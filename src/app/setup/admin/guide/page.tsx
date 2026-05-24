@@ -1,13 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 export default function FirebaseSetupGuide() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [language, setLanguage] = useState<'th' | 'en'>('th');
   const [copied, setCopied] = useState(false);
+  const fromTeacher = searchParams.get('from') === 'teacher';
+  const stepParam = searchParams.get('step');
 
   const content = {
     th: {
@@ -193,7 +196,7 @@ export default function FirebaseSetupGuide() {
           animate={{ opacity: 1, x: 0 }}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          onClick={() => router.push('/setup/admin')}
+          onClick={() => router.back()}
           className="mb-4 flex items-center gap-2 text-gray-500 hover:text-black transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -15,7 +15,7 @@ export default function RoleSelection() {
   };
 
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center overflow-hidden relative">
+    <div className="no-scroll bg-white flex items-center justify-center relative">
       {/* Main content */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}

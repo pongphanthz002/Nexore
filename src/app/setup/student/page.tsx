@@ -145,7 +145,7 @@ export default function StudentSetup() {
   };
 
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center overflow-hidden relative p-4">
+    <div className="no-scroll bg-white flex items-center justify-center overflow-hidden relative p-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

@@ -242,7 +242,7 @@ export default function AdminSetup() {
             ADMIN SETUP
           </h1>
           <p className="text-gray-500 tracking-widest">
-            STEP {step} OF 4
+            SET UP with Firebase
           </p>
         </div>
 

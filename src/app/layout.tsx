@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   description: "Decentralized learning management system for students and teachers",
   manifest: "/manifest.json",
   themeColor: "#0ea5e9",
-  viewport: "width=device-width, initial-scale=1, maximum-scale=1",
+  viewport: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover",
 };
 
 export default function RootLayout({

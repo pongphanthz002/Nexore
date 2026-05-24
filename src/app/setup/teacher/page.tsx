@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { storageService } from '@/services/storage.service';
 import { UserIdentity } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
@@ -27,6 +27,22 @@ export default function TeacherSetup() {
     messagingSenderId: '',
     appId: ''
   });
+  const searchParams = useSearchParams();
+
+  // Restore state from localStorage on mount
+  useEffect(() => {
+    const savedStep = localStorage.getItem('teacherSetup_step');
+    const savedSchoolId = localStorage.getItem('teacherSetup_schoolId');
+    const savedSchoolFirebaseConfig = localStorage.getItem('teacherSetup_schoolFirebaseConfig');
+    const savedTeacherId = localStorage.getItem('teacherSetup_teacherId');
+    
+    if (savedStep) {
+      setStep(parseInt(savedStep));
+      if (savedSchoolId) setSchoolId(savedSchoolId);
+      if (savedSchoolFirebaseConfig) setSchoolFirebaseConfig(JSON.parse(savedSchoolFirebaseConfig));
+      if (savedTeacherId) setTeacherId(savedTeacherId);
+    }
+  }, []);
 
   // Check if user is authenticated
   useEffect(() => {
@@ -46,6 +62,10 @@ export default function TeacherSetup() {
       const schoolHub = await firestoreService.getHub(schoolId.trim());
       if (schoolHub && schoolHub.schoolFirebaseConfig) {
         setSchoolFirebaseConfig(schoolHub.schoolFirebaseConfig);
+        // Save to localStorage for state preservation
+        localStorage.setItem('teacherSetup_schoolId', schoolId);
+        localStorage.setItem('teacherSetup_schoolFirebaseConfig', JSON.stringify(schoolHub.schoolFirebaseConfig));
+        localStorage.setItem('teacherSetup_step', '2');
         setStep(2);
       } else {
         alert('ไม่พบข้อมูลโรงเรียนในระบบ');
@@ -89,6 +109,9 @@ export default function TeacherSetup() {
         return;
       }
       
+      // Save to localStorage for state preservation
+      localStorage.setItem('teacherSetup_teacherId', teacherId);
+      localStorage.setItem('teacherSetup_step', '3');
       setStep(3);
     } catch (error) {
       console.error('Error verifying ID:', error);
@@ -204,7 +227,17 @@ export default function TeacherSetup() {
           animate={{ opacity: 1, x: 0 }}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          onClick={() => router.push('/signup')}
+          onClick={() => {
+            if (step > 1) {
+              setStep(step - 1);
+            } else {
+              localStorage.removeItem('teacherSetup_step');
+              localStorage.removeItem('teacherSetup_schoolId');
+              localStorage.removeItem('teacherSetup_schoolFirebaseConfig');
+              localStorage.removeItem('teacherSetup_teacherId');
+              router.push('/signup');
+            }
+          }}
           className="mb-4 flex items-center gap-2 text-gray-500 hover:text-black transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -327,21 +360,22 @@ export default function TeacherSetup() {
             className="bg-white rounded-2xl p-6 shadow-lg"
           >
             <h2 className="text-2xl font-bold text-black mb-6">
-              Complete Setup
+              SET UP with Firebase
             </h2>
-            <p className="text-gray-500 mb-6">
-              ใส่ Firebase Config สำหรับฐานข้อมูลของครู
-            </p>
 
             <div className="space-y-4">
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
-                <p className="text-gray-600 text-sm mb-2">
-                  School ID: {schoolId}
+              <div className="bg-gray-900 rounded-lg p-4 mb-4">
+                <p className="text-green-400 text-sm mb-2">
+                  School ID: <span className="text-white">{schoolId}</span>
                 </p>
-                <p className="text-gray-600 text-sm mb-2">
-                  Teacher ID: {teacherId}
+                <p className="text-green-400 text-sm mb-2">
+                  Teacher ID: <span className="text-white">{teacherId}</span>
                 </p>
               </div>
+
+              <p className="text-gray-500 mb-6">
+                Enter your Firebase configuration
+              </p>
 
               <div>
                 <label className="block text-gray-700 text-sm mb-2">API Key</label>
@@ -350,7 +384,6 @@ export default function TeacherSetup() {
                   value={teacherFirebaseConfig.apiKey}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, apiKey: e.target.value})}
                   className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
-                  placeholder="AIzaSy..."
                   required
                 />
               </div>
@@ -362,7 +395,6 @@ export default function TeacherSetup() {
                   value={teacherFirebaseConfig.authDomain}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, authDomain: e.target.value})}
                   className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
-                  placeholder="your-app.firebaseapp.com"
                   required
                 />
               </div>
@@ -374,7 +406,6 @@ export default function TeacherSetup() {
                   value={teacherFirebaseConfig.projectId}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, projectId: e.target.value})}
                   className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
-                  placeholder="your-project-id"
                   required
                 />
               </div>
@@ -386,7 +417,6 @@ export default function TeacherSetup() {
                   value={teacherFirebaseConfig.storageBucket}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, storageBucket: e.target.value})}
                   className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
-                  placeholder="your-project.appspot.com"
                   required
                 />
               </div>
@@ -398,7 +428,6 @@ export default function TeacherSetup() {
                   value={teacherFirebaseConfig.messagingSenderId}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, messagingSenderId: e.target.value})}
                   className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
-                  placeholder="123456789"
                   required
                 />
               </div>
@@ -410,7 +439,6 @@ export default function TeacherSetup() {
                   value={teacherFirebaseConfig.appId}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, appId: e.target.value})}
                   className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
-                  placeholder="1:123456789:web:abcdef"
                   required
                 />
               </div>
@@ -420,8 +448,18 @@ export default function TeacherSetup() {
                 disabled={loading}
                 className="w-full bg-gray-500 text-white font-bold py-3 rounded-lg hover:bg-[#000000] hover:scale-105 transition-all duration-150 disabled:opacity-50"
               >
-                {loading ? 'Registering...' : 'Confirm & Complete Setup'}
+                {loading ? 'Saving...' : 'NEXT'}
               </button>
+
+              <div className="text-center mt-4">
+                <button
+                  type="button"
+                  onClick={() => router.push('/setup/admin/guide?from=teacher')}
+                  className="text-gray-400 text-sm hover:text-black transition-colors underline"
+                >
+                  Firebase Setup Guide
+                </button>
+              </div>
             </div>
           </motion.div>
         )}
