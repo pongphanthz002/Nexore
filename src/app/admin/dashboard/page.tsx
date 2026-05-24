@@ -7,13 +7,21 @@ import { firestoreService } from '@/services/firestore.service';
 import { schoolDatabaseService } from '@/services/school-database.service';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import PieChart from '@/components/PieChart';
+import { Files } from 'lucide-react';
 
 export default function AdminDashboard() {
   const router = useRouter();
   const { userAccount, signOut } = useAuth();
-  const [stats, setStats] = useState({ students: 0, teachers: 0, nodes: 0 });
+  const [stats, setStats] = useState({ students: 0, teachers: 0, nodes: 0, signedUpStudents: 0, signedUpTeachers: 0 });
   const [schoolId, setSchoolId] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    setIsDark(document.documentElement.classList.contains('dark'));
+  }, []);
 
   useEffect(() => {
     async function loadData() {
@@ -47,10 +55,15 @@ export default function AdminDashboard() {
           
           console.log('Teachers:', teachers.length, 'Students:', students.length);
           
+          const signedUpTeachers = teachers.filter(t => t.firebaseConfig && Object.keys(t.firebaseConfig).length > 0).length;
+          const signedUpStudents = students.filter(s => s.uid).length;
+          
           setStats({
             students: students.length,
             teachers: teachers.length,
-            nodes: teachers.filter(t => t.firebaseConfig && Object.keys(t.firebaseConfig).length > 0).length,
+            nodes: signedUpTeachers,
+            signedUpStudents,
+            signedUpTeachers,
           });
         }
 
@@ -65,217 +78,117 @@ export default function AdminDashboard() {
     loadData();
   }, [userAccount]);
 
-  const handleSwitchRole = () => {
-    router.push('/teacher/dashboard');
+  const handleCopySchoolId = () => {
+    if (schoolId) {
+      navigator.clipboard.writeText(schoolId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const getDisplaySchoolId = () => {
+    return `School ID: ${schoolId}`;
+  };
+
+  // Generate syntax highlighted School ID
+  const getHighlightedSchoolId = () => {
+    const prefix = 'School ID: ';
+    const id = schoolId;
+    return (
+      <>
+        <span className="text-purple-600 dark:text-purple-400">{prefix}</span>
+        <span className="text-blue-600 dark:text-blue-400">{id}</span>
+      </>
+    );
   };
 
   return (
-    <div className="min-h-screen bg-black overflow-hidden relative">
-      {/* Animated background grid */}
-      <div className="absolute inset-0 opacity-10">
-        <div className="absolute inset-0" style={{
-          backgroundImage: `
-            linear-gradient(rgba(57, 255, 20, 0.1) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(57, 255, 20, 0.1) 1px, transparent 1px)
-          `,
-          backgroundSize: '50px 50px',
-          animation: 'gridMove 20s linear infinite'
-        }} />
-      </div>
+    <div className="p-6">
+      {/* Main content */}
+      <div className="max-w-7xl mx-auto">
 
-      {/* Glowing orbs */}
-      <motion.div
-        animate={{
-          scale: [1, 1.2, 1],
-          opacity: [0.2, 0.4, 0.2],
-        }}
-        transition={{
-          duration: 4,
-          repeat: Infinity,
-          ease: "easeInOut"
-        }}
-        className="absolute w-96 h-96 bg-neon-glow rounded-full blur-3xl opacity-20 top-0 right-0"
-      />
-
-      <div className="relative z-10 p-6">
-        {/* Header */}
+        {/* PIE Charts */}
         <motion.div
-          initial={{ opacity: 0, y: -20 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-between mb-8"
+          transition={{ delay: 0.2 }}
+          className={`rounded-3xl p-8 shadow-lg mb-8 ${isDark ? 'bg-gray-800/50 backdrop-blur-lg border border-gray-700' : 'bg-white/50 backdrop-blur-lg border border-white/20'}`}
         >
-          <div>
-            <h1 className="text-3xl font-bold text-white" style={{
-              textShadow: '0 0 10px #39ff14, 0 0 20px #39ff14'
-            }}>
-              ADMIN DASHBOARD
-            </h1>
-            <p className="text-neon-glow text-sm tracking-widest">
-              SYSTEM CONTROL
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={async () => {
-                await signOut();
-                router.push('/');
-              }}
-              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
-            >
-              Log out
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleSwitchRole}
-              className="bg-neon-glow text-black px-4 py-2 rounded-lg hover:bg-neon-bright transition-colors font-bold"
-            >
-              Switch Role
-            </motion.button>
+          <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'} mb-6`}>สถิติผู้ใช้</h2>
+          <div className="flex justify-center gap-12">
+            <PieChart
+              label="ครู"
+              total={stats.teachers}
+              signedUp={stats.signedUpTeachers}
+              color="#3b82f6"
+              bgColor={isDark ? '#374151' : '#e5e7eb'}
+              unsignedColor="#ef4444"
+            />
+            <PieChart
+              label="นักเรียน"
+              total={stats.students}
+              signedUp={stats.signedUpStudents}
+              color="#10b981"
+              bgColor={isDark ? '#374151' : '#e5e7eb'}
+              unsignedColor="#ef4444"
+            />
           </div>
         </motion.div>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="bg-black-500 border-2 border-neon-glow rounded-xl p-6"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-400 text-sm">Total Students</p>
-                <p className="text-3xl font-bold text-white">{stats.students}</p>
-              </div>
-              <span className="text-4xl">👨‍🎓</span>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="bg-black-500 border-2 border-neon-glow rounded-xl p-6"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-400 text-sm">Total Teachers</p>
-                <p className="text-3xl font-bold text-white">{stats.teachers}</p>
-              </div>
-              <span className="text-4xl">👨‍🏫</span>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="bg-black-500 border-2 border-neon-glow rounded-xl p-6"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-400 text-sm">Active Nodes</p>
-                <p className="text-3xl font-bold text-white">{stats.nodes}</p>
-              </div>
-              <span className="text-4xl">🔗</span>
-            </div>
-          </motion.div>
-        </div>
 
         {/* School ID Section */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="bg-black-500 border-2 border-neon-glow rounded-xl p-6 mb-6"
+          transition={{ delay: 0.3 }}
+          className={`rounded-3xl p-6 shadow-lg mb-8 ${isDark ? 'bg-gray-800/50 backdrop-blur-lg border border-gray-700' : 'bg-white/50 backdrop-blur-lg border border-white/20'}`}
         >
-          <h2 className="text-xl font-bold text-white mb-4">
-            🏫 School ID
+          <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'} mb-4`}>
+            School ID
           </h2>
-          <p className="text-gray-400 mb-4">
-            School ID สำหรับครูและนักเรียนใช้เชื่อมต่อกับโรงเรียน
-          </p>
           {schoolId && (
-            <div className="p-4 bg-black-400 rounded-lg">
-              <p className="text-gray-400 text-sm mb-1">School ID:</p>
-              <p className="text-neon-glow font-mono text-lg">{schoolId}</p>
+            <div className="relative p-4 rounded-2xl bg-gray-100 dark:bg-gray-700 font-mono text-sm">
+              <div className="flex items-center justify-between">
+                <p className="text-gray-800 dark:text-gray-200">{getHighlightedSchoolId()}</p>
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={handleCopySchoolId}
+                  className="p-2 bg-gray-300 dark:bg-gray-600 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-all"
+                >
+                  <Files size={20} className={isDark ? 'text-white' : 'text-gray-900'} />
+                </motion.button>
+              </div>
             </div>
           )}
         </motion.div>
 
-        {/* Action Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Floating Toast */}
+        {copied && (
           <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.6 }}
-            whileHover={{ scale: 1.02, boxShadow: '0 0 20px rgba(57, 255, 20, 0.3)' }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => router.push('/admin/dashboard/users')}
-            className="bg-black-500 border-2 border-neon-glow rounded-xl p-6 cursor-pointer group"
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 50, scale: 0.9 }}
+            className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded-2xl shadow-lg z-50"
           >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-white group-hover:text-neon-glow transition-colors">
-                👥 จัดการผู้ใช้
-              </h3>
-              <span className="text-3xl">👤</span>
-            </div>
-            <p className="text-gray-400 text-sm">
-              จัดการข้อมูลนักเรียนและครู (รวมห้องเรียนและชั้นเรียน)
-            </p>
+            คัดลอกแล้ว!
           </motion.div>
+        )}
 
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.7 }}
-            whileHover={{ scale: 1.02, boxShadow: '0 0 20px rgba(57, 255, 20, 0.3)' }}
-            className="bg-black-500 border-2 border-neon-glow rounded-xl p-6 cursor-pointer group"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-white group-hover:text-neon-glow transition-colors">
-                📊 รายงาน
-              </h3>
-              <span className="text-3xl">📈</span>
-            </div>
-            <p className="text-gray-400 text-sm">
-              ดูรายงานและสถิติระบบ
-            </p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.8 }}
-            whileHover={{ scale: 1.02, boxShadow: '0 0 20px rgba(57, 255, 20, 0.3)' }}
-            className="bg-black-500 border-2 border-neon-glow rounded-xl p-6 cursor-pointer group"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-white group-hover:text-neon-glow transition-colors">
-                ⚙️ ตั้งค่าระบบ
-              </h3>
-              <span className="text-3xl">🔧</span>
-            </div>
-            <p className="text-gray-400 text-sm">
-              ตั้งค่าและกำหนดค่าระบบ
-            </p>
-          </motion.div>
-        </div>
+        {/* Action Card - Users Management */}
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.4 }}
+          whileHover={{ scale: 1.02, y: -5 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={() => router.push('/admin/dashboard/users')}
+          className={`rounded-3xl p-6 shadow-lg cursor-pointer hover:shadow-xl transition-all ${isDark ? 'bg-gray-800/50 backdrop-blur-lg border border-gray-700' : 'bg-white/50 backdrop-blur-lg border border-white/20'}`}
+        >
+          <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
+            จัดการผู้ใช้
+          </h3>
+        </motion.div>
       </div>
-
-      <style jsx>{`
-        @keyframes gridMove {
-          0% {
-            transform: translate(0, 0);
-          }
-          100% {
-            transform: translate(50px, 50px);
-          }
-        }
-      `}</style>
     </div>
   );
 }

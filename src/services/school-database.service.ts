@@ -221,6 +221,48 @@ class SchoolDatabaseService {
       });
     }
   }
+
+  /**
+   * Delete teacher from school database
+   */
+  async deleteTeacher(schoolFirebaseConfig: any, teacherId: string): Promise<void> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    const teacherRef = doc(database, this.teachersCollection, teacherId);
+    await deleteDoc(teacherRef);
+  }
+
+  /**
+   * Delete student from school database
+   */
+  async deleteStudent(schoolFirebaseConfig: any, studentId: string): Promise<void> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    const studentRef = doc(database, this.studentsCollection, studentId);
+    await deleteDoc(studentRef);
+  }
+
+  /**
+   * Delete multiple teachers from school database
+   */
+  async deleteTeacherWhitelist(schoolFirebaseConfig: any, teacherIds: string[]): Promise<void> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    
+    for (const teacherId of teacherIds) {
+      const teacherRef = doc(database, this.teachersCollection, teacherId);
+      await deleteDoc(teacherRef);
+    }
+  }
+
+  /**
+   * Delete multiple students from school database
+   */
+  async deleteStudentWhitelist(schoolFirebaseConfig: any, studentIds: string[]): Promise<void> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    
+    for (const studentId of studentIds) {
+      const studentRef = doc(database, this.studentsCollection, studentId);
+      await deleteDoc(studentRef);
+    }
+  }
 }
 
 export const schoolDatabaseService = new SchoolDatabaseService();
