@@ -144,9 +144,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await firebaseSignOut(auth);
       setUser(null);
       setUserAccount(null);
-      // Clear localStorage
+      // Clear all caches
       if (typeof window !== 'undefined') {
         localStorage.clear();
+        sessionStorage.clear();
+        // Clear cookies
+        document.cookie.split(";").forEach(function(c) { 
+          document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+        });
+        // Clear IndexedDB
+        if (window.indexedDB) {
+          const databases = await indexedDB.databases();
+          databases.forEach(db => {
+            if (db.name) {
+              indexedDB.deleteDatabase(db.name);
+            }
+          });
+        }
+        // Clear Cache API
+        if ('caches' in window) {
+          const cacheNames = await caches.keys();
+          await Promise.all(cacheNames.map(cacheName => caches.delete(cacheName)));
+        }
       }
     } catch (error) {
       console.error('Error signing out:', error);
