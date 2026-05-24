@@ -12,6 +12,7 @@ export default function LoginSignup() {
   const { signInWithGoogle, user, setUserAccount, loading: authLoading, signOut } = useAuth();
   const [loading, setLoading] = useState(false);
   const [checkingAccount, setCheckingAccount] = useState(false);
+  const [isSignup, setIsSignup] = useState(false);
 
   useEffect(() => {
     async function checkUserAccount() {
@@ -25,6 +26,17 @@ export default function LoginSignup() {
           console.log('User mapping found:', userMapping);
           
           if (userMapping) {
+            // User exists in Master Registry
+            if (isSignup) {
+              // User tried to sign up but already has an account
+              console.log('User already exists, signing out and showing error');
+              await signOut();
+              alert('บัญชีนี้ลงทะเบียนแล้ว กรุณาใช้ปุ่ม Sign in');
+              setIsSignup(false);
+              setLoading(false);
+              return;
+            }
+            
             // User exists, get school Firebase config from hubs
             const schoolHub = await firestoreService.getHub(userMapping.schoolId);
             console.log('School hub found:', schoolHub);
@@ -80,6 +92,7 @@ export default function LoginSignup() {
   }, [user, checkingAccount, setUserAccount, router]);
 
   const handleSignIn = async () => {
+    setIsSignup(false);
     setLoading(true);
     try {
       console.log('Starting Google Sign in...');
@@ -96,8 +109,23 @@ export default function LoginSignup() {
     }
   };
 
-  const handleSignup = (role: 'admin' | 'teacher' | 'student') => {
-    router.push(`/setup/${role}`);
+  const handleSignup = async () => {
+    setIsSignup(true);
+    setLoading(true);
+    try {
+      console.log('Starting Google Sign up...');
+      await signInWithGoogle();
+      console.log('Google Sign up completed, waiting for auth state...');
+      // Wait a bit for auth state to update
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      console.log('Auth state should be updated now');
+      // The useEffect will handle the check and redirect
+    } catch (error) {
+      console.error('Error signing up:', error);
+      alert('เข้าสู่ระบบไม่สำเร็จ: ' + (error as Error).message);
+      setIsSignup(false);
+      setLoading(false);
+    }
   };
 
   return (
@@ -150,7 +178,7 @@ export default function LoginSignup() {
 
           {/* Sign Up with Google Button */}
           <button
-            onClick={handleSignIn}
+            onClick={handleSignup}
             disabled={loading}
             className="w-full bg-white border border-gray-200 text-black font-bold py-4 rounded-lg hover:border-gray-400 hover:scale-105 transition-all duration-150 disabled:opacity-50 flex items-center justify-center gap-3 shadow-md"
           >
