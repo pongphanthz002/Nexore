@@ -42,18 +42,20 @@ const AdminHeader = ({ isDark, toggleTheme }: AdminHeaderProps) => {
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className={`fixed top-0 left-0 right-0 z-50 ${isDark ? 'bg-gray-900/80' : 'bg-white/80'} backdrop-blur-lg border-b ${isDark ? 'border-gray-700' : 'border-gray-200'} px-6 py-4`}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        className={`fixed top-0 left-0 right-0 z-50 border-b px-6 py-4 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-md`}
       >
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           {/* Logo */}
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
             onClick={() => router.push('/admin/dashboard')}
             className="flex flex-col items-start"
           >
-            <span className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>NEXORE</span>
-            <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>ADMIN</span>
+            <span className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>NEXORE</span>
+            <span className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>ADMIN</span>
           </motion.button>
 
           {/* Right side controls */}
@@ -63,8 +65,9 @@ const AdminHeader = ({ isDark, toggleTheme }: AdminHeaderProps) => {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 400, damping: 25 }}
               onClick={handleSwitchRole}
-              className={`p-3 rounded-2xl ${isDark ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'} transition-all`}
+              className={`p-3 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
             >
               <SwitchCamera size={20} />
             </motion.button>
@@ -72,8 +75,9 @@ const AdminHeader = ({ isDark, toggleTheme }: AdminHeaderProps) => {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 400, damping: 25 }}
               onClick={handleLogout}
-              className="p-3 rounded-2xl bg-red-500 text-white hover:bg-red-600 transition-all"
+              className="p-3 rounded-xl bg-red-500 text-white"
             >
               <LogOut size={20} />
             </motion.button>
@@ -93,28 +97,31 @@ const AdminHeader = ({ isDark, toggleTheme }: AdminHeaderProps) => {
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
-            className={`rounded-3xl p-6 max-w-md w-full shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className={`rounded-2xl p-6 max-w-md w-full ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
           >
-            <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'} mb-2`}>
+            <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>
               ยืนยันการเปลี่ยน Role
             </h3>
-            <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>
+            <p className={isDark ? 'text-gray-300' : 'text-gray-600'}>
               คุณต้องการเปลี่ยนเป็น Teacher Dashboard ใช่ไหม?
             </p>
             <div className="flex gap-3 mt-6">
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
+                transition={{ type: "spring", stiffness: 400, damping: 25 }}
                 onClick={() => setShowSwitchConfirm(false)}
-                className={`flex-1 py-3 rounded-2xl ${isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'} transition-all`}
+                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
               >
                 ยกเลิก
               </motion.button>
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
+                transition={{ type: "spring", stiffness: 400, damping: 25 }}
                 onClick={confirmSwitchRole}
-                className="flex-1 bg-blue-500 text-white py-3 rounded-2xl hover:bg-blue-600 transition-all"
+                className="flex-1 bg-blue-500 text-white py-3 rounded-xl"
               >
                 ยืนยัน
               </motion.button>
@@ -135,28 +142,31 @@ const AdminHeader = ({ isDark, toggleTheme }: AdminHeaderProps) => {
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
-            className={`rounded-3xl p-6 max-w-md w-full shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className={`rounded-2xl p-6 max-w-md w-full ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
           >
-            <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'} mb-2`}>
+            <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>
               ยืนยันการออกจากระบบ
             </h3>
-            <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>
+            <p className={isDark ? 'text-gray-300' : 'text-gray-600'}>
               คุณต้องการออกจากระบบใช่ไหม?
             </p>
             <div className="flex gap-3 mt-6">
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
+                transition={{ type: "spring", stiffness: 400, damping: 25 }}
                 onClick={() => setShowLogoutConfirm(false)}
-                className={`flex-1 py-3 rounded-2xl ${isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'} transition-all`}
+                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
               >
                 ยกเลิก
               </motion.button>
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
+                transition={{ type: "spring", stiffness: 400, damping: 25 }}
                 onClick={confirmLogout}
-                className="flex-1 bg-red-500 text-white py-3 rounded-2xl hover:bg-red-600 transition-all"
+                className="flex-1 bg-red-500 text-white py-3 rounded-xl"
               >
                 ยืนยัน
               </motion.button>

@@ -9,9 +9,10 @@ interface PieChartProps {
   color: string;
   bgColor: string;
   unsignedColor: string;
+  isDark: boolean;
 }
 
-const PieChart = ({ label, total, signedUp, color, bgColor, unsignedColor }: PieChartProps) => {
+const PieChart = ({ label, total, signedUp, color, bgColor, unsignedColor, isDark }: PieChartProps) => {
   const percentage = total > 0 ? (signedUp / total) * 100 : 0;
   const radius = 50;
   const circumference = 2 * Math.PI * radius;
@@ -49,8 +50,8 @@ const PieChart = ({ label, total, signedUp, color, bgColor, unsignedColor }: Pie
           <span className="text-2xl font-bold text-white">{signedUp}</span>
         </div>
       </div>
-      <p className="mt-3 text-sm font-semibold text-gray-700">{label}</p>
-      <p className="text-xs text-gray-500">ทั้งหมด: {total}</p>
+      <p className={`mt-3 text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-700'}`}>{label}</p>
+      <p className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>ทั้งหมด: {total}</p>
     </div>
   );
 };

@@ -21,6 +21,18 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains('dark'));
+
+    // Listen for theme changes
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.classList.contains('dark'));
+    });
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -111,10 +123,11 @@ export default function AdminDashboard() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className={`rounded-3xl p-8 shadow-lg mb-8 ${isDark ? 'bg-gray-800/50 backdrop-blur-lg border border-gray-700' : 'bg-white/50 backdrop-blur-lg border border-white/20'}`}
+          transition={{ type: "spring", stiffness: 300, damping: 30, delay: 0.2 }}
+          whileHover={{ scale: 1.01, y: -3 }}
+          className={`rounded-2xl p-8 mb-8 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
         >
-          <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'} mb-6`}>สถิติผู้ใช้</h2>
+          <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-6`}>สถิติผู้ใช้</h2>
           <div className="flex justify-center gap-12">
             <PieChart
               label="ครู"
@@ -123,6 +136,7 @@ export default function AdminDashboard() {
               color="#3b82f6"
               bgColor={isDark ? '#374151' : '#e5e7eb'}
               unsignedColor="#ef4444"
+              isDark={isDark}
             />
             <PieChart
               label="นักเรียน"
@@ -131,6 +145,7 @@ export default function AdminDashboard() {
               color="#10b981"
               bgColor={isDark ? '#374151' : '#e5e7eb'}
               unsignedColor="#ef4444"
+              isDark={isDark}
             />
           </div>
         </motion.div>
@@ -139,19 +154,21 @@ export default function AdminDashboard() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className={`rounded-3xl p-6 shadow-lg mb-8 ${isDark ? 'bg-gray-800/50 backdrop-blur-lg border border-gray-700' : 'bg-white/50 backdrop-blur-lg border border-white/20'}`}
+          transition={{ type: "spring", stiffness: 300, damping: 30, delay: 0.3 }}
+          whileHover={{ scale: 1.01, y: -3 }}
+          className={`rounded-2xl p-6 mb-8 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
         >
-          <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'} mb-4`}>
+          <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
             School ID
           </h2>
           {schoolId && (
             <div className="relative p-4 rounded-2xl bg-gray-100 dark:bg-gray-700 font-mono text-sm">
               <div className="flex items-center justify-between">
-                <p className="text-gray-800 dark:text-gray-200">{getHighlightedSchoolId()}</p>
+                <p className="text-gray-800 dark:text-white">{getHighlightedSchoolId()}</p>
                 <motion.button
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 25 }}
                   onClick={handleCopySchoolId}
                   className="p-2 bg-gray-300 dark:bg-gray-600 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-all"
                 >
@@ -168,7 +185,11 @@ export default function AdminDashboard() {
             initial={{ opacity: 0, y: 50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 50, scale: 0.9 }}
-            className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded-2xl shadow-lg z-50"
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded-2xl shadow-lg z-50 backdrop-blur-[20px] saturate-[180%]"
+            style={{
+              boxShadow: '0 8px 32px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.3)',
+            }}
           >
             คัดลอกแล้ว!
           </motion.div>
@@ -178,14 +199,14 @@ export default function AdminDashboard() {
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.4 }}
+          transition={{ type: "spring", stiffness: 300, damping: 30, delay: 0.4 }}
           whileHover={{ scale: 1.02, y: -5 }}
           whileTap={{ scale: 0.98 }}
           onClick={() => router.push('/admin/dashboard/users')}
-          className={`rounded-3xl p-6 shadow-lg cursor-pointer hover:shadow-xl transition-all ${isDark ? 'bg-gray-800/50 backdrop-blur-lg border border-gray-700' : 'bg-white/50 backdrop-blur-lg border border-white/20'}`}
+          className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg cursor-pointer`}
         >
-          <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
-            จัดการผู้ใช้
+          <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            จัดการข้อมูล
           </h3>
         </motion.div>
       </div>

@@ -31,7 +31,9 @@ export default function AdminDashboardLayout({
   };
 
   return (
-    <div className={`min-h-screen ${isDark ? 'bg-gradient-to-br from-gray-900 to-gray-800' : 'bg-gradient-to-br from-blue-50 to-blue-100'}`}>
+    <div 
+      className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}
+    >
       <AdminHeader isDark={isDark} toggleTheme={toggleTheme} />
       <div className="pt-24">
         {children}
