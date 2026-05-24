@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-export default function FirebaseSetupGuide() {
+function FirebaseSetupGuideContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [language, setLanguage] = useState<'th' | 'en'>('th');
@@ -289,5 +289,13 @@ export default function FirebaseSetupGuide() {
         {language === 'th' ? 'TH' : 'EN'}
       </button>
     </div>
+  );
+}
+
+export default function FirebaseSetupGuide() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-white flex items-center justify-center">Loading...</div>}>
+      <FirebaseSetupGuideContent />
+    </Suspense>
   );
 }

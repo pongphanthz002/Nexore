@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { storageService } from '@/services/storage.service';
@@ -10,7 +10,7 @@ import { firestoreService, Hub } from '@/services/firestore.service';
 import { schoolDatabaseService, TeacherFirebaseConfig } from '@/services/school-database.service';
 import { UserAccount } from '@/contexts/AuthContext';
 
-export default function TeacherSetup() {
+function TeacherSetupContent() {
   const router = useRouter();
   const { signInWithGoogle, user, setUserAccount, signOut } = useAuth();
   const [step, setStep] = useState(1);
@@ -465,5 +465,13 @@ export default function TeacherSetup() {
         )}
       </motion.div>
     </div>
+  );
+}
+
+export default function TeacherSetup() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-white flex items-center justify-center">Loading...</div>}>
+      <TeacherSetupContent />
+    </Suspense>
   );
 }
