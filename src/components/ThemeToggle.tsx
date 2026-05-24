@@ -15,6 +15,7 @@ const ThemeToggle = ({ isDark, toggle }: ThemeToggleProps) => {
   const travelDist = containerWidth - orbSize - (padding * 2);
   const x = useMotionValue(isDark ? travelDist : 0);
   const background = useTransform(x, [0, travelDist], ['#2071b5', '#2a2a2a']);
+  const glowX = useTransform(x, (val) => val - 35);
 
   useEffect(() => {
     x.set(isDark ? travelDist : 0);
@@ -49,7 +50,7 @@ const ThemeToggle = ({ isDark, toggle }: ThemeToggleProps) => {
         onClick={() => toggle()}
       >
         <motion.div
-          style={{ x: useTransform(x, (val) => val - 35) }}
+          style={{ x: glowX }}
           className="absolute top-[-30px] left-0 pointer-events-none z-0"
         >
           <div className="relative w-[100px] h-[100px] flex items-center justify-center">
