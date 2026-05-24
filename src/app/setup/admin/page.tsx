@@ -15,6 +15,7 @@ export default function AdminSetup() {
   const [step, setStep] = useState(1);
   const [config, setConfig] = useState<Partial<MasterRegistryConfig>>({});
   const [loading, setLoading] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
     async function checkIfSetup() {
@@ -214,19 +215,7 @@ export default function AdminSetup() {
   };
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center overflow-hidden relative p-4">
-      {/* Animated background */}
-      <div className="absolute inset-0 opacity-10">
-        <div className="absolute inset-0" style={{
-          backgroundImage: `
-            linear-gradient(rgba(57, 255, 20, 0.1) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(57, 255, 20, 0.1) 1px, transparent 1px)
-          `,
-          backgroundSize: '50px 50px',
-          animation: 'gridMove 20s linear infinite'
-        }} />
-      </div>
-
+    <div className="min-h-screen bg-white flex items-center justify-center overflow-hidden relative p-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -238,26 +227,21 @@ export default function AdminSetup() {
           animate={{ opacity: 1, x: 0 }}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          onClick={async () => {
-            await signOut();
-            router.push('/');
-          }}
-          className="mb-4 flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+          onClick={() => router.push('/setup/teacher')}
+          className="mb-4 flex items-center gap-2 text-gray-500 hover:text-black transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
-          ย้อนกลับ
+          BACK
         </motion.button>
 
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2" style={{
-            textShadow: '0 0 10px #39ff14, 0 0 20px #39ff14'
-          }}>
+          <h1 className="text-4xl font-bold text-black mb-2">
             ADMIN SETUP
           </h1>
-          <p className="text-neon-glow tracking-widest">
+          <p className="text-gray-500 tracking-widest">
             STEP {step} OF 4
           </p>
         </div>
@@ -267,121 +251,114 @@ export default function AdminSetup() {
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="bg-black-500 border-2 border-neon-glow rounded-xl p-6"
+            className="bg-white rounded-2xl p-6 shadow-lg"
           >
-            <h2 className="text-2xl font-bold text-white mb-6">
-              🔥 School Configuration
+            <h2 className="text-2xl font-bold text-black mb-6">
+              SET UP with Firebase
             </h2>
-            <p className="text-gray-400 mb-6">
-              ใส่ข้อมูลโรงเรียนและ Firebase Config สำหรับเก็บข้อมูลนักเรียนและครู
+            <p className="text-gray-500 mb-6">
+              Enter school information and Firebase configuration
             </p>
 
             <form onSubmit={handleConfigSubmit} className="space-y-4">
               <div>
-                <label className="block text-neon-glow text-sm mb-2">ชื่อโรงเรียน</label>
+                <label className="block text-gray-700 text-sm mb-2">School Name</label>
                 <input
                   type="text"
                   value={config.schoolName || ''}
                   onChange={(e) => handleConfigChange('schoolName', e.target.value)}
-                  className="w-full bg-black-400 border border-gray-600 rounded-lg p-3 text-white focus:border-neon-glow focus:outline-none transition-colors"
+                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
 
-              <div className="border-t border-gray-600 pt-4 mt-4">
-                <h3 className="text-lg font-bold text-white mb-4">School Firebase (สำหรับเก็บข้อมูลนักเรียน/ครู)</h3>
-              </div>
-
               <div>
-                <label className="block text-neon-glow text-sm mb-2">API Key</label>
+                <label className="block text-gray-700 text-sm mb-2">API Key</label>
                 <input
                   type="text"
                   value={config.schoolApiKey || ''}
                   onChange={(e) => handleConfigChange('schoolApiKey', e.target.value)}
-                  className="w-full bg-black-400 border border-gray-600 rounded-lg p-3 text-white focus:border-neon-glow focus:outline-none transition-colors"
+                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-neon-glow text-sm mb-2">Auth Domain</label>
+                <label className="block text-gray-700 text-sm mb-2">Auth Domain</label>
                 <input
                   type="text"
                   value={config.schoolAuthDomain || ''}
                   onChange={(e) => handleConfigChange('schoolAuthDomain', e.target.value)}
-                  className="w-full bg-black-400 border border-gray-600 rounded-lg p-3 text-white focus:border-neon-glow focus:outline-none transition-colors"
+                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-neon-glow text-sm mb-2">Project ID</label>
+                <label className="block text-gray-700 text-sm mb-2">Project ID</label>
                 <input
                   type="text"
                   value={config.schoolProjectId || ''}
                   onChange={(e) => handleConfigChange('schoolProjectId', e.target.value)}
-                  className="w-full bg-black-400 border border-gray-600 rounded-lg p-3 text-white focus:border-neon-glow focus:outline-none transition-colors"
+                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-neon-glow text-sm mb-2">Storage Bucket</label>
+                <label className="block text-gray-700 text-sm mb-2">Storage Bucket</label>
                 <input
                   type="text"
                   value={config.schoolStorageBucket || ''}
                   onChange={(e) => handleConfigChange('schoolStorageBucket', e.target.value)}
-                  className="w-full bg-black-400 border border-gray-600 rounded-lg p-3 text-white focus:border-neon-glow focus:outline-none transition-colors"
+                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-neon-glow text-sm mb-2">Messaging Sender ID</label>
+                <label className="block text-gray-700 text-sm mb-2">Messaging Sender ID</label>
                 <input
                   type="text"
                   value={config.schoolMessagingSenderId || ''}
                   onChange={(e) => handleConfigChange('schoolMessagingSenderId', e.target.value)}
-                  className="w-full bg-black-400 border border-gray-600 rounded-lg p-3 text-white focus:border-neon-glow focus:outline-none transition-colors"
+                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-neon-glow text-sm mb-2">App ID</label>
+                <label className="block text-gray-700 text-sm mb-2">App ID</label>
                 <input
                   type="text"
                   value={config.schoolAppId || ''}
                   onChange={(e) => handleConfigChange('schoolAppId', e.target.value)}
-                  className="w-full bg-black-400 border border-gray-600 rounded-lg p-3 text-white focus:border-neon-glow focus:outline-none transition-colors"
+                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
 
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+              <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-neon-glow text-black font-bold py-3 rounded-lg hover:bg-neon-bright transition-colors disabled:opacity-50"
+                className="w-full bg-gray-500 text-white font-bold py-3 rounded-lg hover:bg-[#000000] hover:scale-105 transition-all duration-150 disabled:opacity-50"
               >
-                {loading ? 'Saving...' : 'Continue'}
-              </motion.button>
+                {loading ? 'Saving...' : 'NEXT'}
+              </button>
+
+              <div className="text-center mt-4">
+                <button
+                  type="button"
+                  onClick={() => router.push('/setup/admin/guide')}
+                  className="text-gray-400 text-sm hover:text-black transition-colors underline"
+                >
+                  Firebase Setup Guide
+                </button>
+              </div>
             </form>
           </motion.div>
         )}
       </motion.div>
-
-      <style jsx>{`
-        @keyframes gridMove {
-          0% {
-            transform: translate(0, 0);
-          }
-          100% {
-            transform: translate(50px, 50px);
-          }
-        }
-      `}</style>
     </div>
   );
 }

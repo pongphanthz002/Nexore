@@ -18,6 +18,7 @@ export default function TeacherSetup() {
   const [loading, setLoading] = useState(false);
   const [schoolId, setSchoolId] = useState<string>('');
   const [schoolFirebaseConfig, setSchoolFirebaseConfig] = useState<any>(null);
+  const [showTooltip, setShowTooltip] = useState(false);
   const [teacherFirebaseConfig, setTeacherFirebaseConfig] = useState({
     apiKey: '',
     authDomain: '',
@@ -191,19 +192,7 @@ export default function TeacherSetup() {
   };
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center overflow-hidden relative p-4">
-      {/* Animated background */}
-      <div className="absolute inset-0 opacity-10">
-        <div className="absolute inset-0" style={{
-          backgroundImage: `
-            linear-gradient(rgba(57, 255, 20, 0.1) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(57, 255, 20, 0.1) 1px, transparent 1px)
-          `,
-          backgroundSize: '50px 50px',
-          animation: 'gridMove 20s linear infinite'
-        }} />
-      </div>
-
+    <div className="min-h-screen bg-white flex items-center justify-center overflow-hidden relative p-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -215,26 +204,21 @@ export default function TeacherSetup() {
           animate={{ opacity: 1, x: 0 }}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          onClick={async () => {
-            await signOut();
-            router.push('/');
-          }}
-          className="mb-4 flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+          onClick={() => router.push('/signup')}
+          className="mb-4 flex items-center gap-2 text-gray-500 hover:text-black transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
-          ย้อนกลับ
+          BACK
         </motion.button>
 
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2" style={{
-            textShadow: '0 0 10px #39ff14, 0 0 20px #39ff14'
-          }}>
+          <h1 className="text-4xl font-bold text-black mb-2">
             TEACHER SETUP
           </h1>
-          <p className="text-neon-glow tracking-widest">
+          <p className="text-gray-500 tracking-widest">
             STEP {step} OF 3
           </p>
         </div>
@@ -244,47 +228,54 @@ export default function TeacherSetup() {
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="bg-black-500 border-2 border-neon-glow rounded-xl p-6"
+            className="bg-white rounded-2xl p-6 shadow-lg"
           >
-            <h2 className="text-2xl font-bold text-white mb-6">
-              🏫 เชื่อมต่อกับโรงเรียน
-            </h2>
-            <p className="text-gray-400 mb-6">
-              กรอก School ID เพื่อเชื่อมต่อกับโรงเรียน
+            <p className="text-gray-500 mb-6">
+              กรุณากรอก School ID
             </p>
 
             <div className="space-y-4">
-              <div>
-                <label className="block text-neon-glow text-sm mb-2">School ID</label>
+              <div className="relative">
                 <input
                   type="text"
                   value={schoolId}
                   onChange={(e) => setSchoolId(e.target.value)}
                   placeholder="ใส่ School ID ของโรงเรียน"
-                  className="w-full bg-black-400 border border-gray-600 rounded-lg p-3 text-white focus:border-neon-glow focus:outline-none transition-colors"
+                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors pr-10"
                 />
+                <button
+                  type="button"
+                  onMouseEnter={() => setShowTooltip(true)}
+                  onMouseLeave={() => setShowTooltip(false)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </button>
+                {showTooltip && (
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-gray-800 text-white text-sm rounded-lg p-3 shadow-lg z-10">
+                    School ID คือรหัสประจำโรงเรียน<br/>ขอรับได้จากผู้ดูแล
+                  </div>
+                )}
               </div>
 
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+              <button
                 onClick={handleSchoolIdSubmit}
                 disabled={loading}
-                className="w-full bg-neon-glow text-black font-bold py-3 rounded-lg hover:bg-neon-bright transition-colors disabled:opacity-50"
+                className="w-full bg-gray-500 text-white font-bold py-3 rounded-lg hover:bg-[#000000] hover:scale-105 transition-all duration-150 disabled:opacity-50"
               >
-                {loading ? 'กำลังตรวจสอบ...' : 'ถัดไป'}
-              </motion.button>
+                {loading ? 'กำลังตรวจสอบ...' : 'NEXT'}
+              </button>
 
               {/* Admin Setup Link */}
               <div className="text-center mt-4">
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
+                <button
                   onClick={() => router.push('/setup/admin')}
-                  className="text-gray-400 text-sm hover:text-neon-glow transition-colors underline"
+                  className="text-gray-400 text-sm hover:text-black transition-colors underline"
                 >
                   หรือ Setup ในฐานะ Admin
-                </motion.button>
+                </button>
               </div>
             </div>
           </motion.div>
@@ -295,37 +286,35 @@ export default function TeacherSetup() {
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="bg-black-500 border-2 border-neon-glow rounded-xl p-6"
+            className="bg-white rounded-2xl p-6 shadow-lg"
           >
-            <h2 className="text-2xl font-bold text-white mb-6">
-              🆔 ID Verification
+            <h2 className="text-2xl font-bold text-black mb-6">
+              ID Verification
             </h2>
-            <p className="text-gray-400 mb-6">
+            <p className="text-gray-500 mb-6">
               ใส่เลขประจำตัวครูเพื่อยืนยันตัวตน
             </p>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-neon-glow text-sm mb-2">เลขประจำตัวครู</label>
+                <label className="block text-gray-700 text-sm mb-2">เลขประจำตัวครู</label>
                 <input
                   type="text"
                   value={teacherId}
                   onChange={(e) => setTeacherId(e.target.value)}
-                  className="w-full bg-black-400 border border-gray-600 rounded-lg p-3 text-white focus:border-neon-glow focus:outline-none transition-colors"
+                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   placeholder="เช่น T001"
                   required
                 />
               </div>
 
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+              <button
                 onClick={handleIDVerification}
                 disabled={loading}
-                className="w-full bg-neon-glow text-black font-bold py-3 rounded-lg hover:bg-neon-bright transition-colors disabled:opacity-50"
+                className="w-full bg-gray-500 text-white font-bold py-3 rounded-lg hover:bg-[#000000] hover:scale-105 transition-all duration-150 disabled:opacity-50"
               >
                 {loading ? 'Verifying...' : 'Verify'}
-              </motion.button>
+              </button>
             </div>
           </motion.div>
         )}
@@ -335,121 +324,108 @@ export default function TeacherSetup() {
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="bg-black-500 border-2 border-neon-glow rounded-xl p-6"
+            className="bg-white rounded-2xl p-6 shadow-lg"
           >
-            <h2 className="text-2xl font-bold text-white mb-6">
-              🔗 Complete Setup
+            <h2 className="text-2xl font-bold text-black mb-6">
+              Complete Setup
             </h2>
-            <p className="text-gray-400 mb-6">
+            <p className="text-gray-500 mb-6">
               ใส่ Firebase Config สำหรับฐานข้อมูลของครู
             </p>
 
             <div className="space-y-4">
-              <div className="bg-black-400 border border-gray-600 rounded-lg p-4 mb-4">
-                <p className="text-gray-400 text-sm mb-2">
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+                <p className="text-gray-600 text-sm mb-2">
                   School ID: {schoolId}
                 </p>
-                <p className="text-gray-400 text-sm mb-2">
+                <p className="text-gray-600 text-sm mb-2">
                   Teacher ID: {teacherId}
                 </p>
               </div>
 
               <div>
-                <label className="block text-neon-glow text-sm mb-2">API Key</label>
+                <label className="block text-gray-700 text-sm mb-2">API Key</label>
                 <input
                   type="text"
                   value={teacherFirebaseConfig.apiKey}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, apiKey: e.target.value})}
-                  className="w-full bg-black-400 border border-gray-600 rounded-lg p-3 text-white focus:border-neon-glow focus:outline-none transition-colors"
+                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   placeholder="AIzaSy..."
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-neon-glow text-sm mb-2">Auth Domain</label>
+                <label className="block text-gray-700 text-sm mb-2">Auth Domain</label>
                 <input
                   type="text"
                   value={teacherFirebaseConfig.authDomain}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, authDomain: e.target.value})}
-                  className="w-full bg-black-400 border border-gray-600 rounded-lg p-3 text-white focus:border-neon-glow focus:outline-none transition-colors"
+                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   placeholder="your-app.firebaseapp.com"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-neon-glow text-sm mb-2">Project ID</label>
+                <label className="block text-gray-700 text-sm mb-2">Project ID</label>
                 <input
                   type="text"
                   value={teacherFirebaseConfig.projectId}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, projectId: e.target.value})}
-                  className="w-full bg-black-400 border border-gray-600 rounded-lg p-3 text-white focus:border-neon-glow focus:outline-none transition-colors"
+                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   placeholder="your-project-id"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-neon-glow text-sm mb-2">Storage Bucket</label>
+                <label className="block text-gray-700 text-sm mb-2">Storage Bucket</label>
                 <input
                   type="text"
                   value={teacherFirebaseConfig.storageBucket}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, storageBucket: e.target.value})}
-                  className="w-full bg-black-400 border border-gray-600 rounded-lg p-3 text-white focus:border-neon-glow focus:outline-none transition-colors"
+                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   placeholder="your-project.appspot.com"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-neon-glow text-sm mb-2">Messaging Sender ID</label>
+                <label className="block text-gray-700 text-sm mb-2">Messaging Sender ID</label>
                 <input
                   type="text"
                   value={teacherFirebaseConfig.messagingSenderId}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, messagingSenderId: e.target.value})}
-                  className="w-full bg-black-400 border border-gray-600 rounded-lg p-3 text-white focus:border-neon-glow focus:outline-none transition-colors"
+                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   placeholder="123456789"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-neon-glow text-sm mb-2">App ID</label>
+                <label className="block text-gray-700 text-sm mb-2">App ID</label>
                 <input
                   type="text"
                   value={teacherFirebaseConfig.appId}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, appId: e.target.value})}
-                  className="w-full bg-black-400 border border-gray-600 rounded-lg p-3 text-white focus:border-neon-glow focus:outline-none transition-colors"
+                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   placeholder="1:123456789:web:abcdef"
                   required
                 />
               </div>
 
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+              <button
                 onClick={handleNodeBinding}
                 disabled={loading}
-                className="w-full bg-neon-glow text-black font-bold py-3 rounded-lg hover:bg-neon-bright transition-colors disabled:opacity-50"
+                className="w-full bg-gray-500 text-white font-bold py-3 rounded-lg hover:bg-[#000000] hover:scale-105 transition-all duration-150 disabled:opacity-50"
               >
                 {loading ? 'Registering...' : 'Confirm & Complete Setup'}
-              </motion.button>
+              </button>
             </div>
           </motion.div>
         )}
       </motion.div>
-
-      <style jsx>{`
-        @keyframes gridMove {
-          0% {
-            transform: translate(0, 0);
-          }
-          100% {
-            transform: translate(50px, 50px);
-          }
-        }
-      `}</style>
     </div>
   );
 }
