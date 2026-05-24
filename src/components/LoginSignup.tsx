@@ -5,18 +5,19 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { firestoreService } from '@/services/firestore.service';
 import { UserAccount } from '@/contexts/AuthContext';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export default function LoginSignup() {
   const router = useRouter();
-  const { signInWithGoogle, user, setUserAccount, loading: authLoading, signOut } = useAuth();
+  const { signInWithGoogle, user, setUserAccount, loading: authLoading, signOut, setSignupValidation } = useAuth();
   const [loading, setLoading] = useState(false);
   const [checkingAccount, setCheckingAccount] = useState(false);
   const [isSignup, setIsSignup] = useState(false);
+  const signupErrorRef = useRef(false);
 
   useEffect(() => {
     async function checkUserAccount() {
-      if (user?.email && !checkingAccount) {
+      if (user?.email && !checkingAccount && !signupErrorRef.current) {
         setCheckingAccount(true);
         try {
           // Get schoolId from Master Registry
@@ -30,11 +31,18 @@ export default function LoginSignup() {
             if (isSignup) {
               // User tried to sign up but already has an account
               console.log('User already exists, signing out and showing error');
+              // Set flag to prevent AuthContext from loading user account after sign out
+              setSignupValidation(true);
               await signOut();
               alert('บัญชีนี้เคยลงทะเบียนแล้ว');
               setIsSignup(false);
               setLoading(false);
               setCheckingAccount(false);
+              signupErrorRef.current = true;
+              // Reset signupError after a delay
+              setTimeout(() => { 
+                signupErrorRef.current = false;
+              }, 5000);
               return;
             }
             
@@ -63,12 +71,17 @@ export default function LoginSignup() {
               setUserAccount(userAccount);
               
               console.log('Redirecting to dashboard for role:', role);
+              // Don't redirect if there was a signup error
+              if (signupErrorRef.current) {
+                console.log('Skipping redirect due to signup error');
+                return;
+              }
               if (role === 'admin') {
                 router.push('/admin/dashboard');
               } else if (role === 'teacher') {
-                router.push('/teacher');
+                router.push('/teacher/dashboard');
               } else if (role === 'student') {
-                router.push('/student');
+                router.push('/student/dashboard');
               }
             } else {
               console.log('School hub not found or no Firebase config, redirecting to signup');
@@ -90,7 +103,7 @@ export default function LoginSignup() {
     }
     
     checkUserAccount();
-  }, [user, checkingAccount, setUserAccount, router]);
+  }, [user, isSignup, router]);
 
   const handleSignIn = async () => {
     setIsSignup(false);

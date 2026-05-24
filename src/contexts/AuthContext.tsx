@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
 import { firebaseManager } from '@/lib/firebase';
 import { 
   signInWithPopup, 
@@ -31,6 +31,7 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   setUserAccount: (account: UserAccount | null) => void;
+  setSignupValidation: (value: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -40,6 +41,7 @@ const AuthContext = createContext<AuthContextType>({
   signInWithGoogle: async () => {},
   signOut: async () => {},
   setUserAccount: () => {},
+  setSignupValidation: () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -47,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [userAccount, setUserAccount] = useState<UserAccount | null>(null);
   const [loading, setLoading] = useState(true);
   const [auth, setAuth] = useState<Auth | null>(null);
+  const signupValidationRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -66,6 +69,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Load user account from Master Registry if user is authenticated
         if (currentUser?.email) {
           console.log('Loading user account from Master Registry for:', currentUser.email);
+          // Check if this is a signup validation sign out
+          if (signupValidationRef.current) {
+            console.log('Signup validation sign out detected, skipping user account loading');
+            signupValidationRef.current = false;
+            setUserAccount(null);
+            setLoading(false);
+            return;
+          }
           try {
             const accountData = await firestoreService.getUserAccount(currentUser.email);
             console.log('User account data from Master Registry:', accountData);
@@ -173,8 +184,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const setSignupValidation = (value: boolean) => {
+    signupValidationRef.current = value;
+  };
+
   return (
-    <AuthContext.Provider value={{ user, userAccount, loading, signInWithGoogle, signOut, setUserAccount }}>
+    <AuthContext.Provider value={{ user, userAccount, loading, signInWithGoogle, signOut, setUserAccount, setSignupValidation }}>
       {children}
     </AuthContext.Provider>
   );
