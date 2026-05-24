@@ -31,9 +31,10 @@ export default function LoginSignup() {
               // User tried to sign up but already has an account
               console.log('User already exists, signing out and showing error');
               await signOut();
-              alert('บัญชีนี้ลงทะเบียนแล้ว กรุณาใช้ปุ่ม Sign in');
+              alert('บัญชีนี้เคยลงทะเบียนแล้ว');
               setIsSignup(false);
               setLoading(false);
+              setCheckingAccount(false);
               return;
             }
             
