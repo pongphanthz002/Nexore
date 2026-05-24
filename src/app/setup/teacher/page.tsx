@@ -102,13 +102,20 @@ function TeacherSetupContent() {
 
       // Get teacher data
       const teacherData = teachers.find((t: any) => t.teacherId === teacherId);
-      
+
       if (!teacherData) {
         alert('ไม่พบข้อมูลครู กรุณาติดต่อแอดมิน');
         setLoading(false);
         return;
       }
-      
+
+      // Check if teacher already has email/uid assigned
+      if (teacherData.email || teacherData.uid) {
+        alert('เลขประจำตัวนี้ถูกใช้งานแล้ว');
+        setLoading(false);
+        return;
+      }
+
       // Save to localStorage for state preservation
       localStorage.setItem('teacherSetup_teacherId', teacherId);
       localStorage.setItem('teacherSetup_step', '3');

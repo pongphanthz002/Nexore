@@ -82,6 +82,20 @@ class SchoolDatabaseService {
   }
 
   /**
+   * Get teacher data from school database
+   */
+  async getTeacherData(schoolFirebaseConfig: any, teacherId: string): Promise<TeacherFirebaseConfig | null> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    const teacherRef = doc(database, this.teachersCollection, teacherId);
+    const teacherSnap = await getDoc(teacherRef);
+
+    if (teacherSnap.exists()) {
+      return teacherSnap.data() as TeacherFirebaseConfig;
+    }
+    return null;
+  }
+
+  /**
    * Save teacher whitelist (without Firebase config) to school database
    * Preserves email, uid, role for existing teachers (checked by teacherId)
    */

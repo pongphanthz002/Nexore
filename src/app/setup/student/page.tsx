@@ -71,7 +71,14 @@ export default function StudentSetup() {
         setLoading(false);
         return;
       }
-      
+
+      // Check if student already has email/uid assigned
+      if (studentData.email || studentData.uid) {
+        alert('เลขประจำตัวนี้ถูกใช้งานแล้ว');
+        setLoading(false);
+        return;
+      }
+
       console.log('Student data found, saving user account and redirecting...');
       
       if (!user?.email || !user?.uid) {
