@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
+import { Users, GraduationCap, Book } from 'lucide-react';
 
 export default function AdminUsers() {
   const router = useRouter();
@@ -39,18 +40,20 @@ export default function AdminUsers() {
             whileHover={{ scale: 1.02, y: -5 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => router.push('/admin/dashboard/users/teachers')}
-            className={`rounded-2xl p-8 cursor-pointer ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
+            className={`rounded-2xl p-6 cursor-pointer ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
           >
-            <div className="flex flex-col items-center text-center">
-              <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-4 ${isDark ? 'bg-gray-700' : 'bg-blue-100'}`}>
-                <span className="text-4xl">👨‍🏫</span>
+            <div className="flex items-center gap-4">
+              <div className={`w-16 h-16 rounded-xl flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-gray-700' : 'bg-blue-100'}`}>
+                <Users size={32} className={isDark ? 'text-blue-400' : 'text-blue-600'} />
               </div>
-              <h2 className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                จัดการครู
-              </h2>
-              <p className={isDark ? 'text-gray-300' : 'text-gray-600'}>
-                จัดการข้อมูลครู ดาวน์โหลดและอัพโหลดรายชื่อครู
-              </p>
+              <div className="flex-1">
+                <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  จัดการครู
+                </h2>
+                <p className={`text-sm font-light ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Teachers Management
+                </p>
+              </div>
             </div>
           </motion.div>
 
@@ -62,18 +65,20 @@ export default function AdminUsers() {
             whileHover={{ scale: 1.02, y: -5 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => router.push('/admin/dashboard/users/students')}
-            className={`rounded-2xl p-8 cursor-pointer ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
+            className={`rounded-2xl p-6 cursor-pointer ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
           >
-            <div className="flex flex-col items-center text-center">
-              <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-4 ${isDark ? 'bg-gray-700' : 'bg-blue-100'}`}>
-                <span className="text-4xl">👨‍🎓</span>
+            <div className="flex items-center gap-4">
+              <div className={`w-16 h-16 rounded-xl flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-gray-700' : 'bg-blue-100'}`}>
+                <GraduationCap size={32} className={isDark ? 'text-blue-400' : 'text-blue-600'} />
               </div>
-              <h2 className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                จัดการนักเรียน
-              </h2>
-              <p className={isDark ? 'text-gray-300' : 'text-gray-600'}>
-                จัดการข้อมูลนักเรียน ดาวน์โหลดและอัพโหลดรายชื่อนักเรียน
-              </p>
+              <div className="flex-1">
+                <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  จัดการนักเรียน
+                </h2>
+                <p className={`text-sm font-light ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Students Management
+                </p>
+              </div>
             </div>
           </motion.div>
 
@@ -85,18 +90,20 @@ export default function AdminUsers() {
             whileHover={{ scale: 1.02, y: -5 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => router.push('/admin/dashboard/users/subjects')}
-            className={`rounded-2xl p-8 cursor-pointer ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
+            className={`rounded-2xl p-6 cursor-pointer ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
           >
-            <div className="flex flex-col items-center text-center">
-              <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-4 ${isDark ? 'bg-gray-700' : 'bg-blue-100'}`}>
-                <span className="text-4xl">📚</span>
+            <div className="flex items-center gap-4">
+              <div className={`w-16 h-16 rounded-xl flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-gray-700' : 'bg-blue-100'}`}>
+                <Book size={32} className={isDark ? 'text-blue-400' : 'text-blue-600'} />
               </div>
-              <h2 className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                จัดการวิชาเรียน
-              </h2>
-              <p className={isDark ? 'text-gray-300' : 'text-gray-600'}>
-                จัดการตารางสอน ดาวน์โหลดและอัพโหลดรายชื่อวิชาเรียน
-              </p>
+              <div className="flex-1">
+                <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  จัดการวิชาเรียน
+                </h2>
+                <p className={`text-sm font-light ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Subjects Management
+                </p>
+              </div>
             </div>
           </motion.div>
         </div>
