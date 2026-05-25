@@ -33,10 +33,22 @@ export interface StudentData {
   updatedAt: Date;
 }
 
+export interface SubjectData {
+  subjectId: string;
+  teacherId: string;
+  subjectName: string;
+  classroom: string;
+  day: string;
+  time: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 class SchoolDatabaseService {
   private teachersCollection = 'teachers';
   private studentsCollection = 'students';
   private adminsCollection = 'admins';
+  private subjectsCollection = 'subjects';
 
   /**
    * Get school database instance using school's Firebase config
@@ -257,11 +269,73 @@ class SchoolDatabaseService {
    */
   async deleteStudentWhitelist(schoolFirebaseConfig: any, studentIds: string[]): Promise<void> {
     const database = this.getSchoolDB(schoolFirebaseConfig);
-    
+
     for (const studentId of studentIds) {
       const studentRef = doc(database, this.studentsCollection, studentId);
       await deleteDoc(studentRef);
     }
+  }
+
+  /**
+   * Get all subjects from school database
+   */
+  async getAllSubjects(schoolFirebaseConfig: any): Promise<SubjectData[]> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    const querySnapshot = await getDocs(collection(database, this.subjectsCollection));
+    return querySnapshot.docs.map(doc => doc.data() as SubjectData);
+  }
+
+  /**
+   * Save subject whitelist to school database
+   */
+  async saveSubjectWhitelist(schoolFirebaseConfig: any, subjects: any[]): Promise<void> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+
+    for (const subject of subjects) {
+      const subjectRef = doc(database, this.subjectsCollection, subject.subjectId);
+      const existingDoc = await getDoc(subjectRef);
+
+      let subjectData: any = {
+        subjectId: subject.subjectId,
+        teacherId: subject.teacherId,
+        subjectName: subject.subjectName,
+        classroom: subject.classroom,
+        day: subject.day,
+        time: subject.time,
+        updatedAt: new Date(),
+      };
+
+      if (existingDoc.exists()) {
+        const existingData = existingDoc.data();
+        if (existingData.createdAt) subjectData.createdAt = existingData.createdAt;
+      } else {
+        subjectData.createdAt = new Date();
+      }
+
+      await setDoc(subjectRef, subjectData);
+    }
+  }
+
+  /**
+   * Add single subject to school database
+   */
+  async addSubject(schoolFirebaseConfig: any, subject: any): Promise<void> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    const subjectRef = doc(database, this.subjectsCollection, subject.subjectId);
+    await setDoc(subjectRef, {
+      ...subject,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  }
+
+  /**
+   * Delete subject from school database
+   */
+  async deleteSubject(schoolFirebaseConfig: any, subjectId: string): Promise<void> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    const subjectRef = doc(database, this.subjectsCollection, subjectId);
+    await deleteDoc(subjectRef);
   }
 }
 

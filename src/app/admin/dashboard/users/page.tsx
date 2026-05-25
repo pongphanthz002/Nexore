@@ -30,7 +30,7 @@ export default function AdminUsers() {
       <div className="max-w-4xl mx-auto">
 
         {/* Menu Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Teachers Card */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -73,6 +73,29 @@ export default function AdminUsers() {
               </h2>
               <p className={isDark ? 'text-gray-300' : 'text-gray-600'}>
                 จัดการข้อมูลนักเรียน ดาวน์โหลดและอัพโหลดรายชื่อนักเรียน
+              </p>
+            </div>
+          </motion.div>
+
+          {/* Subjects Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30, delay: 0.3 }}
+            whileHover={{ scale: 1.02, y: -5 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => router.push('/admin/dashboard/users/subjects')}
+            className={`rounded-2xl p-8 cursor-pointer ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
+          >
+            <div className="flex flex-col items-center text-center">
+              <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-4 ${isDark ? 'bg-gray-700' : 'bg-blue-100'}`}>
+                <span className="text-4xl">📚</span>
+              </div>
+              <h2 className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                จัดการวิชาเรียน
+              </h2>
+              <p className={isDark ? 'text-gray-300' : 'text-gray-600'}>
+                จัดการตารางสอน ดาวน์โหลดและอัพโหลดรายชื่อวิชาเรียน
               </p>
             </div>
           </motion.div>

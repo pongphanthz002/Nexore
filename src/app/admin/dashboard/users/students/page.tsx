@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { schoolDatabaseService } from '@/services/school-database.service';
 import { firestoreService } from '@/services/firestore.service';
 import { teacherDatabaseService } from '@/services/teacher-database.service';
 import * as XLSX from 'xlsx';
+import { Download, Upload, Trash2, Edit, Eye, EyeOff, RefreshCw, Plus } from 'lucide-react';
 
 export default function StudentsManagement() {
   const router = useRouter();
@@ -20,6 +21,41 @@ export default function StudentsManagement() {
   const [studentsToAdd, setStudentsToAdd] = useState<any[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [pendingStudentsData, setPendingStudentsData] = useState<any[]>([]);
+  const [isDark, setIsDark] = useState(false);
+  const [openClass, setOpenClass] = useState<string | null>(null);
+  const [showUID, setShowUID] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editStudentData, setEditStudentData] = useState({
+    studentId: '',
+    name: '',
+    class: '',
+    number: ''
+  });
+  const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
+  const [newStudentData, setNewStudentData] = useState({
+    studentId: '',
+    name: '',
+    class: '',
+    number: '',
+    email: ''
+  });
+
+  useEffect(() => {
+    setIsDark(document.documentElement.classList.contains('dark'));
+
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.classList.contains('dark'));
+    });
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     loadStudents();
@@ -27,8 +63,13 @@ export default function StudentsManagement() {
 
   const loadStudents = async () => {
     try {
-      if (!userAccount?.schoolFirebaseConfig) return;
+      console.log('loadStudents called, schoolFirebaseConfig:', userAccount?.schoolFirebaseConfig);
+      if (!userAccount?.schoolFirebaseConfig) {
+        console.log('No schoolFirebaseConfig, skipping loadStudents');
+        return;
+      }
       const data = await schoolDatabaseService.getAllStudents(userAccount.schoolFirebaseConfig);
+      console.log('Students data loaded:', data);
       setStudents(data);
     } catch (error) {
       console.error('Error loading students:', error);
@@ -198,7 +239,201 @@ export default function StudentsManagement() {
     setShowPopup(true);
   };
 
-  // Group students by class and sort by number
+  const handleEditStudent = () => {
+    setEditStudentData({
+      studentId: selectedStudent.studentId,
+      name: selectedStudent.name,
+      class: selectedStudent.class,
+      number: selectedStudent.number
+    });
+    setShowEditModal(true);
+    setShowPopup(false);
+  };
+
+  const handleSaveStudentEdit = async () => {
+    if (!userAccount?.schoolFirebaseConfig) return;
+    if (!editStudentData.studentId || !editStudentData.name || !editStudentData.class || !editStudentData.number) {
+      alert('กรุณากรอกข้อมูลให้ครบ');
+      return;
+    }
+
+    if (!confirm('ยืนยันการแก้ไขข้อมูลนักเรียน?')) return;
+
+    setLoading(true);
+    try {
+      const oldStudentId = selectedStudent.studentId;
+      const newStudentId = editStudentData.studentId;
+
+      // If studentId changed, we need to delete old and create new
+      if (oldStudentId !== newStudentId) {
+        await schoolDatabaseService.deleteStudent(userAccount.schoolFirebaseConfig, oldStudentId);
+      }
+
+      await schoolDatabaseService.saveStudentData(userAccount.schoolFirebaseConfig, {
+        studentId: newStudentId,
+        name: editStudentData.name,
+        class: editStudentData.class,
+        number: editStudentData.number,
+        email: selectedStudent.email || '',
+        uid: selectedStudent.uid || '',
+        role: selectedStudent.role || 'student',
+        schoolId: selectedStudent.schoolId || userAccount.schoolId,
+        teacherNodes: selectedStudent.teacherNodes || [],
+        createdAt: selectedStudent.createdAt || new Date(),
+        updatedAt: new Date()
+      });
+
+      await loadStudents();
+      setShowEditModal(false);
+      setSelectedStudent(null);
+      alert('แก้ไขข้อมูลนักเรียนสำเร็จ');
+    } catch (error) {
+      console.error('Error editing student:', error);
+      alert('ไม่สามารถแก้ไขข้อมูลนักเรียนได้');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUnsyncStudent = async () => {
+    if (!userAccount?.schoolFirebaseConfig) return;
+    if (!confirm('ยืนยันการยกเลิกการซิงค์? จะลบ email และ UID ออก')) return;
+
+    setLoading(true);
+    try {
+      await schoolDatabaseService.saveStudentData(userAccount.schoolFirebaseConfig, {
+        ...selectedStudent,
+        email: '',
+        uid: '',
+        updatedAt: new Date()
+      });
+
+      // Also remove from master registry
+      if (selectedStudent.email) {
+        await firestoreService.deleteUserAccount(selectedStudent.email);
+      }
+
+      await loadStudents();
+      setShowPopup(false);
+      setSelectedStudent(null);
+      alert('ยกเลิกการซิงค์สำเร็จ');
+    } catch (error) {
+      console.error('Error unsyncing student:', error);
+      alert('ไม่สามารถยกเลิกการซิงค์ได้');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleStudentSelection = (studentId: string) => {
+    const newSelection = new Set(selectedStudents);
+    if (newSelection.has(studentId)) {
+      newSelection.delete(studentId);
+    } else {
+      newSelection.add(studentId);
+    }
+    setSelectedStudents(newSelection);
+  };
+
+  const handleStudentTouchStart = (studentId: string) => {
+    const timer = setTimeout(() => {
+      toggleStudentSelection(studentId);
+    }, 500);
+    setLongPressTimer(timer);
+  };
+
+  const handleStudentTouchEnd = () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+    }
+  };
+
+  const handleStudentTouchMove = () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+    }
+  };
+
+  const handleDeleteSelectedStudents = async () => {
+    if (selectedStudents.size === 0) return;
+    if (!userAccount?.schoolFirebaseConfig) return;
+
+    if (!confirm(`ยืนยันการลบ ${selectedStudents.size} นักเรียน?`)) return;
+
+    setLoading(true);
+    try {
+      const studentIdsArray = Array.from(selectedStudents);
+      for (const studentId of studentIdsArray) {
+        const student = students.find(s => s.studentId === studentId);
+        if (student?.email) {
+          await firestoreService.deleteUserAccount(student.email);
+        }
+        await schoolDatabaseService.deleteStudent(userAccount.schoolFirebaseConfig, studentId);
+      }
+      setSelectedStudents(new Set());
+      await loadStudents();
+      alert('ลบนักเรียนสำเร็จ');
+    } catch (error) {
+      console.error('Error deleting students:', error);
+      alert('ไม่สามารถลบนักเรียนได้');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddStudent = async () => {
+    if (!userAccount?.schoolFirebaseConfig) return;
+    if (!newStudentData.studentId || !newStudentData.name || !newStudentData.class || !newStudentData.number) {
+      alert('กรุณากรอกข้อมูลให้ครบ');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await schoolDatabaseService.saveStudentData(userAccount.schoolFirebaseConfig, {
+        studentId: newStudentData.studentId,
+        name: newStudentData.name,
+        class: newStudentData.class,
+        number: newStudentData.number,
+        email: newStudentData.email,
+        role: 'student',
+        schoolId: userAccount.schoolId,
+        teacherNodes: [],
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+
+      // Also add to master registry if email is provided
+      if (newStudentData.email) {
+        await firestoreService.saveUserAccount(
+          newStudentData.email,
+          userAccount.schoolId,
+          undefined,
+          'student'
+        );
+      }
+
+      await loadStudents();
+      setShowAddModal(false);
+      setNewStudentData({
+        studentId: '',
+        name: '',
+        class: '',
+        number: '',
+        email: ''
+      });
+      alert('เพิ่มนักเรียนสำเร็จ');
+    } catch (error) {
+      console.error('Error adding student:', error);
+      alert('ไม่สามารถเพิ่มนักเรียนได้');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Group students by class and sort by studentId
   const groupedStudents = students.reduce((acc: any, student: any) => {
     const className = student.class || 'ไม่ระบุชั้น';
     if (!acc[className]) {
@@ -208,17 +443,19 @@ export default function StudentsManagement() {
     return acc;
   }, {});
 
-  // Sort each group by number
+  // Sort each group by studentId
   Object.keys(groupedStudents).forEach(className => {
     groupedStudents[className].sort((a: any, b: any) => {
-      const numA = parseInt(a.number) || 0;
-      const numB = parseInt(b.number) || 0;
-      return numA - numB;
+      return a.studentId.localeCompare(b.studentId);
     });
   });
 
+  const toggleClass = (className: string) => {
+    setOpenClass(openClass === className ? null : className);
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 p-6">
+    <div className={`min-h-screen p-6 pb-24 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
@@ -226,10 +463,10 @@ export default function StudentsManagement() {
         className="flex items-center justify-between mb-8"
       >
         <div>
-          <h1 className="text-3xl font-bold text-gray-800">
+          <h1 className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
             จัดการนักเรียน
           </h1>
-          <p className="text-gray-500 text-sm">
+          <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
             STUDENTS MANAGEMENT
           </p>
         </div>
@@ -237,49 +474,10 @@ export default function StudentsManagement() {
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           onClick={() => router.push('/admin/dashboard/users')}
-          className="bg-white text-gray-700 px-6 py-3 rounded-2xl shadow-sm hover:shadow-md transition-all"
+          className={`px-6 py-3 rounded-2xl shadow-sm hover:shadow-md transition-all ${isDark ? 'bg-gray-800 text-gray-300' : 'bg-white text-gray-700'}`}
         >
           กลับ
         </motion.button>
-      </motion.div>
-
-      {/* Download/Upload Card */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="bg-white rounded-3xl p-6 shadow-lg mb-6"
-      >
-        <h2 className="text-xl font-bold text-gray-800 mb-4">
-          ดาวน์โหลดและอัพโหลดรายชื่อนักเรียน
-        </h2>
-        <div className="flex gap-4">
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={handleDownload}
-            className="flex-1 bg-blue-500 text-white py-3 rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2"
-          >
-            <span>📥</span>
-            <span>ดาวน์โหลดรายชื่อนักเรียน</span>
-          </motion.button>
-          <div className="flex-1 relative">
-            <input
-              type="file"
-              accept=".xlsx"
-              onChange={handleUpload}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-            />
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="w-full bg-gray-200 text-gray-700 py-3 rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2"
-            >
-              <span>📤</span>
-              <span>อัพโหลดรายชื่อนักเรียน</span>
-            </motion.button>
-          </div>
-        </div>
       </motion.div>
 
       {/* Students List Card */}
@@ -287,50 +485,149 @@ export default function StudentsManagement() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
-        className="bg-white rounded-3xl p-6 shadow-lg"
+        className={`rounded-2xl p-6 shadow-lg ${isDark ? 'bg-gray-800' : 'bg-white'}`}
       >
-        <h2 className="text-xl font-bold text-gray-800 mb-4">
-          รายชื่อนักเรียนทั้งหมด ({students.length})
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
+            รายชื่อนักเรียนทั้งหมด ({students.length})
+          </h2>
+          {selectedStudents.size > 0 && (
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleDeleteSelectedStudents}
+              className="flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-xl"
+            >
+              <Trash2 size={16} />
+              <span>ลบ {selectedStudents.size} รายการ</span>
+            </motion.button>
+          )}
+        </div>
         {students.length === 0 ? (
-          <p className="text-gray-500 text-center py-8">
+          <p className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
             ยังไม่มีข้อมูลนักเรียน
           </p>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-4">
             {Object.keys(groupedStudents).sort().map((className, classIndex) => (
               <div key={className}>
-                <h3 className="text-lg font-semibold text-gray-700 mb-3">
-                  ชั้น {className} ({groupedStudents[className].length})
-                </h3>
-                <div className="space-y-3">
-                  {groupedStudents[className].map((student: any, studentIndex: number) => (
-                    <motion.div
-                      key={student.studentId}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.3 + classIndex * 0.1 + studentIndex * 0.02 }}
-                      whileHover={{ scale: 1.01, x: 5 }}
-                      whileTap={{ scale: 0.99 }}
-                      onClick={() => handleStudentClick(student)}
-                      className="bg-gray-50 rounded-2xl p-4 cursor-pointer hover:bg-blue-50 transition-all"
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 + classIndex * 0.1 }}
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.99 }}
+                  onClick={() => toggleClass(className)}
+                  className={`rounded-2xl p-4 cursor-pointer transition-all ${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'} ${openClass === className ? 'ring-2 ring-blue-500' : ''}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>
+                      ชั้น {className} ({groupedStudents[className].length})
+                    </h3>
+                    <motion.span
+                      animate={{ rotate: openClass === className ? 180 : 0 }}
+                      className={`text-2xl ${isDark ? 'text-gray-300' : 'text-gray-600'}`}
                     >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-semibold text-gray-800">{student.name}</p>
-                          <p className="text-sm text-gray-500">
-                            {student.studentId} • เลขที่ {student.number}
-                          </p>
-                        </div>
-                        <span className="text-blue-500">→</span>
+                      {openClass === className ? '▼' : '▶'}
+                    </motion.span>
+                  </div>
+                </motion.div>
+                <AnimatePresence>
+                  {openClass === className && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.3 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="space-y-3 mt-3 pl-4">
+                        {groupedStudents[className].map((student: any, studentIndex: number) => (
+                          <motion.div
+                            key={student.studentId}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: studentIndex * 0.02 }}
+                            whileHover={{ scale: 1.01, x: 5 }}
+                            whileTap={{ scale: 0.99 }}
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              toggleStudentSelection(student.studentId);
+                            }}
+                            onTouchStart={() => handleStudentTouchStart(student.studentId)}
+                            onTouchEnd={handleStudentTouchEnd}
+                            onTouchMove={handleStudentTouchMove}
+                            onClick={() => selectedStudents.size > 0 ? toggleStudentSelection(student.studentId) : handleStudentClick(student)}
+                            className={`rounded-2xl p-4 cursor-pointer transition-all ${selectedStudents.has(student.studentId) ? 'bg-red-100 border-2 border-red-500' : isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-50 hover:bg-blue-50'}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>{student.name}</p>
+                                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                  {student.studentId} • เลขที่ {student.number}
+                                </p>
+                              </div>
+                              {selectedStudents.has(student.studentId) ? (
+                                <span className="text-red-500">✓</span>
+                              ) : (
+                                <span className="text-blue-500">→</span>
+                              )}
+                            </div>
+                          </motion.div>
+                        ))}
                       </div>
                     </motion.div>
-                  ))}
-                </div>
+                  )}
+                </AnimatePresence>
               </div>
             ))}
           </div>
         )}
+      </motion.div>
+
+      {/* Footer Dock */}
+      <motion.div
+        initial={{ y: 100 }}
+        animate={{ y: 0 }}
+        className="fixed bottom-0 left-0 right-0 z-40"
+      >
+        <div className={`dock-container relative px-6 py-3 shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+          <div className="flex items-center justify-center gap-6 max-w-4xl mx-auto">
+            {/* Download Button */}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleDownload}
+              className={`flex items-center justify-center p-4 rounded-xl transition-colors w-24 ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+            >
+              <Download size={28} />
+            </motion.button>
+
+            {/* Hero Action Button (Larger) */}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setShowAddModal(true)}
+              className="hero-action-button relative z-50 flex items-center justify-center p-5 rounded-3xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg transition-all w-32"
+              style={{
+                boxShadow: '0 8px 20px rgba(59, 130, 246, 0.4)'
+              }}
+            >
+              <Plus size={32} />
+            </motion.button>
+
+            {/* Upload Button */}
+            <div className={`relative p-4 rounded-xl transition-colors w-24 flex items-center justify-center ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
+              <input
+                type="file"
+                accept=".xlsx"
+                onChange={handleUpload}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              />
+              <Upload size={28} className={isDark ? 'text-gray-300' : 'text-gray-700'} />
+            </div>
+          </div>
+        </div>
       </motion.div>
 
       {/* Popup */}
@@ -347,52 +644,183 @@ export default function StudentsManagement() {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl"
+            className={`rounded-2xl p-6 max-w-md w-full shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-gray-800">
+              <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
                 รายละเอียดนักเรียน
               </h3>
               <button
                 onClick={() => setShowPopup(false)}
-                className="text-gray-400 hover:text-gray-600 text-2xl"
+                className={`text-2xl ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'}`}
               >
                 ×
               </button>
             </div>
             <div className="space-y-3">
               <div>
-                <p className="text-sm text-gray-500">เลขประจำตัวนักเรียน</p>
-                <p className="font-semibold text-gray-800">{selectedStudent.studentId}</p>
+                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>เลขประจำตัวนักเรียน</p>
+                <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>{selectedStudent.studentId}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">ชื่อ-สกุล</p>
-                <p className="font-semibold text-gray-800">{selectedStudent.name}</p>
+                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>ชื่อ-สกุล</p>
+                <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>{selectedStudent.name}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">ชั้น</p>
-                <p className="font-semibold text-gray-800">{selectedStudent.class}</p>
+                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>ชั้น</p>
+                <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>{selectedStudent.class}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">เลขที่</p>
-                <p className="font-semibold text-gray-800">{selectedStudent.number}</p>
+                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>เลขที่</p>
+                <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>{selectedStudent.number}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">Email</p>
-                <p className="font-semibold text-gray-800">{selectedStudent.email || '-'}</p>
+                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Email</p>
+                <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>{selectedStudent.email || '-'}</p>
               </div>
-              <div>
-                <p className="text-sm text-gray-500">UID</p>
-                <p className="font-semibold text-gray-800">{selectedStudent.uid || '-'}</p>
-              </div>
+              {selectedStudent.uid && (
+                <div>
+                  <div className="flex items-center justify-between">
+                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>UID</p>
+                    <button
+                      onClick={() => setShowUID(!showUID)}
+                      className={`p-1 rounded ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                    >
+                      {showUID ? <EyeOff size={16} className={isDark ? 'text-gray-400' : 'text-gray-500'} /> : <Eye size={16} className={isDark ? 'text-gray-400' : 'text-gray-500'} />}
+                    </button>
+                  </div>
+                  {showUID ? (
+                    <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>{selectedStudent.uid}</p>
+                  ) : (
+                    <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>••••••••••••</p>
+                  )}
+                </div>
+              )}
               {selectedStudent.teacherNodes && selectedStudent.teacherNodes.length > 0 && (
                 <div>
-                  <p className="text-sm text-gray-500">Teacher Nodes</p>
-                  <p className="font-semibold text-gray-800">
+                  <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Teacher Nodes</p>
+                  <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>
                     {selectedStudent.teacherNodes.join(', ')}
                   </p>
                 </div>
               )}
+            </div>
+            <div className="flex gap-3 mt-6">
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleEditStudent}
+                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-500 text-white"
+              >
+                <Edit size={18} />
+                <span>แก้ไข</span>
+              </motion.button>
+              {selectedStudent.email && (
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={handleUnsyncStudent}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-orange-500 text-white"
+                >
+                  <RefreshCw size={18} />
+                  <span>ยกเลิกซิงค์</span>
+                </motion.button>
+              )}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+
+      {/* Edit Modal */}
+      {showEditModal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+          onClick={() => setShowEditModal(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            onClick={(e) => e.stopPropagation()}
+            className={`rounded-2xl p-6 max-w-md w-full shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
+                แก้ไขข้อมูลนักเรียน
+              </h3>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className={`text-2xl ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'}`}
+              >
+                ×
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className={`block text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-1`}>
+                  เลขประจำตัวนักเรียน
+                </label>
+                <input
+                  type="text"
+                  value={editStudentData.studentId}
+                  onChange={(e) => setEditStudentData({ ...editStudentData, studentId: e.target.value })}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                />
+              </div>
+              <div>
+                <label className={`block text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-1`}>
+                  ชื่อ-สกุล
+                </label>
+                <input
+                  type="text"
+                  value={editStudentData.name}
+                  onChange={(e) => setEditStudentData({ ...editStudentData, name: e.target.value })}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                />
+              </div>
+              <div>
+                <label className={`block text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-1`}>
+                  ชั้น
+                </label>
+                <input
+                  type="text"
+                  value={editStudentData.class}
+                  onChange={(e) => setEditStudentData({ ...editStudentData, class: e.target.value })}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                />
+              </div>
+              <div>
+                <label className={`block text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-1`}>
+                  เลขที่
+                </label>
+                <input
+                  type="text"
+                  value={editStudentData.number}
+                  onChange={(e) => setEditStudentData({ ...editStudentData, number: e.target.value })}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setShowEditModal(false)}
+                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'}`}
+              >
+                ยกเลิก
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleSaveStudentEdit}
+                className="flex-1 bg-blue-500 text-white py-3 rounded-xl"
+              >
+                บันทึก
+              </motion.button>
             </div>
           </motion.div>
         </motion.div>
@@ -410,24 +838,24 @@ export default function StudentsManagement() {
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
-            className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl"
+            className={`rounded-2xl p-6 max-w-lg w-full shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
           >
             <div className="mb-4">
-              <h3 className="text-xl font-bold text-gray-800 mb-2">
+              <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'} mb-2`}>
                 ⚠️ ยืนยันการอัพโหลดรายชื่อนักเรียน
               </h3>
-              <p className="text-gray-600">
+              <p className={isDark ? 'text-gray-300' : 'text-gray-600'}>
                 พบการเปลี่ยนแปลงในรายชื่อนักเรียน
               </p>
             </div>
 
             {studentsToDelete.length > 0 && (
-              <div className="max-h-40 overflow-y-auto mb-4 bg-red-50 rounded-2xl p-4">
-                <p className="text-sm text-gray-500 mb-2">รายชื่อที่จะถูกลบ ({studentsToDelete.length} คน):</p>
+              <div className={`max-h-40 overflow-y-auto mb-4 rounded-2xl p-4 ${isDark ? 'bg-red-900/30' : 'bg-red-50'}`}>
+                <p className={`text-sm mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>รายชื่อที่จะถูกลบ ({studentsToDelete.length} คน):</p>
                 {studentsToDelete.map((student) => (
                   <div key={student.studentId} className="flex items-center gap-2 py-1">
                     <span className="text-red-500">🗑️</span>
-                    <span className="text-gray-800">
+                    <span className={isDark ? 'text-gray-200' : 'text-gray-800'}>
                       {student.studentId} - {student.name} (ชั้น {student.class})
                     </span>
                   </div>
@@ -436,12 +864,12 @@ export default function StudentsManagement() {
             )}
 
             {studentsToAdd.length > 0 && (
-              <div className="max-h-40 overflow-y-auto mb-4 bg-green-50 rounded-2xl p-4">
-                <p className="text-sm text-gray-500 mb-2">รายชื่อที่จะถูกเพิ่ม ({studentsToAdd.length} คน):</p>
+              <div className={`max-h-40 overflow-y-auto mb-4 rounded-2xl p-4 ${isDark ? 'bg-green-900/30' : 'bg-green-50'}`}>
+                <p className={`text-sm mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>รายชื่อที่จะถูกเพิ่ม ({studentsToAdd.length} คน):</p>
                 {studentsToAdd.map((student) => (
                   <div key={student.studentId} className="flex items-center gap-2 py-1">
                     <span className="text-green-500">➕</span>
-                    <span className="text-gray-800">
+                    <span className={isDark ? 'text-gray-200' : 'text-gray-800'}>
                       {student.studentId} - {student.name} (ชั้น {student.class})
                     </span>
                   </div>
@@ -459,7 +887,7 @@ export default function StudentsManagement() {
                   setStudentsToAdd([]);
                   setPendingStudentsData([]);
                 }}
-                className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-2xl hover:bg-gray-300 transition-all"
+                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'}`}
               >
                 ยกเลิก
               </motion.button>
@@ -467,9 +895,120 @@ export default function StudentsManagement() {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={confirmDeleteAndUpload}
-                className="flex-1 bg-red-500 text-white py-3 rounded-2xl hover:bg-red-600 transition-all"
+                className="flex-1 bg-red-500 text-white py-3 rounded-xl"
               >
                 ยืนยันและอัพโหลด
+              </motion.button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+
+      {/* Add Student Modal */}
+      {showAddModal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+          onClick={() => setShowAddModal(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            onClick={(e) => e.stopPropagation()}
+            className={`rounded-2xl p-6 max-w-md w-full shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
+                เพิ่มนักเรียน
+              </h3>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className={`text-2xl ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'}`}
+              >
+                ×
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className={`block text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-1`}>
+                  เลขประจำตัวนักเรียน
+                </label>
+                <input
+                  type="text"
+                  value={newStudentData.studentId}
+                  onChange={(e) => setNewStudentData({ ...newStudentData, studentId: e.target.value })}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  placeholder="เช่น S001"
+                />
+              </div>
+              <div>
+                <label className={`block text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-1`}>
+                  ชื่อ-สกุล
+                </label>
+                <input
+                  type="text"
+                  value={newStudentData.name}
+                  onChange={(e) => setNewStudentData({ ...newStudentData, name: e.target.value })}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  placeholder="ชื่อ-สกุล"
+                />
+              </div>
+              <div>
+                <label className={`block text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-1`}>
+                  ชั้น
+                </label>
+                <input
+                  type="text"
+                  value={newStudentData.class}
+                  onChange={(e) => setNewStudentData({ ...newStudentData, class: e.target.value })}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  placeholder="เช่น M.1"
+                />
+              </div>
+              <div>
+                <label className={`block text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-1`}>
+                  เลขที่
+                </label>
+                <input
+                  type="text"
+                  value={newStudentData.number}
+                  onChange={(e) => setNewStudentData({ ...newStudentData, number: e.target.value })}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  placeholder="เช่น 1"
+                />
+              </div>
+              <div>
+                <label className={`block text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-1`}>
+                  Email (ไม่บังคับ)
+                </label>
+                <input
+                  type="email"
+                  value={newStudentData.email}
+                  onChange={(e) => setNewStudentData({ ...newStudentData, email: e.target.value })}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  placeholder="email@example.com"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setShowAddModal(false)}
+                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'}`}
+              >
+                ยกเลิก
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleAddStudent}
+                className="flex-1 bg-blue-500 text-white py-3 rounded-xl"
+              >
+                เพิ่ม
               </motion.button>
             </div>
           </motion.div>
