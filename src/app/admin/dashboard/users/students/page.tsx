@@ -45,6 +45,7 @@ export default function StudentsManagement() {
     email: ''
   });
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedClass, setSelectedClass] = useState<string | null>(null);
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains('dark'));
@@ -522,8 +523,31 @@ export default function StudentsManagement() {
     });
   });
 
-  const toggleClass = (className: string) => {
-    setOpenClass(openClass === className ? null : className);
+  // Group classes by base level (e.g., M.1/1, M.1/2, M.1/3 -> M.1)
+  const classGroups = Object.keys(groupedStudents).reduce((acc: any, className) => {
+    // Extract base level (e.g., "M.1" from "M.1/1" or "ม.1/1")
+    const baseLevel = className.split('/')[0];
+    if (!acc[baseLevel]) {
+      acc[baseLevel] = [];
+    }
+    acc[baseLevel].push(className);
+    return acc;
+  }, {});
+
+  // Sort classes within each group
+  Object.keys(classGroups).forEach(baseLevel => {
+    classGroups[baseLevel].sort();
+  });
+
+  // Sort base levels
+  const sortedBaseLevels = Object.keys(classGroups).sort();
+
+  const handleClassClick = (className: string) => {
+    setSelectedClass(className);
+  };
+
+  const handleBackToClasses = () => {
+    setSelectedClass(null);
   };
 
   return (
@@ -597,8 +621,19 @@ export default function StudentsManagement() {
       >
         <div className="flex items-center justify-between mb-4">
           <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
-            รายชื่อนักเรียนทั้งหมด ({filteredStudents.length})
+            {selectedClass ? `ชั้น ${selectedClass}` : searchQuery ? 'ผลการค้นหา' : 'รายชื่อห้องเรียนทั้งหมด'}
           </h2>
+          {selectedClass && (
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleBackToClasses}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
+            >
+              <ArrowLeft size={16} />
+              <span>กลับ</span>
+            </motion.button>
+          )}
           {selectedStudents.size > 0 && (
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -611,82 +646,112 @@ export default function StudentsManagement() {
             </motion.button>
           )}
         </div>
-        {filteredStudents.length === 0 ? (
-          <p className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-            {searchQuery ? 'ไม่พบนักเรียนที่ค้นหา' : 'ยังไม่มีข้อมูลนักเรียน'}
-          </p>
-        ) : (
-          <div className="space-y-4">
-            {Object.keys(groupedStudents).sort().map((className, classIndex) => (
-              <div key={className}>
+        {selectedClass ? (
+          // Show students in selected class
+          <div className="space-y-3">
+            {groupedStudents[selectedClass]?.map((student: any, studentIndex: number) => (
+              <motion.div
+                key={student.studentId}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: studentIndex * 0.02 }}
+                whileHover={{ scale: 1.01, x: 5 }}
+                whileTap={{ scale: 0.99 }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  toggleStudentSelection(student.studentId);
+                }}
+                onTouchStart={() => handleStudentTouchStart(student.studentId)}
+                onTouchEnd={handleStudentTouchEnd}
+                onTouchMove={handleStudentTouchMove}
+                onClick={() => selectedStudents.size > 0 ? toggleStudentSelection(student.studentId) : handleStudentClick(student)}
+                className={`rounded-2xl p-4 cursor-pointer transition-all ${selectedStudents.has(student.studentId) ? 'bg-red-100 border-2 border-red-500' : isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-50 hover:bg-blue-50'}`}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>{student.name}</p>
+                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      {student.studentId} • เลขที่ {student.number} • ชั้น {student.class}
+                    </p>
+                  </div>
+                  {selectedStudents.has(student.studentId) ? (
+                    <span className="text-red-500">✓</span>
+                  ) : (
+                    <span className="text-blue-500">→</span>
+                  )}
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        ) : searchQuery ? (
+          // Show filtered students directly when searching
+          <div className="space-y-3">
+            {filteredStudents.length === 0 ? (
+              <p className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                ไม่พบนักเรียนที่ค้นหา
+              </p>
+            ) : (
+              filteredStudents.map((student: any, studentIndex: number) => (
                 <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3 + classIndex * 0.1 }}
-                  whileHover={{ scale: 1.01 }}
+                  key={student.studentId}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: studentIndex * 0.02 }}
+                  whileHover={{ scale: 1.01, x: 5 }}
                   whileTap={{ scale: 0.99 }}
-                  onClick={() => toggleClass(className)}
-                  className={`rounded-2xl p-4 cursor-pointer transition-all ${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'} ${openClass === className ? 'ring-2 ring-blue-500' : ''}`}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    toggleStudentSelection(student.studentId);
+                  }}
+                  onTouchStart={() => handleStudentTouchStart(student.studentId)}
+                  onTouchEnd={handleStudentTouchEnd}
+                  onTouchMove={handleStudentTouchMove}
+                  onClick={() => selectedStudents.size > 0 ? toggleStudentSelection(student.studentId) : handleStudentClick(student)}
+                  className={`rounded-2xl p-4 cursor-pointer transition-all ${selectedStudents.has(student.studentId) ? 'bg-red-100 border-2 border-red-500' : isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-50 hover:bg-blue-50'}`}
                 >
                   <div className="flex items-center justify-between">
-                    <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>
-                      ชั้น {className} ({groupedStudents[className].length})
-                    </h3>
-                    <motion.span
-                      animate={{ rotate: openClass === className ? 180 : 0 }}
-                      className={`text-2xl ${isDark ? 'text-gray-300' : 'text-gray-600'}`}
-                    >
-                      {openClass === className ? '▼' : '▶'}
-                    </motion.span>
+                    <div>
+                      <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>{student.name}</p>
+                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {student.studentId} • เลขที่ {student.number} • ชั้น {student.class}
+                      </p>
+                    </div>
+                    {selectedStudents.has(student.studentId) ? (
+                      <span className="text-red-500">✓</span>
+                    ) : (
+                      <span className="text-blue-500">→</span>
+                    )}
                   </div>
                 </motion.div>
-                <AnimatePresence>
-                  {openClass === className && (
+              ))
+            )}
+          </div>
+        ) : (
+          // Show class cards in grid layout grouped by base level
+          <div className="space-y-6">
+            {sortedBaseLevels.map((baseLevel, levelIndex) => (
+              <div key={baseLevel}>
+                <div className="grid grid-cols-2 gap-4">
+                  {classGroups[baseLevel].map((className: string, classIndex: number) => (
                     <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.3 }}
-                      className="overflow-hidden"
+                      key={className}
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.3 + levelIndex * 0.1 + classIndex * 0.05 }}
+                      whileHover={{ scale: 1.02, y: -5 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => handleClassClick(className)}
+                      className={`rounded-2xl p-4 cursor-pointer transition-all shadow-md ${isDark ? 'bg-gray-800 hover:bg-gray-700' : 'bg-white hover:bg-blue-50'}`}
                     >
-                      <div className="space-y-3 mt-3 pl-4">
-                        {groupedStudents[className].map((student: any, studentIndex: number) => (
-                          <motion.div
-                            key={student.studentId}
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: studentIndex * 0.02 }}
-                            whileHover={{ scale: 1.01, x: 5 }}
-                            whileTap={{ scale: 0.99 }}
-                            onContextMenu={(e) => {
-                              e.preventDefault();
-                              toggleStudentSelection(student.studentId);
-                            }}
-                            onTouchStart={() => handleStudentTouchStart(student.studentId)}
-                            onTouchEnd={handleStudentTouchEnd}
-                            onTouchMove={handleStudentTouchMove}
-                            onClick={() => selectedStudents.size > 0 ? toggleStudentSelection(student.studentId) : handleStudentClick(student)}
-                            className={`rounded-2xl p-4 cursor-pointer transition-all ${selectedStudents.has(student.studentId) ? 'bg-red-100 border-2 border-red-500' : isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-50 hover:bg-blue-50'}`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>{student.name}</p>
-                                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                  {student.studentId} • เลขที่ {student.number}
-                                </p>
-                              </div>
-                              {selectedStudents.has(student.studentId) ? (
-                                <span className="text-red-500">✓</span>
-                              ) : (
-                                <span className="text-blue-500">→</span>
-                              )}
-                            </div>
-                          </motion.div>
-                        ))}
-                      </div>
+                      <h4 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
+                        ชั้น {className}
+                      </h4>
+                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {groupedStudents[className].length} นักเรียน
+                      </p>
                     </motion.div>
-                  )}
-                </AnimatePresence>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
