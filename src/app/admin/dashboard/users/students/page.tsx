@@ -825,9 +825,9 @@ export default function StudentsManagement() {
               </h3>
               <button
                 onClick={() => setShowPopup(false)}
-                className={`text-2xl ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'}`}
+                className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-100 text-gray-400 hover:text-gray-600'}`}
               >
-                ×
+                <X size={24} />
               </button>
             </div>
             <div className="space-y-3">

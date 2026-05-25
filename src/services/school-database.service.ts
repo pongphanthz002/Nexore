@@ -337,6 +337,7 @@ class SchoolDatabaseService {
         classroom: subject.classroom,
         day: subject.day,
         time: subject.time,
+        duration: subject.duration || '1',
         updatedAt: new Date(),
       };
 

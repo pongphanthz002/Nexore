@@ -26,8 +26,12 @@ export default function SubjectsManagement() {
     subjectName: '',
     classroom: '',
     day: '',
-    time: ''
+    time: '',
+    duration: '1'
   });
+  const [selectedTeacherId, setSelectedTeacherId] = useState<string>('');
+  const [showTeacherDropdown, setShowTeacherDropdown] = useState(false);
+  const [showDurationDropdown, setShowDurationDropdown] = useState(false);
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains('dark'));
@@ -70,7 +74,8 @@ export default function SubjectsManagement() {
           'วิชา': '',
           'ห้อง': '',
           'วัน': '',
-          'เวลา': ''
+          'เวลา': '',
+          'จำนวนชั่วโมง': ''
         }
       ];
       const worksheet = XLSX.utils.json_to_sheet(template);
@@ -83,7 +88,8 @@ export default function SubjectsManagement() {
         'วิชา': s.subjectName,
         'ห้อง': s.classroom,
         'วัน': s.day,
-        'เวลา': s.time
+        'เวลา': s.time,
+        'จำนวนชั่วโมง': s.duration || 1
       }));
       const worksheet = XLSX.utils.json_to_sheet(data);
       const workbook = XLSX.utils.book_new();
@@ -109,17 +115,44 @@ export default function SubjectsManagement() {
       const worksheet = workbook.Sheets[sheetName];
       const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
 
-      const subjectsData = jsonData.map((row: any, index: number) => ({
-        subjectId: `SUB${Date.now()}_${index}`,
-        teacherId: row['เลขประจำตัวครู'] || '',
-        subjectName: row['วิชา'] || '',
-        classroom: row['ห้อง'] || '',
-        day: row['วัน'] || '',
-        time: row['เวลา'] || ''
-      }));
+      // Parse classroom field to handle multiple classes (comma-separated)
+      const subjectsData: any[] = [];
+      jsonData.forEach((row: any, index: number) => {
+        const classroomStr = row['ห้อง'] || '';
+        const classrooms = classroomStr.split(',').map((c: string) => c.trim()).filter((c: string) => c);
+        
+        if (classrooms.length > 0) {
+          classrooms.forEach((classroom: string) => {
+            // Replace "/" with "-" in classroom name for valid Firestore document ID
+            // e.g., "ม.1/1" → "ม.1-1"
+            const safeClassroom = classroom.replace(/\//g, '-');
+            subjectsData.push({
+              subjectId: `SUB${Date.now()}_${index}_${safeClassroom}`,
+              teacherId: row['เลขประจำตัวครู'] || '',
+              subjectName: row['วิชา'] || '',
+              classroom: classroom,
+              day: row['วัน'] || '',
+              time: row['เวลา'] || '',
+              duration: row['จำนวนชั่วโมง'] || '1'
+            });
+          });
+        }
+      });
 
+      // Delete ALL existing subjects
+      const existingSubjects = await schoolDatabaseService.getAllSubjects(userAccount.schoolFirebaseConfig);
+      for (const subject of existingSubjects) {
+        try {
+          await schoolDatabaseService.deleteSubject(userAccount.schoolFirebaseConfig, subject.subjectId);
+        } catch (error) {
+          console.error('Error deleting subject:', subject.subjectId, error);
+        }
+      }
+
+      // Save all new subjects from the file
       await schoolDatabaseService.saveSubjectWhitelist(userAccount.schoolFirebaseConfig, subjectsData);
       await loadData();
+      invalidateCache();
       alert('อัพโหลดรายชื่อวิชาเรียนสำเร็จ');
     } catch (error) {
       console.error('Error uploading subjects:', error);
@@ -151,7 +184,8 @@ export default function SubjectsManagement() {
         subjectName: '',
         classroom: '',
         day: '',
-        time: ''
+        time: '',
+        duration: '1'
       });
       alert('เพิ่มวิชาเรียนสำเร็จ');
     } catch (error) {
@@ -286,6 +320,52 @@ export default function SubjectsManagement() {
     return teacher ? teacher.name : teacherId;
   };
 
+  // Filter subjects by selected teacher
+  const filteredSubjects = selectedTeacherId 
+    ? subjects.filter(s => s.teacherId === selectedTeacherId)
+    : [];
+
+  // Group filtered subjects by day only (don't combine duration)
+  const groupedByDay = filteredSubjects.reduce((acc: any, subject: any) => {
+    const day = subject.day || 'ไม่ระบุวัน';
+    if (!acc[day]) {
+      acc[day] = [];
+    }
+    acc[day].push(subject);
+    return acc;
+  }, {});
+
+  const handleTeacherSelect = (teacherId: string) => {
+    setSelectedTeacherId(teacherId);
+    setShowTeacherDropdown(false);
+  };
+
+  const selectedTeacher = teachers.find(t => t.teacherId === selectedTeacherId);
+
+  // Helper function to convert Thai day names to English 3-letter abbreviations
+  const convertDayToEnglish = (day: string) => {
+    const dayMap: { [key: string]: string } = {
+      'จันทร์': 'Mon',
+      'อังคาร': 'Tue',
+      'พุธ': 'Wed',
+      'พฤหัสบดี': 'Thu',
+      'ศุกร์': 'Fri',
+      'เสาร์': 'Sat',
+      'อาทิตย์': 'Sun',
+      'Mon': 'Mon',
+      'Tue': 'Tue',
+      'Wed': 'Wed',
+      'Thu': 'Thu',
+      'Fri': 'Fri',
+      'Sat': 'Sat',
+      'Sun': 'Sun'
+    };
+    return dayMap[day] || day;
+  };
+
+  // Day order for sorting (Monday to Sunday)
+  const dayOrder = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
   return (
     <div 
       className={`min-h-screen p-6 pb-24 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}
@@ -317,24 +397,62 @@ export default function SubjectsManagement() {
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between mb-8"
+        className="mb-6"
       >
-        <div>
-          <h1 className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
-            จัดการวิชาเรียน
-          </h1>
-          <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-            SUBJECTS MANAGEMENT
-          </p>
+        <h1 className={`text-3xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-800'}`}>
+          จัดการข้อมูลวิชาเรียน
+        </h1>
+        
+        {/* Teacher Dropdown */}
+        <div className={`flex items-center gap-3 p-4 rounded-2xl shadow-sm ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+          {/* Back Button */}
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => router.push('/admin/dashboard/users')}
+            className={`p-2 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
+          >
+            <ArrowLeft size={20} />
+          </motion.button>
+
+          {/* Custom Teacher Dropdown */}
+          <div className="flex-1 relative">
+            <div
+              onClick={() => setShowTeacherDropdown(!showTeacherDropdown)}
+              className={`w-full px-4 py-2 rounded-xl cursor-pointer flex items-center justify-between ${isDark ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-700'}`}
+            >
+              <span>{selectedTeacher ? selectedTeacher.name : 'เลือกครู'}</span>
+              <motion.span
+                animate={{ rotate: showTeacherDropdown ? 180 : 0 }}
+                className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}
+              >
+                ▼
+              </motion.span>
+            </div>
+            
+            {/* Dropdown List */}
+            {showTeacherDropdown && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={`absolute top-full left-0 right-0 mt-2 rounded-xl shadow-lg z-50 max-h-64 overflow-y-auto ${isDark ? 'bg-gray-800' : 'bg-white'}`}
+              >
+                {teachers.map((teacher) => (
+                  <div
+                    key={teacher.teacherId}
+                    onClick={() => handleTeacherSelect(teacher.teacherId)}
+                    className={`p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${isDark ? 'text-white' : 'text-gray-800'}`}
+                  >
+                    <div className="font-medium">{teacher.name}</div>
+                    <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      {teacher.teacherId}
+                    </div>
+                  </div>
+                ))}
+              </motion.div>
+            )}
+          </div>
         </div>
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => router.push('/admin/dashboard/users')}
-          className={`px-6 py-3 rounded-2xl shadow-sm hover:shadow-md transition-all ${isDark ? 'bg-gray-800 text-gray-300' : 'bg-white text-gray-700'}`}
-        >
-          กลับ
-        </motion.button>
       </motion.div>
 
       {/* Subjects List */}
@@ -346,7 +464,10 @@ export default function SubjectsManagement() {
       >
         <div className="flex items-center justify-between mb-4">
           <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
-            รายชื่อวิชาเรียนทั้งหมด ({subjects.length})
+            {selectedTeacherId 
+              ? `ข้อมูลวิชาที่สอน (${Object.keys(groupedByDay).length} วัน)`
+              : 'รายชื่อวิชาเรียนทั้งหมด'
+            }
           </h2>
           {selectedSubjects.size > 0 && (
             <motion.button
@@ -361,48 +482,74 @@ export default function SubjectsManagement() {
           )}
         </div>
 
-        {subjects.length === 0 ? (
+        {!selectedTeacherId ? (
           <p className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-            ยังไม่มีข้อมูลวิชาเรียน
+            กรุณาเลือกครูเพื่อดูวิชาที่สอน
+          </p>
+        ) : Object.keys(groupedByDay).length === 0 ? (
+          <p className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            ยังไม่มีข้อมูลวิชาเรียนสำหรับครูท่านนี้
           </p>
         ) : (
-          <div className="space-y-6">
-            {Object.keys(groupedSubjects).sort().map((teacherId, classIndex) => (
-              <div key={teacherId}>
-                <h3 className={`text-lg font-semibold mb-3 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  {getTeacherName(teacherId)} ({groupedSubjects[teacherId].length})
-                </h3>
-                <div className="space-y-3">
-                  {groupedSubjects[teacherId].map((subject: any, index: number) => (
-                    <motion.div
-                      key={subject.subjectId}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.3 + classIndex * 0.1 + index * 0.02 }}
-                      whileHover={{ scale: 1.01, x: 5 }}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        toggleSubjectSelection(subject.subjectId);
-                      }}
-                      onTouchStart={() => handleSubjectTouchStart(subject.subjectId)}
-                      onTouchEnd={handleSubjectTouchEnd}
-                      onTouchMove={handleSubjectTouchMove}
-                      className={`rounded-2xl p-4 cursor-pointer transition-all ${selectedSubjects.has(subject.subjectId) ? 'bg-red-100 border-2 border-red-500' : isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-50 hover:bg-blue-50'}`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>{subject.subjectName}</p>
-                          <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            ห้อง {subject.classroom} • {subject.day} • {subject.time}
-                          </p>
+          <div className="space-y-4">
+            {Object.keys(groupedByDay)
+              .sort((a, b) => {
+                const dayA = convertDayToEnglish(a);
+                const dayB = convertDayToEnglish(b);
+                const indexA = dayOrder.indexOf(dayA);
+                const indexB = dayOrder.indexOf(dayB);
+                return indexA - indexB;
+              })
+              .map((day, dayIndex) => (
+              <div key={day}>
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 + dayIndex * 0.1 }}
+                  className={`rounded-2xl p-4 ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}
+                >
+                  <h3 className={`text-lg font-semibold mb-3 ${isDark ? 'text-white' : 'text-gray-800'}`}>
+                    {convertDayToEnglish(day)}
+                  </h3>
+                  <div className="space-y-2">
+                    {groupedByDay[day]
+                      .sort((a: any, b: any) => {
+                        // Sort by time (extract start time from time range)
+                        const timeA = a.time.split('-')[0] || a.time;
+                        const timeB = b.time.split('-')[0] || b.time;
+                        return timeA.localeCompare(timeB);
+                      })
+                      .map((subject: any, index: number) => (
+                      <motion.div
+                        key={subject.subjectId}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.3 + dayIndex * 0.1 + index * 0.02 }}
+                        whileHover={{ scale: 1.01, x: 5 }}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          toggleSubjectSelection(subject.subjectId);
+                        }}
+                        onTouchStart={() => handleSubjectTouchStart(subject.subjectId)}
+                        onTouchEnd={handleSubjectTouchEnd}
+                        onTouchMove={handleSubjectTouchMove}
+                        className={`rounded-xl p-3 cursor-pointer transition-all ${selectedSubjects.has(subject.subjectId) ? 'bg-red-100 border-2 border-red-500' : isDark ? 'bg-gray-600 hover:bg-gray-500' : 'bg-white hover:bg-blue-50'}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>{subject.subjectName}</p>
+                            <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                              ห้อง {subject.classroom} • {subject.time} • {subject.duration === '1' ? '1hr.' : `${subject.duration}hrs.`}
+                            </p>
+                          </div>
+                          {selectedSubjects.has(subject.subjectId) && (
+                            <span className="text-red-500">✓</span>
+                          )}
                         </div>
-                        {selectedSubjects.has(subject.subjectId) && (
-                          <span className="text-red-500">✓</span>
-                        )}
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </motion.div>
               </div>
             ))}
           </div>
@@ -547,6 +694,47 @@ export default function SubjectsManagement() {
                   placeholder="เช่น 08:00-09:00"
                 />
               </div>
+              <div>
+                <label className={`block text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-1`}>
+                  จำนวนชั่วโมง
+                </label>
+                <div className="relative">
+                  <div
+                    onClick={() => setShowDurationDropdown(!showDurationDropdown)}
+                    className={`w-full p-3 rounded-xl cursor-pointer flex items-center justify-between border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  >
+                    <span>{newSubject.duration === '1' ? '1hr.' : `${newSubject.duration}hrs.`}</span>
+                    <motion.span
+                      animate={{ rotate: showDurationDropdown ? 180 : 0 }}
+                      className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}
+                    >
+                      ▼
+                    </motion.span>
+                  </div>
+                  
+                  {/* Duration Dropdown List */}
+                  {showDurationDropdown && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className={`absolute top-full left-0 right-0 mt-2 rounded-xl shadow-lg z-50 ${isDark ? 'bg-gray-800' : 'bg-white'}`}
+                    >
+                      {['1', '2', '3'].map((duration) => (
+                        <div
+                          key={duration}
+                          onClick={() => {
+                            setNewSubject({ ...newSubject, duration });
+                            setShowDurationDropdown(false);
+                          }}
+                          className={`p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${isDark ? 'text-white' : 'text-gray-800'}`}
+                        >
+                          {duration === '1' ? '1hr.' : `${duration}hrs.`}
+                        </div>
+                      ))}
+                    </motion.div>
+                  )}
+                </div>
+              </div>
             </div>
             <div className="flex gap-3 mt-6">
               <motion.button
@@ -569,6 +757,7 @@ export default function SubjectsManagement() {
           </motion.div>
         </motion.div>
       )}
+
     </div>
   );
 }
