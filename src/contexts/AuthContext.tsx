@@ -57,6 +57,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    // Prevent iOS Safari edge swipe-to-go-back gesture globally
+    const preventEdgeSwipe = (e: TouchEvent) => {
+      const touchX = e.touches[0].clientX;
+      // Prevent touch from left and right edges (50px)
+      if (touchX < 50 || touchX > window.innerWidth - 50) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    document.addEventListener('touchstart', preventEdgeSwipe, { passive: false });
+
     try {
       const instance = firebaseManager.getMasterRegistryInstance();
       setAuth(instance.auth);
@@ -119,10 +131,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       });
 
-      return () => unsubscribe();
+      return () => {
+        unsubscribe();
+        document.removeEventListener('touchstart', preventEdgeSwipe);
+      };
     } catch (error) {
       console.error('Error initializing auth:', error);
       setLoading(false);
+      return () => {
+        document.removeEventListener('touchstart', preventEdgeSwipe);
+      };
     }
   }, []);
 

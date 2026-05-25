@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   description: "Decentralized learning management system for students and teachers",
   manifest: "/manifest.json",
   themeColor: "#0ea5e9",
-  viewport: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover",
+  viewport: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content, theme-color=#0ea5e9",
 };
 
 export default function RootLayout({
@@ -23,6 +23,10 @@ export default function RootLayout({
       <head>
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="theme-color" content="#0ea5e9" />
       </head>
       <body className={inter.className}>
         <AuthProvider>{children}</AuthProvider>
