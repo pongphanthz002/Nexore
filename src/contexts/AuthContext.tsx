@@ -32,6 +32,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   setUserAccount: (account: UserAccount | null) => void;
   setSignupValidation: (value: boolean) => void;
+  invalidateCache: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -42,6 +43,7 @@ const AuthContext = createContext<AuthContextType>({
   signOut: async () => {},
   setUserAccount: () => {},
   setSignupValidation: () => {},
+  invalidateCache: () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -89,21 +91,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setLoading(false);
             return;
           }
+          
+          // Try to load from cache first
+          const cachedAccount = localStorage.getItem('NEXORE_USER_ACCOUNT');
+          const cacheTimestamp = localStorage.getItem('NEXORE_USER_ACCOUNT_TIMESTAMP');
+          const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes in milliseconds
+          
+          if (cachedAccount && cacheTimestamp) {
+            const age = Date.now() - parseInt(cacheTimestamp);
+            if (age < CACHE_DURATION) {
+              console.log('Loading user account from cache');
+              setUserAccount(JSON.parse(cachedAccount));
+              setLoading(false);
+              return;
+            } else {
+              console.log('Cache expired, fetching from Firestore');
+              localStorage.removeItem('NEXORE_USER_ACCOUNT');
+              localStorage.removeItem('NEXORE_USER_ACCOUNT_TIMESTAMP');
+            }
+          }
+          
           try {
-            const accountData = await firestoreService.getUserAccount(currentUser.email);
+            // Parallel loading: fetch user account and hub simultaneously
+            const [accountData, hub] = await Promise.all([
+              firestoreService.getUserAccount(currentUser.email),
+              firestoreService.getHub(currentUser.email).catch(() => null) // getHub might fail if user not in hub yet
+            ]);
+            
             console.log('User account data from Master Registry:', accountData);
+            console.log('Hub data:', hub);
             
             if (accountData) {
-              // Get hub to get school firebase config
-              const hub = await firestoreService.getHub(accountData.schoolId);
-              console.log('Hub data:', hub);
+              // If hub wasn't loaded in parallel, try loading it with schoolId
+              let finalHub = hub;
+              if (!finalHub && accountData.schoolId) {
+                finalHub = await firestoreService.getHub(accountData.schoolId);
+                console.log('Hub data (fallback):', finalHub);
+              }
               
-              if (hub && hub.schoolFirebaseConfig) {
+              if (finalHub && finalHub.schoolFirebaseConfig) {
                 const fullUserAccount: UserAccount = {
                   id: currentUser.email,
                   email: currentUser.email,
                   schoolId: accountData.schoolId,
-                  schoolFirebaseConfig: hub.schoolFirebaseConfig,
+                  schoolFirebaseConfig: finalHub.schoolFirebaseConfig,
                   role: accountData.role || 'student', // Default to student if role not set
                   userId: accountData.uid || currentUser.uid,
                   name: currentUser.displayName || '',
@@ -112,6 +143,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 };
                 console.log('Setting user account:', fullUserAccount);
                 setUserAccount(fullUserAccount);
+                
+                // Cache the user account
+                localStorage.setItem('NEXORE_USER_ACCOUNT', JSON.stringify(fullUserAccount));
+                localStorage.setItem('NEXORE_USER_ACCOUNT_TIMESTAMP', Date.now().toString());
               } else {
                 console.log('No hub or firebase config found for user');
                 setUserAccount(null);
@@ -206,8 +241,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signupValidationRef.current = value;
   };
 
+  const invalidateCache = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('NEXORE_USER_ACCOUNT');
+      localStorage.removeItem('NEXORE_USER_ACCOUNT_TIMESTAMP');
+      console.log('Cache invalidated');
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, userAccount, loading, signInWithGoogle, signOut, setUserAccount, setSignupValidation }}>
+    <AuthContext.Provider value={{ user, userAccount, loading, signInWithGoogle, signOut, setUserAccount, setSignupValidation, invalidateCache }}>
       {children}
     </AuthContext.Provider>
   );

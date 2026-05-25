@@ -62,8 +62,11 @@ export default function AdminDashboard() {
 
         if (schoolFirebaseConfig) {
           console.log('Loading data with Firebase config:', schoolFirebaseConfig);
-          const teachers = await schoolDatabaseService.getAllTeachers(schoolFirebaseConfig);
-          const students = await schoolDatabaseService.getAllStudents(schoolFirebaseConfig);
+          // Parallel loading: fetch teachers and students simultaneously using optimized queries
+          const [teachers, students] = await Promise.all([
+            schoolDatabaseService.getAllTeachersOptimized(schoolFirebaseConfig),
+            schoolDatabaseService.getAllStudentsOptimized(schoolFirebaseConfig)
+          ]);
           
           console.log('Teachers:', teachers.length, 'Students:', students.length);
           

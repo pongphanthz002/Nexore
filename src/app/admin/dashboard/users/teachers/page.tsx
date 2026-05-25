@@ -12,7 +12,7 @@ import { Eye, EyeOff, Edit, RefreshCw, Trash2, Download, Upload, Plus, ArrowLeft
 
 export default function TeachersManagement() {
   const router = useRouter();
-  const { userAccount } = useAuth();
+  const { userAccount, invalidateCache } = useAuth();
   const [teachers, setTeachers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedTeacher, setSelectedTeacher] = useState<any>(null);
@@ -198,6 +198,7 @@ export default function TeachersManagement() {
       // Save new teachers to School Database
       await schoolDatabaseService.saveTeacherWhitelist(userAccount.schoolFirebaseConfig, pendingTeachersData);
       await loadTeachers();
+      invalidateCache();
       alert('อัพโหลดรายชื่อครูสำเร็จ');
     } catch (error) {
       console.error('Error uploading teachers:', error);
@@ -267,6 +268,7 @@ export default function TeachersManagement() {
       });
 
       await loadTeachers();
+      invalidateCache();
       setShowEditModal(false);
       setSelectedTeacher(null);
       alert('แก้ไขข้อมูลครูสำเร็จ');
@@ -410,6 +412,7 @@ export default function TeachersManagement() {
       }
       setSelectedTeachers(new Set());
       await loadTeachers();
+      invalidateCache();
       alert('ลบครูสำเร็จ');
     } catch (error) {
       console.error('Error deleting teachers:', error);
@@ -448,6 +451,7 @@ export default function TeachersManagement() {
       }
 
       await loadTeachers();
+      invalidateCache();
       setShowAddModal(false);
       setNewTeacherData({
         teacherId: '',

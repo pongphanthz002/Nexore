@@ -10,7 +10,7 @@ import { Download, Upload, Trash2, Plus, ArrowLeft } from 'lucide-react';
 
 export default function SubjectsManagement() {
   const router = useRouter();
-  const { userAccount } = useAuth();
+  const { userAccount, invalidateCache } = useAuth();
   const [subjects, setSubjects] = useState<any[]>([]);
   const [teachers, setTeachers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -144,6 +144,7 @@ export default function SubjectsManagement() {
       };
       await schoolDatabaseService.addSubject(userAccount.schoolFirebaseConfig, subject);
       await loadData();
+      invalidateCache();
       setShowAddModal(false);
       setNewSubject({
         teacherId: '',
@@ -175,6 +176,7 @@ export default function SubjectsManagement() {
       }
       setSelectedSubjects(new Set());
       await loadData();
+      invalidateCache();
       alert('ลบวิชาเรียนสำเร็จ');
     } catch (error) {
       console.error('Error deleting subjects:', error);

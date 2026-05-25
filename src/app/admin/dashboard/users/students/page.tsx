@@ -12,7 +12,7 @@ import { Download, Upload, Trash2, Edit, Eye, EyeOff, RefreshCw, Plus, ArrowLeft
 
 export default function StudentsManagement() {
   const router = useRouter();
-  const { userAccount } = useAuth();
+  const { userAccount, invalidateCache } = useAuth();
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
@@ -225,6 +225,7 @@ export default function StudentsManagement() {
       // Save new students to School Database
       await schoolDatabaseService.saveStudentWhitelist(userAccount.schoolFirebaseConfig, pendingStudentsData);
       await loadStudents();
+      invalidateCache();
       alert('อัพโหลดรายชื่อนักเรียนสำเร็จ');
     } catch (error) {
       console.error('Error uploading students:', error);
@@ -287,6 +288,7 @@ export default function StudentsManagement() {
       });
 
       await loadStudents();
+      invalidateCache();
       setShowEditModal(false);
       setSelectedStudent(null);
       alert('แก้ไขข้อมูลนักเรียนสำเร็จ');
@@ -430,6 +432,7 @@ export default function StudentsManagement() {
       }
       setSelectedStudents(new Set());
       await loadStudents();
+      invalidateCache();
       alert('ลบนักเรียนสำเร็จ');
     } catch (error) {
       console.error('Error deleting students:', error);
@@ -472,6 +475,7 @@ export default function StudentsManagement() {
       }
 
       await loadStudents();
+      invalidateCache();
       setShowAddModal(false);
       setNewStudentData({
         studentId: '',

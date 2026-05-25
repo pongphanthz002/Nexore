@@ -94,6 +94,24 @@ class SchoolDatabaseService {
   }
 
   /**
+   * Get all teachers from school database (optimized - select only essential fields)
+   * Use this for dashboard stats where full data is not needed
+   */
+  async getAllTeachersOptimized(schoolFirebaseConfig: any): Promise<TeacherFirebaseConfig[]> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    const querySnapshot = await getDocs(collection(database, this.teachersCollection));
+    return querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        teacherId: data.teacherId,
+        name: data.name,
+        email: data.email,
+        firebaseConfig: data.firebaseConfig,
+      } as TeacherFirebaseConfig;
+    });
+  }
+
+  /**
    * Get teacher data from school database
    */
   async getTeacherData(schoolFirebaseConfig: any, teacherId: string): Promise<TeacherFirebaseConfig | null> {
@@ -212,6 +230,23 @@ class SchoolDatabaseService {
     const database = this.getSchoolDB(schoolFirebaseConfig);
     const querySnapshot = await getDocs(collection(database, this.studentsCollection));
     return querySnapshot.docs.map(doc => doc.data() as StudentData);
+  }
+
+  /**
+   * Get all students from school database (optimized - select only essential fields)
+   * Use this for dashboard stats where full data is not needed
+   */
+  async getAllStudentsOptimized(schoolFirebaseConfig: any): Promise<StudentData[]> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    const querySnapshot = await getDocs(collection(database, this.studentsCollection));
+    return querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        studentId: data.studentId,
+        name: data.name,
+        uid: data.uid,
+      } as StudentData;
+    });
   }
 
   /**
