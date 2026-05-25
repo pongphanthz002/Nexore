@@ -129,7 +129,7 @@ export default function AdminUsers() {
               </div>
               <div className="flex-1">
                 <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  จัดการครู
+                  จัดการข้อมูลครู
                 </h2>
                 <p className={`text-sm font-light ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                   Teachers Management
@@ -154,7 +154,7 @@ export default function AdminUsers() {
               </div>
               <div className="flex-1">
                 <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  จัดการนักเรียน
+                  จัดการข้อมูลนักเรียน
                 </h2>
                 <p className={`text-sm font-light ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                   Students Management
@@ -179,7 +179,7 @@ export default function AdminUsers() {
               </div>
               <div className="flex-1">
                 <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  จัดการวิชาเรียน
+                  จัดการข้อมูลวิชาเรียน
                 </h2>
                 <p className={`text-sm font-light ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                   Subjects Management

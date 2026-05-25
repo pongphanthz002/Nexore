@@ -8,7 +8,7 @@ import { schoolDatabaseService } from '@/services/school-database.service';
 import { firestoreService } from '@/services/firestore.service';
 import { teacherDatabaseService } from '@/services/teacher-database.service';
 import * as XLSX from 'xlsx';
-import { Download, Upload, Trash2, Edit, Eye, EyeOff, RefreshCw, Plus, ArrowLeft } from 'lucide-react';
+import { Download, Upload, Trash2, Edit, Eye, EyeOff, RefreshCw, Plus, ArrowLeft, Search, X } from 'lucide-react';
 
 export default function StudentsManagement() {
   const router = useRouter();
@@ -44,6 +44,7 @@ export default function StudentsManagement() {
     number: '',
     email: ''
   });
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains('dark'));
@@ -77,6 +78,17 @@ export default function StudentsManagement() {
     } catch (error) {
       console.error('Error loading students:', error);
     }
+  };
+
+  const filteredStudents = students.filter(student =>
+    student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    student.studentId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (student.email && student.email.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (student.class && student.class.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
   };
 
   const handleDownload = () => {
@@ -494,7 +506,7 @@ export default function StudentsManagement() {
   };
 
   // Group students by class and sort by studentId
-  const groupedStudents = students.reduce((acc: any, student: any) => {
+  const groupedStudents = filteredStudents.reduce((acc: any, student: any) => {
     const className = student.class || 'ไม่ระบุชั้น';
     if (!acc[className]) {
       acc[className] = [];
@@ -545,24 +557,35 @@ export default function StudentsManagement() {
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between mb-8"
+        className="mb-6"
       >
-        <div>
-          <h1 className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
-            จัดการนักเรียน
-          </h1>
-          <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-            STUDENTS MANAGEMENT
-          </p>
+        <h1 className={`text-3xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-800'}`}>
+          จัดการข้อมูลนักเรียน
+        </h1>
+        
+        {/* Search Header */}
+        <div className={`flex items-center gap-3 p-4 rounded-2xl shadow-sm ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+          {/* Back Button */}
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => router.push('/admin/dashboard/users')}
+            className={`p-2 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
+          >
+            <ArrowLeft size={20} />
+          </motion.button>
+
+          {/* Search Input */}
+          <div className="flex-1">
+            <input
+              type="text"
+              placeholder="ค้นหานักเรียน..."
+              value={searchQuery}
+              onChange={(e) => handleSearch(e.target.value)}
+              className={`w-full px-4 py-2 rounded-xl outline-none ${isDark ? 'bg-gray-700 text-white placeholder-gray-400' : 'bg-gray-100 text-gray-700 placeholder-gray-400'}`}
+            />
+          </div>
         </div>
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => router.push('/admin/dashboard/users')}
-          className={`px-6 py-3 rounded-2xl shadow-sm hover:shadow-md transition-all ${isDark ? 'bg-gray-800 text-gray-300' : 'bg-white text-gray-700'}`}
-        >
-          กลับ
-        </motion.button>
       </motion.div>
 
       {/* Students List Card */}
@@ -574,7 +597,7 @@ export default function StudentsManagement() {
       >
         <div className="flex items-center justify-between mb-4">
           <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
-            รายชื่อนักเรียนทั้งหมด ({students.length})
+            รายชื่อนักเรียนทั้งหมด ({filteredStudents.length})
           </h2>
           {selectedStudents.size > 0 && (
             <motion.button
@@ -588,9 +611,9 @@ export default function StudentsManagement() {
             </motion.button>
           )}
         </div>
-        {students.length === 0 ? (
+        {filteredStudents.length === 0 ? (
           <p className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-            ยังไม่มีข้อมูลนักเรียน
+            {searchQuery ? 'ไม่พบนักเรียนที่ค้นหา' : 'ยังไม่มีข้อมูลนักเรียน'}
           </p>
         ) : (
           <div className="space-y-4">
