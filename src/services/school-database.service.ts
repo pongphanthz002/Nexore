@@ -1,5 +1,7 @@
 import { firebaseManager } from '@/lib/firebase';
 import { collection, doc, setDoc, getDoc, getDocs, query, where, updateDoc, deleteDoc, Firestore } from 'firebase/firestore';
+import { teacherDatabaseService } from '@/services/teacher-database.service';
+import { firestoreService } from '@/services/firestore.service';
 
 export interface TeacherFirebaseConfig {
   teacherId: string;
@@ -288,6 +290,15 @@ class SchoolDatabaseService {
   }
 
   /**
+   * Delete admin from school database
+   */
+  async deleteAdmin(schoolFirebaseConfig: any, email: string): Promise<void> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    const adminRef = doc(database, this.adminsCollection, email);
+    await deleteDoc(adminRef);
+  }
+
+  /**
    * Delete multiple teachers from school database
    */
   async deleteTeacherWhitelist(schoolFirebaseConfig: any, teacherIds: string[]): Promise<void> {
@@ -372,6 +383,77 @@ class SchoolDatabaseService {
     const database = this.getSchoolDB(schoolFirebaseConfig);
     const subjectRef = doc(database, this.subjectsCollection, subjectId);
     await deleteDoc(subjectRef);
+  }
+
+  /**
+   * Delete all school data (teachers, students, subjects)
+   */
+  async deleteAllSchoolData(schoolFirebaseConfig: any): Promise<void> {
+    // Delete all teachers
+    const teachers = await this.getAllTeachers(schoolFirebaseConfig);
+    const teacherIds = teachers.map(t => t.teacherId);
+    if (teacherIds.length > 0) {
+      await this.deleteTeacherWhitelist(schoolFirebaseConfig, teacherIds);
+    }
+
+    // Delete all students
+    const students = await this.getAllStudents(schoolFirebaseConfig);
+    const studentIds = students.map(s => s.studentId);
+    if (studentIds.length > 0) {
+      await this.deleteStudentWhitelist(schoolFirebaseConfig, studentIds);
+    }
+
+    // Delete all subjects
+    const subjects = await this.getAllSubjects(schoolFirebaseConfig);
+    for (const subject of subjects) {
+      await this.deleteSubject(schoolFirebaseConfig, subject.subjectId);
+    }
+  }
+
+  /**
+   * Delete all teacher databases for all teachers in the school
+   */
+  async deleteAllTeacherDatabases(schoolFirebaseConfig: any): Promise<void> {
+    const teachers = await this.getAllTeachers(schoolFirebaseConfig);
+
+    for (const teacher of teachers) {
+      if (teacher.firebaseConfig) {
+        try {
+          await teacherDatabaseService.deleteTeacherDatabase(teacher.firebaseConfig);
+          console.log(`Deleted teacher database for: ${teacher.teacherId}`);
+        } catch (error) {
+          console.error(`Error deleting teacher database for ${teacher.teacherId}:`, error);
+        }
+      }
+    }
+  }
+
+  /**
+   * Delete all user accounts from Master Registry (teachers and students)
+   */
+  async deleteAllUserAccountsFromMasterRegistry(
+    teacherEmails: string[],
+    studentEmails: string[]
+  ): Promise<void> {
+    // Delete teacher accounts
+    for (const email of teacherEmails) {
+      try {
+        await firestoreService.deleteUserAccount(email);
+        console.log(`Deleted teacher account: ${email}`);
+      } catch (error) {
+        console.error(`Error deleting teacher account ${email}:`, error);
+      }
+    }
+
+    // Delete student accounts
+    for (const email of studentEmails) {
+      try {
+        await firestoreService.deleteUserAccount(email);
+        console.log(`Deleted student account: ${email}`);
+      } catch (error) {
+        console.error(`Error deleting student account ${email}:`, error);
+      }
+    }
   }
 }
 

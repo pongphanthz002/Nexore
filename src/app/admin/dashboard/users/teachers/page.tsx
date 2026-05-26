@@ -41,6 +41,7 @@ export default function TeachersManagement() {
     email: ''
   });
   const [searchQuery, setSearchQuery] = useState('');
+  const lastLoadedConfigRef = useRef<string | null>(null);
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains('dark'));
@@ -61,20 +62,20 @@ export default function TeachersManagement() {
     loadTeachers();
   }, [userAccount]);
 
-  const loadTeachers = async () => {
+  const loadTeachers = async (force = false) => {
     try {
-      console.log('loadTeachers called, schoolFirebaseConfig:', userAccount?.schoolFirebaseConfig);
-      if (!userAccount?.schoolFirebaseConfig) {
-        console.log('No schoolFirebaseConfig, skipping loadTeachers');
-        return;
-      }
+      if (!userAccount?.schoolFirebaseConfig) return;
+      const configKey = userAccount.schoolFirebaseConfig.projectId;
+      if (!force && configKey === lastLoadedConfigRef.current) return;
+      setLoading(true);
       const data = await schoolDatabaseService.getAllTeachers(userAccount.schoolFirebaseConfig);
-      console.log('Teachers data loaded:', data);
-      // Sort by teacherId
       data.sort((a, b) => a.teacherId.localeCompare(b.teacherId));
       setTeachers(data);
+      lastLoadedConfigRef.current = configKey;
     } catch (error) {
       console.error('Error loading teachers:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -162,7 +163,7 @@ export default function TeachersManagement() {
 
       // No changes, proceed with upload
       await schoolDatabaseService.saveTeacherWhitelist(userAccount.schoolFirebaseConfig, teachersData);
-      await loadTeachers();
+      await loadTeachers(true);
       alert('อัพโหลดรายชื่อครูสำเร็จ');
     } catch (error) {
       console.error('Error uploading teachers:', error);
@@ -208,7 +209,7 @@ export default function TeachersManagement() {
 
       // Save new teachers to School Database
       await schoolDatabaseService.saveTeacherWhitelist(userAccount.schoolFirebaseConfig, pendingTeachersData);
-      await loadTeachers();
+      await loadTeachers(true);
       invalidateCache();
       alert('อัพโหลดรายชื่อครูสำเร็จ');
     } catch (error) {
@@ -278,7 +279,7 @@ export default function TeachersManagement() {
         updatedAt: new Date()
       });
 
-      await loadTeachers();
+      await loadTeachers(true);
       invalidateCache();
       setShowEditModal(false);
       setSelectedTeacher(null);
@@ -309,7 +310,7 @@ export default function TeachersManagement() {
         await firestoreService.deleteUserAccount(selectedTeacher.email);
       }
 
-      await loadTeachers();
+      await loadTeachers(true);
       setShowPopup(false);
       setSelectedTeacher(null);
       alert('ยกเลิกการซิงค์สำเร็จ');
@@ -422,7 +423,7 @@ export default function TeachersManagement() {
         await schoolDatabaseService.deleteTeacher(userAccount.schoolFirebaseConfig, teacherId);
       }
       setSelectedTeachers(new Set());
-      await loadTeachers();
+      await loadTeachers(true);
       invalidateCache();
       alert('ลบครูสำเร็จ');
     } catch (error) {
@@ -461,7 +462,7 @@ export default function TeachersManagement() {
         );
       }
 
-      await loadTeachers();
+      await loadTeachers(true);
       invalidateCache();
       setShowAddModal(false);
       setNewTeacherData({
@@ -477,6 +478,29 @@ export default function TeachersManagement() {
       setLoading(false);
     }
   };
+
+  if (loading && teachers.length === 0) {
+    return (
+      <div className={`min-h-screen p-6 pb-24 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+        <h1 className={`text-3xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-800'}`}>จัดการข้อมูลครู</h1>
+        <div className="animate-pulse space-y-4">
+          <div className={`h-12 rounded-2xl ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`} />
+          <div className={`h-10 w-48 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className={`rounded-2xl p-4 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}>
+              <div className="flex items-center gap-4">
+                <div className={`w-10 h-10 rounded-full ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                <div className="flex-1 space-y-2">
+                  <div className={`h-4 w-32 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                  <div className={`h-3 w-24 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div 

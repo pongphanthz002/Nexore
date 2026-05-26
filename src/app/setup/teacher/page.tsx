@@ -222,11 +222,11 @@ function TeacherSetupContent() {
   };
 
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center overflow-hidden relative p-4">
+    <div className="min-h-screen bg-white relative p-4 pt-8 overflow-y-auto flex items-center justify-center">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative z-10 w-full max-w-md"
+        className="relative z-10 w-full max-w-md pb-20"
       >
         {/* Back Button */}
         <motion.button
@@ -245,7 +245,7 @@ function TeacherSetupContent() {
               router.push('/signup');
             }
           }}
-          className="mb-4 flex items-center gap-2 text-gray-500 hover:text-black transition-colors"
+          className="mb-4 flex items-center gap-2 text-gray-500 hover:text-black transition-colors p-2 -ml-2"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />

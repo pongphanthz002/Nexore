@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { storageService } from '@/services/storage.service';
 import { firestoreService } from '@/services/firestore.service';
 import { schoolDatabaseService } from '@/services/school-database.service';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import PieChart from '@/components/PieChart';
 import { Files } from 'lucide-react';
@@ -18,6 +18,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [isDark, setIsDark] = useState(false);
+  const lastLoadedSchoolIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains('dark'));
@@ -38,7 +39,6 @@ export default function AdminDashboard() {
   useEffect(() => {
     async function loadData() {
       try {
-        setLoading(true);
         let schoolFirebaseConfig = null;
         let currentSchoolId = '';
 
@@ -46,12 +46,10 @@ export default function AdminDashboard() {
         if (userAccount && userAccount.role === 'admin') {
           schoolFirebaseConfig = userAccount.schoolFirebaseConfig;
           currentSchoolId = userAccount.schoolId;
-          console.log('Using userAccount data:', { schoolFirebaseConfig, currentSchoolId });
         } else {
           // Fallback to localStorage (old system)
           const config = await storageService.getMasterRegistryConfig();
           if (config && config.schoolProjectId) {
-            // Fetch from Master Registry Firestore
             const hub = await firestoreService.getHub(config.schoolProjectId);
             if (hub && hub.schoolFirebaseConfig) {
               schoolFirebaseConfig = hub.schoolFirebaseConfig;
@@ -60,9 +58,14 @@ export default function AdminDashboard() {
           }
         }
 
+        // Skip if same schoolId already loaded
+        if (currentSchoolId && currentSchoolId === lastLoadedSchoolIdRef.current) {
+          return;
+        }
+
         if (schoolFirebaseConfig) {
+          setLoading(true);
           console.log('Loading data with Firebase config:', schoolFirebaseConfig);
-          // Parallel loading: fetch teachers and students simultaneously using optimized queries
           const [teachers, students] = await Promise.all([
             schoolDatabaseService.getAllTeachersOptimized(schoolFirebaseConfig),
             schoolDatabaseService.getAllStudentsOptimized(schoolFirebaseConfig)
@@ -80,9 +83,9 @@ export default function AdminDashboard() {
             signedUpStudents,
             signedUpTeachers,
           });
+          lastLoadedSchoolIdRef.current = currentSchoolId;
         }
 
-        // Set school ID
         setSchoolId(currentSchoolId);
       } catch (error) {
         console.error('Error loading data:', error);
@@ -116,6 +119,38 @@ export default function AdminDashboard() {
       </>
     );
   };
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="max-w-7xl mx-auto">
+          {/* Skeleton: PIE Charts */}
+          <div className={`rounded-2xl p-8 mb-8 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg animate-pulse`}>
+            <div className={`h-6 w-32 rounded-lg mb-6 ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+            <div className="flex justify-center gap-12">
+              <div className="flex flex-col items-center gap-3">
+                <div className={`w-28 h-28 rounded-full ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                <div className={`h-4 w-16 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+              </div>
+              <div className="flex flex-col items-center gap-3">
+                <div className={`w-28 h-28 rounded-full ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                <div className={`h-4 w-20 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+              </div>
+            </div>
+          </div>
+          {/* Skeleton: School ID */}
+          <div className={`rounded-2xl p-6 mb-8 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg animate-pulse`}>
+            <div className={`h-6 w-24 rounded-lg mb-4 ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+            <div className={`h-12 rounded-2xl ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`} />
+          </div>
+          {/* Skeleton: Action Card */}
+          <div className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg animate-pulse`}>
+            <div className={`h-6 w-28 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">

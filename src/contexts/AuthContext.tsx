@@ -62,10 +62,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Prevent iOS Safari edge swipe-to-go-back gesture globally
     const preventEdgeSwipe = (e: TouchEvent) => {
       const touchX = e.touches[0].clientX;
-      // Prevent touch from left and right edges (50px)
-      if (touchX < 50 || touchX > window.innerWidth - 50) {
+      // Only prevent from left edge (50px) - right edge swipe is for forward navigation
+      if (touchX < 50) {
         e.preventDefault();
-        e.stopPropagation();
       }
     };
 
@@ -99,13 +98,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           
           if (cachedAccount && cacheTimestamp) {
             const age = Date.now() - parseInt(cacheTimestamp);
-            if (age < CACHE_DURATION) {
-              console.log('Loading user account from cache');
-              setUserAccount(JSON.parse(cachedAccount));
+            const parsed = JSON.parse(cachedAccount);
+            if (age < CACHE_DURATION && parsed.email === currentUser.email) {
+              console.log('Loading user account from cache for:', currentUser.email);
+              setUserAccount(parsed);
               setLoading(false);
               return;
             } else {
-              console.log('Cache expired, fetching from Firestore');
+              console.log('Cache expired or email mismatch, fetching from Firestore');
               localStorage.removeItem('NEXORE_USER_ACCOUNT');
               localStorage.removeItem('NEXORE_USER_ACCOUNT_TIMESTAMP');
             }
@@ -208,28 +208,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await firebaseSignOut(auth);
       setUser(null);
       setUserAccount(null);
-      // Clear all caches
+      // Clear Nexore-specific caches only (preserve Firebase IndexedDB)
       if (typeof window !== 'undefined') {
-        localStorage.clear();
+        // Clear only Nexore keys from localStorage
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.startsWith('NEXORE_') || key.startsWith('nexore-') || key.startsWith('nexore_'))) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key));
         sessionStorage.clear();
         // Clear cookies
         document.cookie.split(";").forEach(function(c) { 
           document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
         });
-        // Clear IndexedDB
-        if (window.indexedDB) {
-          const databases = await indexedDB.databases();
-          databases.forEach(db => {
-            if (db.name) {
-              indexedDB.deleteDatabase(db.name);
-            }
-          });
-        }
-        // Clear Cache API
-        if ('caches' in window) {
-          const cacheNames = await caches.keys();
-          await Promise.all(cacheNames.map(cacheName => caches.delete(cacheName)));
-        }
+        // Reset Firebase instances (but do NOT delete IndexedDB)
+        firebaseManager.clearAllInstances();
+        // Re-initialize master registry instance
+        firebaseManager.getMasterRegistryInstance();
       }
     } catch (error) {
       console.error('Error signing out:', error);

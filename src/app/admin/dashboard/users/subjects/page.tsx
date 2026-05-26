@@ -32,6 +32,7 @@ export default function SubjectsManagement() {
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>('');
   const [showTeacherDropdown, setShowTeacherDropdown] = useState(false);
   const [showDurationDropdown, setShowDurationDropdown] = useState(false);
+  const lastLoadedConfigRef = useRef<string | null>(null);
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains('dark'));
@@ -52,17 +53,23 @@ export default function SubjectsManagement() {
     loadData();
   }, [userAccount]);
 
-  const loadData = async () => {
+  const loadData = async (force = false) => {
     try {
       if (!userAccount?.schoolFirebaseConfig) return;
+      const configKey = userAccount.schoolFirebaseConfig.projectId;
+      if (!force && configKey === lastLoadedConfigRef.current) return;
+      setLoading(true);
       const [subjectsData, teachersData] = await Promise.all([
         schoolDatabaseService.getAllSubjects(userAccount.schoolFirebaseConfig),
         schoolDatabaseService.getAllTeachers(userAccount.schoolFirebaseConfig)
       ]);
       setSubjects(subjectsData);
       setTeachers(teachersData);
+      lastLoadedConfigRef.current = configKey;
     } catch (error) {
       console.error('Error loading data:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -151,7 +158,7 @@ export default function SubjectsManagement() {
 
       // Save all new subjects from the file
       await schoolDatabaseService.saveSubjectWhitelist(userAccount.schoolFirebaseConfig, subjectsData);
-      await loadData();
+      await loadData(true);
       invalidateCache();
       alert('อัพโหลดรายชื่อวิชาเรียนสำเร็จ');
     } catch (error) {
@@ -176,7 +183,7 @@ export default function SubjectsManagement() {
         ...newSubject
       };
       await schoolDatabaseService.addSubject(userAccount.schoolFirebaseConfig, subject);
-      await loadData();
+      await loadData(true);
       invalidateCache();
       setShowAddModal(false);
       setNewSubject({
@@ -209,7 +216,7 @@ export default function SubjectsManagement() {
         await schoolDatabaseService.deleteSubject(userAccount.schoolFirebaseConfig, subjectId);
       }
       setSelectedSubjects(new Set());
-      await loadData();
+      await loadData(true);
       invalidateCache();
       alert('ลบวิชาเรียนสำเร็จ');
     } catch (error) {
@@ -365,6 +372,27 @@ export default function SubjectsManagement() {
 
   // Day order for sorting (Monday to Sunday)
   const dayOrder = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  if (loading && subjects.length === 0) {
+    return (
+      <div className={`min-h-screen p-6 pb-24 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+        <h1 className={`text-3xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-800'}`}>จัดการวิชาเรียน</h1>
+        <div className="animate-pulse space-y-4">
+          <div className={`h-12 rounded-2xl ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`} />
+          <div className={`h-10 w-48 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className={`rounded-2xl p-4 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}>
+              <div className="space-y-2">
+                <div className={`h-4 w-40 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                <div className={`h-3 w-28 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                <div className={`h-3 w-20 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div 

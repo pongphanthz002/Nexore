@@ -46,6 +46,7 @@ export default function StudentsManagement() {
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
+  const lastLoadedConfigRef = useRef<string | null>(null);
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains('dark'));
@@ -66,18 +67,19 @@ export default function StudentsManagement() {
     loadStudents();
   }, [userAccount]);
 
-  const loadStudents = async () => {
+  const loadStudents = async (force = false) => {
     try {
-      console.log('loadStudents called, schoolFirebaseConfig:', userAccount?.schoolFirebaseConfig);
-      if (!userAccount?.schoolFirebaseConfig) {
-        console.log('No schoolFirebaseConfig, skipping loadStudents');
-        return;
-      }
+      if (!userAccount?.schoolFirebaseConfig) return;
+      const configKey = userAccount.schoolFirebaseConfig.projectId;
+      if (!force && configKey === lastLoadedConfigRef.current) return;
+      setLoading(true);
       const data = await schoolDatabaseService.getAllStudents(userAccount.schoolFirebaseConfig);
-      console.log('Students data loaded:', data);
       setStudents(data);
+      lastLoadedConfigRef.current = configKey;
     } catch (error) {
       console.error('Error loading students:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -173,7 +175,7 @@ export default function StudentsManagement() {
 
       // No changes, proceed with upload
       await schoolDatabaseService.saveStudentWhitelist(userAccount.schoolFirebaseConfig, studentsData);
-      await loadStudents();
+      await loadStudents(true);
       alert('อัพโหลดรายชื่อนักเรียนสำเร็จ');
     } catch (error) {
       console.error('Error uploading students:', error);
@@ -237,7 +239,7 @@ export default function StudentsManagement() {
 
       // Save new students to School Database
       await schoolDatabaseService.saveStudentWhitelist(userAccount.schoolFirebaseConfig, pendingStudentsData);
-      await loadStudents();
+      await loadStudents(true);
       invalidateCache();
       alert('อัพโหลดรายชื่อนักเรียนสำเร็จ');
     } catch (error) {
@@ -300,7 +302,7 @@ export default function StudentsManagement() {
         updatedAt: new Date()
       });
 
-      await loadStudents();
+      await loadStudents(true);
       invalidateCache();
       setShowEditModal(false);
       setSelectedStudent(null);
@@ -331,7 +333,7 @@ export default function StudentsManagement() {
         await firestoreService.deleteUserAccount(selectedStudent.email);
       }
 
-      await loadStudents();
+      await loadStudents(true);
       setShowPopup(false);
       setSelectedStudent(null);
       alert('ยกเลิกการซิงค์สำเร็จ');
@@ -444,7 +446,7 @@ export default function StudentsManagement() {
         await schoolDatabaseService.deleteStudent(userAccount.schoolFirebaseConfig, studentId);
       }
       setSelectedStudents(new Set());
-      await loadStudents();
+      await loadStudents(true);
       invalidateCache();
       alert('ลบนักเรียนสำเร็จ');
     } catch (error) {
@@ -487,7 +489,7 @@ export default function StudentsManagement() {
         );
       }
 
-      await loadStudents();
+      await loadStudents(true);
       invalidateCache();
       setShowAddModal(false);
       setNewStudentData({
@@ -549,6 +551,29 @@ export default function StudentsManagement() {
   const handleBackToClasses = () => {
     setSelectedClass(null);
   };
+
+  if (loading && students.length === 0) {
+    return (
+      <div className={`min-h-screen p-6 pb-24 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+        <h1 className={`text-3xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-800'}`}>จัดการข้อมูลนักเรียน</h1>
+        <div className="animate-pulse space-y-4">
+          <div className={`h-12 rounded-2xl ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`} />
+          <div className={`h-10 w-48 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className={`rounded-2xl p-4 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}>
+              <div className="flex items-center gap-4">
+                <div className={`w-10 h-10 rounded-full ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                <div className="flex-1 space-y-2">
+                  <div className={`h-4 w-32 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                  <div className={`h-3 w-24 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div 
