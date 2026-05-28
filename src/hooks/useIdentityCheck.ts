@@ -38,7 +38,8 @@ export function useIdentityCheck() {
               const teachers = await schoolDatabaseService.getAllTeachers(schoolHub.schoolFirebaseConfig);
               const teacher = teachers.find(t => t.email === user.email);
               if (teacher) {
-                role = 'teacher';
+                // Use role from School Database (admin or teacher), fallback to Master Registry, then 'teacher'
+                role = (teacher.role as 'admin' | 'teacher') || (userMapping.role as 'admin' | 'teacher') || 'teacher';
                 userId = teacher.teacherId;
                 userName = teacher.name;
                 // Use teacher's own Firebase config if available

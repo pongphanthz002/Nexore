@@ -27,6 +27,10 @@ export default function LoginSignup() {
           console.log('User mapping found:', userMapping);
           
           if (userMapping) {
+            // Clear cache to ensure fresh data
+            localStorage.removeItem('NEXORE_USER_ACCOUNT');
+            localStorage.removeItem('NEXORE_USER_ACCOUNT_TIMESTAMP');
+            
             // User exists in Master Registry
             if (isSignup) {
               // User tried to sign up but already has an account
@@ -51,24 +55,9 @@ export default function LoginSignup() {
             console.log('School hub found:', schoolHub);
             
             if (schoolHub && schoolHub.schoolFirebaseConfig) {
-              // Use role from Master Registry
+              // Let AuthContext handle user account loading from Master Registry and School Database
+              // Just redirect based on role from Master Registry
               const role = userMapping.role || 'student';
-              const userId = userMapping.uid || user.uid;
-              const userName = user.displayName || '';
-              
-              // Set user account
-              const userAccount: UserAccount = {
-                id: user.email,
-                email: user.email,
-                schoolId: userMapping.schoolId,
-                schoolFirebaseConfig: schoolHub.schoolFirebaseConfig,
-                role: role,
-                userId: userId,
-                name: userName,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-              };
-              setUserAccount(userAccount);
               
               console.log('Redirecting to dashboard for role:', role);
               // Don't redirect if there was a signup error
