@@ -96,6 +96,24 @@ const ScheduleWidget = ({ isDark }: ScheduleWidgetProps) => {
     return subjects.filter(s => s.day === day).sort((a, b) => a.time.localeCompare(b.time));
   };
 
+  // Merge subjects with same name and time but different rooms
+  const mergeSubjectsBySameTime = (daySubjects: SubjectData[]): SubjectData[] => {
+    const mergedMap = new Map<string, SubjectData>();
+    
+    daySubjects.forEach(subject => {
+      const key = `${subject.subjectName}-${subject.time}`;
+      if (mergedMap.has(key)) {
+        const existing = mergedMap.get(key)!;
+        // Merge classrooms
+        existing.classroom = `${existing.classroom}, ${subject.classroom}`;
+      } else {
+        mergedMap.set(key, { ...subject });
+      }
+    });
+    
+    return Array.from(mergedMap.values());
+  };
+
   // Build color map: assign consistent color per subjectName
   const subjectColorMap = new Map<string, number>();
   const uniqueNames = Array.from(new Set(subjects.map(s => s.subjectName)));
@@ -162,7 +180,8 @@ const ScheduleWidget = ({ isDark }: ScheduleWidgetProps) => {
     hours: number,
     height: number,
   ) => {
-    const parsed = daySubjects.map(s => ({ ...s, parsed: parseTimeRange(s.time) })).filter(s => s.parsed);
+    const mergedSubjects = mergeSubjectsBySameTime(daySubjects);
+    const parsed = mergedSubjects.map(s => ({ ...s, parsed: parseTimeRange(s.time) })).filter(s => s.parsed);
     return (
       <div className="relative" style={{ height: hours * height }}>
         {/* Hour lines */}
@@ -213,7 +232,8 @@ const ScheduleWidget = ({ isDark }: ScheduleWidgetProps) => {
     hours: number,
     height: number,
   ) => {
-    const parsed = daySubjects.map(s => ({ ...s, parsed: parseTimeRange(s.time) })).filter(s => s.parsed);
+    const mergedSubjects = mergeSubjectsBySameTime(daySubjects);
+    const parsed = mergedSubjects.map(s => ({ ...s, parsed: parseTimeRange(s.time) })).filter(s => s.parsed);
     const hourWidth = height; // Use height as width for horizontal
 
     return (
