@@ -39,6 +39,8 @@ export default function AdminDashboard() {
   useEffect(() => {
     async function loadData() {
       try {
+        console.log('AdminDashboard - Loading data, userAccount role:', userAccount?.role);
+        console.log('AdminDashboard - Loading data, userAccount userId:', userAccount?.userId);
         let schoolFirebaseConfig = null;
         let currentSchoolId = '';
 
@@ -72,6 +74,8 @@ export default function AdminDashboard() {
           ]);
           
           console.log('Teachers:', teachers.length, 'Students:', students.length);
+          console.log('AdminDashboard - After loading data, userAccount role:', userAccount?.role);
+          console.log('AdminDashboard - After loading data, userAccount userId:', userAccount?.userId);
           
           const signedUpTeachers = teachers.filter(t => t.firebaseConfig && Object.keys(t.firebaseConfig).length > 0).length;
           const signedUpStudents = students.filter(s => s.uid).length;

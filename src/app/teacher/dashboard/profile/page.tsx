@@ -4,12 +4,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { schoolDatabaseService } from '@/services/school-database.service';
+import { firestoreService } from '@/services/firestore.service';
 import { firebaseManager } from '@/lib/firebase';
 import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { Edit, Save, X, Settings, Files, Eye, EyeOff, AlertTriangle, Loader2 } from 'lucide-react';
 
 export default function ProfilePage() {
-  const { userAccount, setUserAccount } = useAuth();
+  const { userAccount, setUserAccount, invalidateCache, user } = useAuth();
   const [isDark, setIsDark] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [showConfigPopup, setShowConfigPopup] = useState(false);
@@ -115,6 +116,7 @@ export default function ProfilePage() {
       const oldTeacherId = userAccount.userId;
 
       // Unlink old teacher if exists and different
+      // Only unlink if oldTeacherId is a valid teacherId (not Firebase UID)
       if (oldTeacherId && oldTeacherId !== selectedTeacherId && userAccount.schoolFirebaseConfig) {
         try {
           const schoolInstance = firebaseManager.getInstance(
@@ -124,11 +126,62 @@ export default function ProfilePage() {
           const oldTeacherRef = doc(schoolInstance.db, 'teachers', oldTeacherId);
           await updateDoc(oldTeacherRef, { uid: '', email: '' });
         } catch (err) {
-          console.error('Error unlinking old teacher:', err);
+          // Ignore error if document doesn't exist (oldTeacherId might be Firebase UID)
+          console.error('Error unlinking old teacher (document may not exist):', err);
         }
       }
 
-      setUserAccount({ ...userAccount, userId: selectedTeacherId });
+      // Link new teacher: save uid and email to School Database
+      // Use user?.uid (Firebase Auth UID) instead of userAccount.id (which is email)
+      if (userAccount.schoolFirebaseConfig && user?.uid) {
+        try {
+          const schoolInstance = firebaseManager.getInstance(
+            userAccount.schoolFirebaseConfig,
+            `school-${userAccount.schoolFirebaseConfig.projectId}`
+          );
+          const newTeacherRef = doc(schoolInstance.db, 'teachers', selectedTeacherId);
+          await updateDoc(newTeacherRef, {
+            uid: user.uid,
+            email: userAccount.email,
+            role: userAccount.role === 'admin' ? 'admin' : 'teacher',
+          });
+        } catch (err) {
+          console.error('Error linking new teacher:', err);
+        }
+      }
+
+      // Get current account data from Master Registry to preserve role
+      const accountData = await firestoreService.getUserAccount(userAccount.email);
+      console.log('Current account data from Master Registry:', accountData);
+
+      // Update Master Registry: keep Firebase Auth UID (not teacherId)
+      // This follows AGENTS.md: Master Registry stores Firebase Auth UID
+      await firestoreService.saveUserAccount(
+        userAccount.email,
+        userAccount.schoolId,
+        user?.uid || accountData?.uid, // Use Firebase Auth UID
+        accountData?.role || 'admin' // Preserve role from Master Registry
+      );
+
+      // Invalidate cache and reload userAccount from Master Registry
+      // This ensures role remains 'admin' and userAccount is up-to-date
+      invalidateCache();
+
+      // Reload userAccount from Master Registry
+      const updatedAccountData = await firestoreService.getUserAccount(userAccount.email);
+      console.log('Account data from Master Registry after linking teacher:', updatedAccountData);
+      if (updatedAccountData) {
+        const updatedUserAccount = {
+          ...userAccount,
+          userId: selectedTeacherId,
+          role: updatedAccountData.role || 'admin', // Ensure role is from Master Registry
+        };
+        console.log('Updated userAccount with role:', updatedUserAccount.role);
+        setUserAccount(updatedUserAccount);
+      } else {
+        // Fallback: update userId only
+        setUserAccount({ ...userAccount, userId: selectedTeacherId });
+      }
     } finally {
       setLinkLoading(false);
       setShowLinkConfirm(false);
@@ -546,13 +599,13 @@ export default function ProfilePage() {
                 <h3 className="text-xl font-bold">ยืนยันการแก้ไข Firebase Config</h3>
               </div>
               <p className={`mb-4 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                การแก้ไขนี้อาจทำให้ระบบไม่สามารถเข้าถึงข้อมูลได้ กรุณาพิมพ์ <strong>"ยืนยัน"</strong> เพื่อดำเนินการ
+                การแก้ไขนี้อาจทำให้ระบบไม่สามารถเข้าถึงข้อมูลได้ กรุณาพิมพ์ <strong>&quot;ยืนยัน&quot;</strong> เพื่อดำเนินการ
               </p>
               <input
                 type="text"
                 value={configConfirmText}
                 onChange={(e) => setConfigConfirmText(e.target.value)}
-                placeholder='พิมพ์ "ยืนยัน"'
+                placeholder='พิมพ์ &quot;ยืนยัน&quot;'
                 className={`w-full p-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
               />
               {configError && (

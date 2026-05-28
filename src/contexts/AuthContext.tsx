@@ -11,6 +11,8 @@ import {
   Auth 
 } from 'firebase/auth';
 import { firestoreService } from '@/services/firestore.service';
+import { schoolDatabaseService } from '@/services/school-database.service';
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 
 export interface UserAccount {
   id: string;
@@ -101,6 +103,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const parsed = JSON.parse(cachedAccount);
             if (age < CACHE_DURATION && parsed.email === currentUser.email) {
               console.log('Loading user account from cache for:', currentUser.email);
+              console.log('Cached user account role:', parsed.role);
+              console.log('Cached user account userId:', parsed.userId);
+              console.log('Cache age:', age, 'ms');
               setUserAccount(parsed);
               setLoading(false);
               return;
@@ -130,19 +135,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               }
               
               if (finalHub && finalHub.schoolFirebaseConfig) {
+                // Check if user is a teacher and has role in School Database
+                let finalRole = accountData.role || 'student';
+                let finalUserId = accountData.uid || currentUser.uid; // Default to Firebase Auth UID
+                
+                if (accountData.role === 'teacher' || accountData.role === 'admin') {
+                  try {
+                    const schoolInstance = firebaseManager.getInstance(
+                      finalHub.schoolFirebaseConfig,
+                      `school-${finalHub.schoolFirebaseConfig.projectId}`
+                    );
+                    // Find teacher by Firebase Auth UID
+                    const teachersRef = collection(schoolInstance.db, 'teachers');
+                    const q = query(teachersRef, where('uid', '==', accountData.uid || currentUser.uid));
+                    const querySnapshot = await getDocs(q);
+                    
+                    if (!querySnapshot.empty) {
+                      const teacherDoc = querySnapshot.docs[0];
+                      const teacherData = teacherDoc.data();
+                      if (teacherData?.role) {
+                        finalRole = teacherData.role;
+                        console.log('Role from School Database:', finalRole);
+                      }
+                      // Use teacherId as userId (not Firebase Auth UID)
+                      finalUserId = teacherDoc.id;
+                      console.log('TeacherId from School Database:', finalUserId);
+                    }
+                  } catch (err) {
+                    console.error('Error fetching teacher role from School Database:', err);
+                  }
+                }
+                
                 const fullUserAccount: UserAccount = {
                   id: currentUser.email,
                   email: currentUser.email,
                   schoolId: accountData.schoolId,
                   schoolFirebaseConfig: finalHub.schoolFirebaseConfig,
-                  role: accountData.role || 'student', // Default to student if role not set
-                  userId: accountData.uid || currentUser.uid,
+                  role: finalRole,
+                  userId: finalUserId,
                   name: currentUser.displayName || '',
                   createdAt: new Date(),
                   updatedAt: new Date(),
                 };
                 console.log('Setting user account:', fullUserAccount);
+                console.log('Setting user account role:', fullUserAccount.role);
+                console.log('Setting user account userId:', fullUserAccount.userId);
                 setUserAccount(fullUserAccount);
+                
+                // Log after setting to verify
+                console.log('AuthContext - After setUserAccount, userAccount role:', fullUserAccount.role);
+                console.log('AuthContext - After setUserAccount, userAccount userId:', fullUserAccount.userId);
                 
                 // Cache the user account
                 localStorage.setItem('NEXORE_USER_ACCOUNT', JSON.stringify(fullUserAccount));

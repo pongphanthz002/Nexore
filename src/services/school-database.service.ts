@@ -8,7 +8,7 @@ export interface TeacherFirebaseConfig {
   name: string;
   email: string;
   uid?: string;
-  role?: 'teacher';
+  role?: 'teacher' | 'admin';
   firebaseConfig?: {
     apiKey: string;
     authDomain: string;

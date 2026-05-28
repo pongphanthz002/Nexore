@@ -18,6 +18,8 @@ const TeacherHeader = ({ isDark, toggleTheme }: TeacherHeaderProps) => {
   const [showSwitchConfirm, setShowSwitchConfirm] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
+  console.log('TeacherHeader - userAccount role:', userAccount?.role);
+
   const handleSwitchRole = () => {
     setShowSwitchConfirm(true);
   };

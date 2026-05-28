@@ -3,13 +3,21 @@
 import { useState, useEffect } from 'react';
 import TeacherHeader from '@/components/TeacherHeader';
 import TeacherDock from '@/components/TeacherDock';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function TeacherDashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const { userAccount } = useAuth();
   const [isDark, setIsDark] = useState(false);
+
+  console.log('TeacherDashboardLayout - userAccount role:', userAccount?.role);
+
+  useEffect(() => {
+    console.log('TeacherDashboardLayout - userAccount changed:', userAccount?.role);
+  }, [userAccount]);
 
   useEffect(() => {
     // Load theme from localStorage

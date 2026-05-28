@@ -19,9 +19,11 @@ interface ScheduleWidgetProps {
   isDark: boolean;
 }
 
-// Parse "08:30-09:30" → { startHour, startMin, endHour, endMin }
+// Parse "08:30-09:30" or "13.30 - 15.10" → { startHour, startMin, endHour, endMin }
 function parseTimeRange(time: string) {
-  const match = time.match(/^(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})$/);
+  // Normalize time format: replace dots with colons, remove spaces
+  const normalized = time.replace(/\./g, ':').replace(/\s+/g, '');
+  const match = normalized.match(/^(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})$/);
   if (!match) return null;
   return {
     startHour: parseInt(match[1]),
@@ -58,9 +60,20 @@ const ScheduleWidget = ({ isDark }: ScheduleWidgetProps) => {
   const [loading, setLoading] = useState(true);
   const [showFullSchedule, setShowFullSchedule] = useState(false);
   const [popupDay, setPopupDay] = useState('');
-  
+  const [isMobile, setIsMobile] = useState(false);
+
   const days = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์'];
   const todayThai = getTodayThai();
+
+  // Detect mobile for responsive timeline
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     async function loadSubjects() {
@@ -85,25 +98,34 @@ const ScheduleWidget = ({ isDark }: ScheduleWidgetProps) => {
 
   // Build color map: assign consistent color per subjectName
   const subjectColorMap = new Map<string, number>();
-  const uniqueNames = [...new Set(subjects.map(s => s.subjectName))];
+  const uniqueNames = Array.from(new Set(subjects.map(s => s.subjectName)));
   uniqueNames.forEach((name, i) => subjectColorMap.set(name, i % blockColors.length));
 
-  // Calculate time range for today's timeline
+  // Calculate time range for today's timeline - Fixed from 08:30 to 16:00
   const todaySubjects = getSubjectsForDay(todayThai);
-  const parsedToday = todaySubjects.map(s => ({ ...s, parsed: parseTimeRange(s.time) })).filter(s => s.parsed);
+  const parsedToday = todaySubjects.map(s => ({ ...s, parsed: parseTimeRange(s.time) }));
+  const validParsed = parsedToday.filter(s => s.parsed);
 
-  let timelineStart = 8; // default 08:00
-  let timelineEnd = 17;  // default 17:00
-  if (parsedToday.length > 0) {
-    timelineStart = Math.min(...parsedToday.map(s => s.parsed!.startHour));
-    timelineEnd = Math.max(...parsedToday.map(s => s.parsed!.endHour + (s.parsed!.endMin > 0 ? 1 : 0)));
-  }
+  // Fixed timeline: 08:30 to 16:00
+  const timelineStart = 8; // 08:00
+  const timelineEnd = 16; // 16:00
   const totalHours = timelineEnd - timelineStart;
-  const hourHeight = 60; // px per hour
+  const hourHeight = 40; // px per hour (reduced from 60 for compact view)
 
-  const handleOpenPopup = () => {
+  const handleOpenPopup = async () => {
     setPopupDay(todayThai);
     setShowFullSchedule(true);
+    // Enter fullscreen to cover status bar and dock
+    try {
+      const el = document.documentElement;
+      if (el.requestFullscreen) {
+        await el.requestFullscreen();
+      } else if ((el as any).webkitRequestFullscreen) {
+        await (el as any).webkitRequestFullscreen();
+      }
+    } catch (err) {
+      console.log('Fullscreen not supported:', err);
+    }
   };
 
   const handlePopupDayChange = (direction: 'prev' | 'next') => {
@@ -117,15 +139,12 @@ const ScheduleWidget = ({ isDark }: ScheduleWidgetProps) => {
     setPopupDay(days[newIndex]);
   };
 
-  // Calculate popup timeline range for selected day
+  // Calculate popup timeline range for selected day - Fixed from 08:30 to 16:00
   const popupSubjects = getSubjectsForDay(popupDay);
   const parsedPopup = popupSubjects.map(s => ({ ...s, parsed: parseTimeRange(s.time) })).filter(s => s.parsed);
-  let popupStart = 8;
-  let popupEnd = 17;
-  if (parsedPopup.length > 0) {
-    popupStart = Math.min(...parsedPopup.map(s => s.parsed!.startHour));
-    popupEnd = Math.max(...parsedPopup.map(s => s.parsed!.endHour + (s.parsed!.endMin > 0 ? 1 : 0)));
-  }
+  // Fixed timeline: 08:30 to 16:00
+  const popupStart = 8; // 08:00
+  const popupEnd = 16; // 16:00
   const popupTotalHours = popupEnd - popupStart;
 
   if (loading) {
@@ -171,18 +190,81 @@ const ScheduleWidget = ({ isDark }: ScheduleWidgetProps) => {
               key={subject.subjectId}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className={`absolute left-14 right-1 rounded-xl p-2 ${isDark ? color.darkBg : color.bg} ${color.text} overflow-hidden`}
+              className={`absolute left-12 right-0 rounded-xl p-2 ${isDark ? color.darkBg : color.bg} ${color.text} overflow-hidden flex flex-col justify-center`}
               style={{ top: topOffset, height: Math.max(blockHeight, 28) }}
             >
-              <div className="font-semibold text-sm truncate">{subject.subjectName}</div>
-              {blockHeight > 36 && (
-                <div className="text-xs opacity-80 truncate">
-                  {subject.time} | ห้อง {subject.classroom}
-                </div>
-              )}
+              <div className="font-semibold text-sm">
+                {subject.subjectName} <span className="opacity-70 font-normal">ห้อง {subject.classroom}</span>
+              </div>
+              <div className="text-xs opacity-70">
+                {subject.time}
+              </div>
             </motion.div>
           );
         })}
+      </div>
+    );
+  };
+
+  // Horizontal timeline for mobile (rotated 90 degrees)
+  const renderHorizontalTimeline = (
+    daySubjects: SubjectData[],
+    startHour: number,
+    hours: number,
+    height: number,
+  ) => {
+    const parsed = daySubjects.map(s => ({ ...s, parsed: parseTimeRange(s.time) })).filter(s => s.parsed);
+    const hourWidth = height; // Use height as width for horizontal
+
+    return (
+      <div className="relative w-full flex justify-center" style={{ height: 'auto', paddingLeft: '20px' }}>
+        {/* Time labels on left side (vertical) */}
+        <div className="flex flex-col border-r pr-2 mr-2 border-gray-300 dark:border-gray-600" style={{ width: '50px' }}>
+          {Array.from({ length: hours + 1 }, (_, i) => (
+            <div
+              key={i}
+              className="text-xs text-center text-gray-600 dark:text-gray-400"
+              style={{ height: hourWidth }}
+            >
+              {String(startHour + i).padStart(2, '0')}:00
+            </div>
+          ))}
+        </div>
+
+        {/* Subject area */}
+        <div className="relative flex-1" style={{ height: '95px' }}>
+          {/* Horizontal time lines */}
+          {Array.from({ length: hours + 1 }, (_, i) => (
+            <div
+              key={`line-${i}`}
+              className="absolute left-0 right-0 border-b border-gray-300 dark:border-gray-600"
+              style={{ top: i * hourWidth }}
+            />
+          ))}
+
+          {/* Subject blocks - horizontal like main dashboard */}
+          {parsed.map((subject, idx) => {
+            const p = subject.parsed!;
+            const topOffset = ((p.startMinutes - startHour * 60) / 60) * hourWidth;
+            const blockHeight = ((p.endMinutes - p.startMinutes) / 60) * hourWidth;
+            const colorIdx = subjectColorMap.get(subject.subjectName) || 0;
+            const color = blockColors[colorIdx];
+
+            return (
+              <motion.div
+                key={subject.subjectId}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className={`absolute left-0 right-0 rounded-xl p-2 ${isDark ? color.darkBg : color.bg} ${color.text} overflow-hidden flex flex-col justify-center`}
+                style={{ top: topOffset, height: Math.max(blockHeight, 28) }}
+              >
+                <div className="font-semibold text-sm">
+                  {subject.subjectName} <span className="opacity-70">ห้อง {subject.classroom} {subject.time}</span>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
       </div>
     );
   };
@@ -215,67 +297,68 @@ const ScheduleWidget = ({ isDark }: ScheduleWidgetProps) => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-            onClick={() => setShowFullSchedule(false)}
+            className="fixed bg-black/50 backdrop-blur-sm"
+            style={isMobile ? { width: '100vh', height: '100vw', position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(90deg)', marginTop: '-30px', zIndex: 9999 } : { inset: 0, zIndex: 50 }}
+            onClick={() => {
+              setShowFullSchedule(false);
+              // Exit fullscreen when closing
+              try {
+                if (document.fullscreenElement) {
+                  document.exitFullscreen();
+                } else if ((document as any).webkitFullscreenElement) {
+                  (document as any).webkitExitFullscreen();
+                }
+              } catch (e) { /* ignore */ }
+            }}
           >
             <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
+              initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
+              exit={{ scale: 0.95, opacity: 0 }}
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              className={`rounded-2xl p-6 max-w-4xl w-full max-h-[85vh] overflow-y-auto ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
+              className={`w-full h-full overflow-y-auto ${isDark ? 'bg-gray-800' : 'bg-white'}`}
+              style={{ padding: isMobile ? '60px 8px 8px 8px' : '24px' }}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between mb-6">
-                <h2 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  ตารางสอนประจำวัน
-                </h2>
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => setShowFullSchedule(false)}
-                  className={`p-2 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
-                >
-                  <X size={20} />
-                </motion.button>
-              </div>
 
-              <div className="flex items-center justify-center gap-4 mb-6">
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => handlePopupDayChange('prev')}
-                  className={`p-2 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
-                >
-                  <ChevronLeft size={24} />
-                </motion.button>
+              {/* Close button - fixed at top right */}
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => {
+                  setShowFullSchedule(false);
+                  // Exit fullscreen when closing
+                  try {
+                    if (document.fullscreenElement) {
+                      document.exitFullscreen();
+                    } else if ((document as any).webkitFullscreenElement) {
+                      (document as any).webkitExitFullscreen();
+                    }
+                  } catch (e) { /* ignore */ }
+                }}
+                className={`fixed top-4 right-4 p-2 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
+                style={{ zIndex: 10001 }}
+              >
+                <X size={20} />
+              </motion.button>
 
-                <div className="flex gap-2">
-                  {days.map((day) => (
-                    <motion.button
-                      key={day}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => setPopupDay(day)}
-                      className={`px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
-                        day === popupDay
-                          ? 'bg-blue-500 text-white'
-                          : isDark ? 'bg-gray-700 text-gray-400' : 'bg-gray-100 text-gray-600'
-                      }`}
-                    >
-                      {day.substring(0, 2)}
-                    </motion.button>
-                  ))}
-                </div>
-
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => handlePopupDayChange('next')}
-                  className={`p-2 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
-                >
-                  <ChevronRight size={24} />
-                </motion.button>
+              {/* Day selection buttons - fixed at top */}
+              <div className={`fixed top-0 left-0 right-0 flex gap-2 p-3 justify-center ${isDark ? 'bg-gray-800 border-b border-gray-700' : 'bg-white border-b border-gray-200'}`} style={{ zIndex: 10000 }}>
+                {days.map((day) => (
+                  <motion.button
+                    key={day}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setPopupDay(day)}
+                    className={`px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
+                      day === popupDay
+                        ? 'bg-blue-500 text-white'
+                        : isDark ? 'bg-gray-700 text-gray-400' : 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    {day}
+                  </motion.button>
+                ))}
               </div>
 
               <motion.div
@@ -285,7 +368,11 @@ const ScheduleWidget = ({ isDark }: ScheduleWidgetProps) => {
                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
               >
                 {popupSubjects.length > 0 ? (
-                  renderTimeline(popupSubjects, popupStart, popupTotalHours, hourHeight)
+                  isMobile ? (
+                    renderHorizontalTimeline(popupSubjects, popupStart, popupTotalHours, hourHeight)
+                  ) : (
+                    renderTimeline(popupSubjects, popupStart, popupTotalHours, hourHeight)
+                  )
                 ) : (
                   <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                     ไม่มีตารางสอนในวัน{popupDay}
