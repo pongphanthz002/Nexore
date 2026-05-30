@@ -1,10 +1,12 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSearchParams } from 'next/navigation';
 import { schoolDatabaseService, SubjectData, StudentData } from '@/services/school-database.service';
-import { ChevronLeft, Clock, Users } from 'lucide-react';
+import { teacherDatabaseService, AttendanceRecord, AttendanceData } from '@/services/teacher-database.service';
+import { ChevronLeft, Clock, Users, ClipboardList, Save, CheckCircle2 } from 'lucide-react';
 
 // Parse "08:30-09:30" → { startMinutes, endMinutes }
 function parseTimeRange(time: string): { startMinutes: number; endMinutes: number } | null {
@@ -28,8 +30,28 @@ function getNowMinutes(): number {
   return now.getHours() * 60 + now.getMinutes();
 }
 
-export default function SchedulesPage() {
+// Format date as "Mon 23/5"
+function formatDate(date: Date): string {
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dayName = days[date.getDay()];
+  const day = date.getDate();
+  const month = date.getMonth() + 1;
+  return `${dayName} ${day}/${month}`;
+}
+
+// Parse "Mon 23/5" back to Date (approximate)
+function parseDate(dateStr: string): Date {
+  const parts = dateStr.split(' ');
+  const dayMonth = parts[1].split('/');
+  const day = parseInt(dayMonth[0]);
+  const month = parseInt(dayMonth[1]) - 1;
+  const now = new Date();
+  return new Date(now.getFullYear(), month, day);
+}
+
+function SchedulesContent() {
   const { userAccount } = useAuth();
+  const searchParams = useSearchParams();
   const [isDark, setIsDark] = useState(false);
   const [subjects, setSubjects] = useState<SubjectData[]>([]);
   const [students, setStudents] = useState<StudentData[]>([]);
@@ -37,6 +59,15 @@ export default function SchedulesPage() {
   const [selectedSubject, setSelectedSubject] = useState<SubjectData | null>(null);
   const [filteredStudents, setFilteredStudents] = useState<StudentData[]>([]);
   const [nowMinutes, setNowMinutes] = useState(getNowMinutes());
+  const [teacherConfig, setTeacherConfig] = useState<any>(null);
+  
+  // Attendance state
+  const [isAttendanceMode, setIsAttendanceMode] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
+  const [selectedHours, setSelectedHours] = useState(1);
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+  const [loadingAttendance, setLoadingAttendance] = useState(false);
+  const [fromSection, setFromSection] = useState<'current' | 'all'>('current');
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains('dark'));
@@ -57,13 +88,15 @@ export default function SchedulesPage() {
     async function loadData() {
       if (userAccount?.schoolFirebaseConfig && userAccount?.userId) {
         try {
-          const [allSubjects, allStudents] = await Promise.all([
+          const [allSubjects, allStudents, teacherData] = await Promise.all([
             schoolDatabaseService.getAllSubjects(userAccount.schoolFirebaseConfig),
             schoolDatabaseService.getAllStudents(userAccount.schoolFirebaseConfig),
+            schoolDatabaseService.getTeacherConfig(userAccount.schoolFirebaseConfig, userAccount.userId),
           ]);
           const teacherSubjects = allSubjects.filter(s => s.teacherId === userAccount.userId);
           setSubjects(teacherSubjects);
           setStudents(allStudents);
+          setTeacherConfig(teacherData);
         } catch (error) {
           console.error('Error loading data:', error);
         } finally {
@@ -83,6 +116,15 @@ export default function SchedulesPage() {
     return nowMinutes >= range.startMinutes - 10 && nowMinutes <= range.endMinutes + 10;
   }).sort((a, b) => a.time.localeCompare(b.time));
 
+  // Handle mode=attendance query parameter
+  useEffect(() => {
+    const mode = searchParams.get('mode');
+    if (mode === 'attendance' && currentSubjects.length > 0 && !loading) {
+      // Auto-select first current subject and open attendance
+      handleSelectSubject(currentSubjects[0], 'current');
+    }
+  }, [searchParams, currentSubjects, loading]);
+
   // All unique subjects (unique by subjectName + classroom)
   const allUniqueSubjects = subjects
     .reduce((acc, subject) => {
@@ -94,8 +136,9 @@ export default function SchedulesPage() {
     }, [] as SubjectData[])
     .sort((a, b) => a.classroom.localeCompare(b.classroom, 'th'));
 
-  const handleSelectSubject = (subject: SubjectData) => {
+  const handleSelectSubject = async (subject: SubjectData, section: 'current' | 'all' = 'current') => {
     setSelectedSubject(subject);
+    setFromSection(section);
     const matched = students
       .filter(s => s.class === subject.classroom)
       .sort((a, b) => {
@@ -104,6 +147,128 @@ export default function SchedulesPage() {
         return numA - numB;
       });
     setFilteredStudents(matched);
+    
+    // Set default hours from subject duration
+    if (subject.duration) {
+      setSelectedHours(parseInt(subject.duration) || 1);
+    }
+    
+    // Auto-open attendance mode for current subjects
+    if (section === 'current' && teacherConfig?.firebaseConfig) {
+      await handleOpenAttendance();
+    }
+  };
+
+  const handleOpenAttendance = async () => {
+    if (!selectedSubject) {
+      alert('กรุณาเลือกวิชาก่อน');
+      return;
+    }
+    
+    // Use teacher's Firebase config if available, otherwise use school config (for admin teachers)
+    const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
+    
+    if (!firebaseConfig) {
+      alert('ไม่พบ Firebase Config กรุณาติดต่อผู้ดูแลระบบ');
+      return;
+    }
+    
+    setIsAttendanceMode(true);
+    setLoadingAttendance(true);
+    
+    try {
+      const existingAttendance = await teacherDatabaseService.getAttendance(
+        firebaseConfig,
+        selectedSubject.subjectId,
+        selectedSubject.classroom,
+        selectedDate
+      );
+      
+      if (existingAttendance) {
+        setAttendanceRecords(existingAttendance.records);
+        setSelectedHours(existingAttendance.hours);
+      } else {
+        // Initialize empty records
+        const initialRecords: AttendanceRecord[] = filteredStudents.map(s => ({
+          studentId: s.studentId,
+          name: s.name,
+          number: s.number,
+          status: ''
+        }));
+        setAttendanceRecords(initialRecords);
+      }
+    } catch (error) {
+      console.error('Error loading attendance:', error);
+      const initialRecords: AttendanceRecord[] = filteredStudents.map(s => ({
+        studentId: s.studentId,
+        name: s.name,
+        number: s.number,
+        status: ''
+      }));
+      setAttendanceRecords(initialRecords);
+    } finally {
+      setLoadingAttendance(false);
+    }
+  };
+
+  const handleMarkAllPresent = () => {
+    setAttendanceRecords(records => 
+      records.map(r => ({ ...r, status: 'มา' as const }))
+    );
+  };
+
+  const handleStatusChange = (studentId: string, status: string) => {
+    setAttendanceRecords(records => 
+      records.map(r => r.studentId === studentId ? { ...r, status: status as AttendanceRecord['status'] } : r)
+    );
+  };
+
+  const handleSaveAttendance = async () => {
+    if (!selectedSubject) return;
+    
+    // Use teacher's Firebase config if available, otherwise use school config (for admin teachers)
+    const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
+    
+    if (!firebaseConfig) {
+      alert('ไม่พบ Firebase Config กรุณาติดต่อผู้ดูแลระบบ');
+      return;
+    }
+    
+    setLoadingAttendance(true);
+    try {
+      const attendanceData: AttendanceData = {
+        subjectId: selectedSubject.subjectId,
+        subjectName: selectedSubject.subjectName,
+        classroom: selectedSubject.classroom,
+        date: selectedDate,
+        hours: selectedHours,
+        records: attendanceRecords,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      
+      await teacherDatabaseService.saveAttendance(firebaseConfig, attendanceData);
+      alert('บันทึกเช็คชื่อสำเร็จ');
+      setIsAttendanceMode(false);
+    } catch (error) {
+      console.error('Error saving attendance:', error);
+      alert('เกิดข้อผิดพลาดในการบันทึก');
+    } finally {
+      setLoadingAttendance(false);
+    }
+  };
+
+  const handleDateChange = (daysOffset: number) => {
+    const newDate = new Date();
+    newDate.setDate(newDate.getDate() + daysOffset);
+    setSelectedDate(formatDate(newDate));
+  };
+
+  // Calculate attendance summary for a student
+  const calculateAttendanceSummary = (studentId: string) => {
+    if (!selectedSubject || !teacherConfig?.firebaseConfig) return null;
+    // This would be implemented when we have attendance data
+    return null;
   };
 
   if (loading) {
@@ -155,7 +320,7 @@ export default function SchedulesPage() {
                         key={subject.subjectId}
                         whileHover={{ scale: 1.01, y: -2 }}
                         whileTap={{ scale: 0.99 }}
-                        onClick={() => handleSelectSubject(subject)}
+                        onClick={() => handleSelectSubject(subject, 'current')}
                         className={`p-4 rounded-xl cursor-pointer border-2 ${isDark ? 'bg-green-900/30 border-green-700 hover:bg-green-900/50' : 'bg-green-50 border-green-300 hover:bg-green-100'} transition-colors`}
                       >
                         <div className="flex items-center gap-4">
@@ -198,7 +363,7 @@ export default function SchedulesPage() {
                         key={`${subject.subjectName}-${subject.classroom}`}
                         whileHover={{ scale: 1.01, y: -2 }}
                         whileTap={{ scale: 0.99 }}
-                        onClick={() => handleSelectSubject(subject)}
+                        onClick={() => handleSelectSubject(subject, 'all')}
                         className={`p-4 rounded-xl cursor-pointer ${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'} transition-colors`}
                       >
                         <div className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
@@ -216,6 +381,140 @@ export default function SchedulesPage() {
                   </div>
                 )}
               </div>
+            </motion.div>
+          ) : isAttendanceMode ? (
+            <motion.div
+              key="attendance"
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 50 }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
+            >
+              {/* Fixed Dock */}
+              <div className={`sticky top-0 z-10 -mx-6 px-6 py-4 mb-6 border-b ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+                <div className="flex items-center gap-3 mb-4">
+                  <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => setIsAttendanceMode(false)}
+                    className={`p-2 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
+                  >
+                    <ChevronLeft size={24} />
+                  </motion.button>
+                  <div className="flex-1">
+                    <h1 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      เช็คชื่อ: {selectedSubject.subjectName}
+                    </h1>
+                    <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                      ห้อง {selectedSubject.classroom}
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Date picker */}
+                  <div className="flex items-center gap-2">
+                    <motion.button
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => handleDateChange(-1)}
+                      className={`p-2 rounded-lg ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
+                    >
+                      ←
+                    </motion.button>
+                    <span className={`font-medium min-w-[100px] text-center ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {selectedDate}
+                    </span>
+                    <motion.button
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => handleDateChange(1)}
+                      className={`p-2 rounded-lg ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
+                    >
+                      →
+                    </motion.button>
+                  </div>
+                  
+                  {/* Hours dropdown */}
+                  <select
+                    value={selectedHours}
+                    onChange={(e) => setSelectedHours(parseInt(e.target.value))}
+                    className={`px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+                  >
+                    <option value={1}>1 hr.</option>
+                    <option value={2}>2 hrs.</option>
+                    <option value={3}>3 hrs.</option>
+                  </select>
+                  
+                  {/* Save button */}
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleSaveAttendance}
+                    disabled={loadingAttendance}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium ${loadingAttendance ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${isDark ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white'}`}
+                  >
+                    <Save size={18} />
+                    บันทึก
+                  </motion.button>
+                </div>
+              </div>
+
+              {/* Mark all present button */}
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleMarkAllPresent}
+                className={`w-full mb-4 p-3 rounded-xl flex items-center justify-center gap-2 font-medium ${isDark ? 'bg-green-600/20 text-green-400 border border-green-600/50' : 'bg-green-50 text-green-600 border border-green-300'}`}
+              >
+                <CheckCircle2 size={20} />
+                มาทั้งหมด
+              </motion.button>
+
+              {/* Student list with status dropdown */}
+              {loadingAttendance ? (
+                <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  กำลังโหลด...
+                </div>
+              ) : attendanceRecords.length > 0 ? (
+                <div className="space-y-2">
+                  {attendanceRecords.map((record, index) => (
+                    <motion.div
+                      key={record.studentId}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.02 }}
+                      className={`flex items-center gap-3 p-3 rounded-xl ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
+                    >
+                      <span className={`w-12 text-center font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                        {record.number}
+                      </span>
+                      <span className={`flex-1 font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        {record.name}
+                      </span>
+                      <select
+                        value={record.status}
+                        onChange={(e) => handleStatusChange(record.studentId, e.target.value)}
+                        className={`px-3 py-2 rounded-lg border text-sm ${isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+                      >
+                        <option value="">เลือก</option>
+                        <option value="มา">มา</option>
+                        <option value="ขาด">ขาด</option>
+                        <option value="สาย">สาย</option>
+                        <option value="ลาป่วย">ลาป่วย</option>
+                        <option value="ลากิจ">ลากิจ</option>
+                        <option value="กิจกรรม">กิจกรรม</option>
+                        <option value="หนี">หนี</option>
+                      </select>
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  ไม่พบนักเรียนในห้องนี้
+                </div>
+              )}
             </motion.div>
           ) : (
             <motion.div
@@ -235,7 +534,7 @@ export default function SchedulesPage() {
                 >
                   <ChevronLeft size={24} />
                 </motion.button>
-                <div>
+                <div className="flex-1">
                   <h1 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
                     {selectedSubject.subjectName}
                   </h1>
@@ -243,6 +542,16 @@ export default function SchedulesPage() {
                     ห้อง {selectedSubject.classroom} | {filteredStudents.length} คน
                   </p>
                 </div>
+                {fromSection === 'all' && (
+                  <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={handleOpenAttendance}
+                    className={`p-2 rounded-xl ${isDark ? 'bg-blue-600 text-white' : 'bg-blue-500 text-white'}`}
+                  >
+                    <ClipboardList size={24} />
+                  </motion.button>
+                )}
               </div>
 
               {filteredStudents.length > 0 ? (
@@ -253,6 +562,15 @@ export default function SchedulesPage() {
                         <th className={`py-3 px-4 text-left text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>เลขที่</th>
                         <th className={`py-3 px-4 text-left text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>เลขประจำตัว</th>
                         <th className={`py-3 px-4 text-left text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>ชื่อ</th>
+                        {fromSection === 'all' && (
+                          <>
+                            <th className={`py-3 px-4 text-center text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>มา</th>
+                            <th className={`py-3 px-4 text-center text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>ขาด</th>
+                            <th className={`py-3 px-4 text-center text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>สาย</th>
+                            <th className={`py-3 px-4 text-center text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>ลา</th>
+                            <th className={`py-3 px-4 text-center text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>%</th>
+                          </>
+                        )}
                       </tr>
                     </thead>
                     <tbody>
@@ -267,6 +585,15 @@ export default function SchedulesPage() {
                           <td className={`py-3 px-4 text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{student.number || '-'}</td>
                           <td className={`py-3 px-4 text-sm font-mono ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{student.studentId}</td>
                           <td className={`py-3 px-4 text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{student.name}</td>
+                          {fromSection === 'all' && (
+                            <>
+                              <td className={`py-3 px-4 text-sm text-center ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>-</td>
+                              <td className={`py-3 px-4 text-sm text-center ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>-</td>
+                              <td className={`py-3 px-4 text-sm text-center ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>-</td>
+                              <td className={`py-3 px-4 text-sm text-center ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>-</td>
+                              <td className={`py-3 px-4 text-sm text-center ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>-</td>
+                            </>
+                          )}
                         </motion.tr>
                       ))}
                     </tbody>
@@ -282,5 +609,13 @@ export default function SchedulesPage() {
         </AnimatePresence>
       </div>
     </div>
+  );
+}
+
+export default function SchedulesPage() {
+  return (
+    <Suspense fallback={<div className="p-6">กำลังโหลด...</div>}>
+      <SchedulesContent />
+    </Suspense>
   );
 }

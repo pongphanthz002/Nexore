@@ -42,6 +42,7 @@ export interface SubjectData {
   classroom: string;
   day: string;
   time: string;
+  duration?: string; // e.g. "1", "2", "3"
   createdAt: Date;
   updatedAt: Date;
 }

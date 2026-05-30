@@ -1,5 +1,23 @@
 import { firebaseManager } from '@/lib/firebase';
-import { collection, doc, getDocs, query, where, deleteDoc, Firestore } from 'firebase/firestore';
+import { collection, doc, getDocs, getDoc, setDoc, query, where, deleteDoc, Firestore } from 'firebase/firestore';
+
+export interface AttendanceRecord {
+  studentId: string;
+  name: string;
+  number: string;
+  status: 'มา' | 'ขาด' | 'สาย' | 'ลาป่วย' | 'ลากิจ' | 'กิจกรรม' | 'หนี' | '';
+}
+
+export interface AttendanceData {
+  subjectId: string;
+  subjectName: string;
+  classroom: string;
+  date: string; // e.g. "Mon 23/5"
+  hours: number;
+  records: AttendanceRecord[];
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 class TeacherDatabaseService {
   /**
@@ -72,6 +90,58 @@ class TeacherDatabaseService {
       console.error('Error deleting teacher database:', error);
       throw error;
     }
+  }
+
+  /**
+   * Save attendance data to teacher's database
+   */
+  async saveAttendance(teacherFirebaseConfig: any, data: AttendanceData): Promise<void> {
+    const database = this.getTeacherDB(teacherFirebaseConfig);
+    const docId = `${data.subjectId}_${data.classroom}_${data.date}`;
+    const attendanceRef = doc(database, 'attendance', docId);
+    
+    const existingDoc = await getDoc(attendanceRef);
+    const saveData: any = {
+      ...data,
+      updatedAt: new Date(),
+    };
+    
+    if (existingDoc.exists()) {
+      saveData.createdAt = existingDoc.data().createdAt;
+    } else {
+      saveData.createdAt = new Date();
+    }
+    
+    await setDoc(attendanceRef, saveData);
+  }
+
+  /**
+   * Get attendance data for a specific date/subject/classroom
+   */
+  async getAttendance(teacherFirebaseConfig: any, subjectId: string, classroom: string, date: string): Promise<AttendanceData | null> {
+    const database = this.getTeacherDB(teacherFirebaseConfig);
+    const docId = `${subjectId}_${classroom}_${date}`;
+    const attendanceRef = doc(database, 'attendance', docId);
+    const snap = await getDoc(attendanceRef);
+    
+    if (snap.exists()) {
+      return snap.data() as AttendanceData;
+    }
+    return null;
+  }
+
+  /**
+   * Get all attendance records for a specific subject + classroom
+   */
+  async getAttendanceBySubject(teacherFirebaseConfig: any, subjectId: string, classroom: string): Promise<AttendanceData[]> {
+    const database = this.getTeacherDB(teacherFirebaseConfig);
+    const q = query(
+      collection(database, 'attendance'),
+      where('subjectId', '==', subjectId),
+      where('classroom', '==', classroom)
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(d => d.data() as AttendanceData);
   }
 }
 

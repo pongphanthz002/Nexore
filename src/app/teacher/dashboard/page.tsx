@@ -27,9 +27,7 @@ export default function TeacherDashboard() {
   }, []);
 
   const handleAttendanceShortcut = () => {
-    // TODO: Navigate to attendance page when implemented
-    console.log('Attendance shortcut clicked - page not yet implemented');
-    // router.push('/teacher/dashboard/attendance');
+    router.push('/teacher/dashboard/schedules?mode=attendance');
   };
 
   return (
