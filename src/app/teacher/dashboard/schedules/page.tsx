@@ -20,7 +20,7 @@ function parseTimeRange(time: string): { startMinutes: number; endMinutes: numbe
 
 function getCurrentDayThai(): string {
   const dayMap: Record<number, string> = {
-    1: 'จันทร์', 2: 'อังคาร', 3: 'พุธ', 4: 'พฤหัสบดี', 5: 'ศุกร์',
+    0: 'อาทิตย์', 1: 'จันทร์', 2: 'อังคาร', 3: 'พุธ', 4: 'พฤหัสบดี', 5: 'ศุกร์', 6: 'เสาร์',
   };
   return dayMap[new Date().getDay()] || '';
 }
@@ -68,6 +68,7 @@ function SchedulesContent() {
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [loadingAttendance, setLoadingAttendance] = useState(false);
   const [fromSection, setFromSection] = useState<'current' | 'all'>('current');
+  const [attendanceSummaries, setAttendanceSummaries] = useState<Record<string, any>>({});
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains('dark'));
@@ -124,6 +125,23 @@ function SchedulesContent() {
       handleSelectSubject(currentSubjects[0], 'current');
     }
   }, [searchParams, currentSubjects, loading]);
+
+  // Load attendance summaries when subject is selected (for all subjects view)
+  useEffect(() => {
+    async function loadSummaries() {
+      if (selectedSubject && filteredStudents.length > 0 && !isAttendanceMode) {
+        const summaries: Record<string, any> = {};
+        for (const student of filteredStudents) {
+          const summary = await calculateAttendanceSummary(selectedSubject, student.studentId);
+          if (summary) {
+            summaries[student.studentId] = summary;
+          }
+        }
+        setAttendanceSummaries(summaries);
+      }
+    }
+    loadSummaries();
+  }, [selectedSubject, filteredStudents, isAttendanceMode]);
 
   // All unique subjects (unique by subjectName + classroom)
   const allUniqueSubjects = subjects
@@ -264,11 +282,47 @@ function SchedulesContent() {
     setSelectedDate(formatDate(newDate));
   };
 
+  // Reload attendance data when date changes
+  useEffect(() => {
+    if (isAttendanceMode && selectedSubject) {
+      handleOpenAttendance();
+    }
+  }, [selectedDate]);
+
   // Calculate attendance summary for a student
-  const calculateAttendanceSummary = (studentId: string) => {
-    if (!selectedSubject || !teacherConfig?.firebaseConfig) return null;
-    // This would be implemented when we have attendance data
-    return null;
+  const calculateAttendanceSummary = async (subject: SubjectData, studentId: string) => {
+    const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
+    if (!firebaseConfig) return null;
+
+    try {
+      const allAttendance = await teacherDatabaseService.getAttendanceBySubject(
+        firebaseConfig,
+        subject.subjectId,
+        subject.classroom
+      );
+
+      let present = 0;
+      let absent = 0;
+      let total = allAttendance.length;
+
+      allAttendance.forEach(att => {
+        const record = att.records.find(r => r.studentId === studentId);
+        if (record) {
+          if (record.status === 'มา') {
+            present++;
+          } else if (record.status === 'ขาด' || record.status === 'หนี') {
+            absent++;
+          }
+        }
+      });
+
+      const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
+
+      return { present, absent, total, percentage };
+    } catch (error) {
+      console.error('Error calculating attendance summary:', error);
+      return null;
+    }
   };
 
   if (loading) {
@@ -414,27 +468,17 @@ function SchedulesContent() {
                 
                 <div className="flex flex-wrap items-center gap-3">
                   {/* Date picker */}
-                  <div className="flex items-center gap-2">
-                    <motion.button
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
-                      onClick={() => handleDateChange(-1)}
-                      className={`p-2 rounded-lg ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
-                    >
-                      ←
-                    </motion.button>
-                    <span className={`font-medium min-w-[100px] text-center ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      {selectedDate}
-                    </span>
-                    <motion.button
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
-                      onClick={() => handleDateChange(1)}
-                      className={`p-2 rounded-lg ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
-                    >
-                      →
-                    </motion.button>
-                  </div>
+                  <input
+                    type="date"
+                    value={parseDate(selectedDate).toISOString().split('T')[0]}
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        const newDate = new Date(e.target.value);
+                        setSelectedDate(formatDate(newDate));
+                      }
+                    }}
+                    className={`px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+                  />
                   
                   {/* Hours dropdown */}
                   <select
@@ -587,11 +631,21 @@ function SchedulesContent() {
                           <td className={`py-3 px-4 text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{student.name}</td>
                           {fromSection === 'all' && (
                             <>
-                              <td className={`py-3 px-4 text-sm text-center ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>-</td>
-                              <td className={`py-3 px-4 text-sm text-center ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>-</td>
-                              <td className={`py-3 px-4 text-sm text-center ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>-</td>
-                              <td className={`py-3 px-4 text-sm text-center ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>-</td>
-                              <td className={`py-3 px-4 text-sm text-center ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>-</td>
+                              <td className={`py-3 px-4 text-sm text-center ${isDark ? 'text-green-400' : 'text-green-600'}`}>
+                                {attendanceSummaries[student.studentId]?.present || 0}
+                              </td>
+                              <td className={`py-3 px-4 text-sm text-center ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                                {attendanceSummaries[student.studentId]?.absent || 0}
+                              </td>
+                              <td className={`py-3 px-4 text-sm text-center ${isDark ? 'text-yellow-400' : 'text-yellow-600'}`}>
+                                {attendanceSummaries[student.studentId]?.total ? attendanceSummaries[student.studentId].total - attendanceSummaries[student.studentId].present - attendanceSummaries[student.studentId].absent : 0}
+                              </td>
+                              <td className={`py-3 px-4 text-sm text-center ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
+                                {attendanceSummaries[student.studentId]?.total || 0}
+                              </td>
+                              <td className={`py-3 px-4 text-sm text-center font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                {attendanceSummaries[student.studentId]?.percentage || 0}%
+                              </td>
                             </>
                           )}
                         </motion.tr>
