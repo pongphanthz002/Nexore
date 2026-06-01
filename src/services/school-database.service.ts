@@ -387,6 +387,59 @@ class SchoolDatabaseService {
   }
 
   /**
+   * Get all attendance records for a specific subject + classroom from school database (for admin teachers)
+   */
+  async getAttendanceBySubject(schoolFirebaseConfig: any, subjectId: string, classroom: string): Promise<any[]> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    const q = query(
+      collection(database, 'attendance'),
+      where('subjectId', '==', subjectId)
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(d => d.data());
+  }
+
+  /**
+   * Delete all data related to a subject from school database (grades, assignments, attendance, schedules, materials)
+   */
+  async deleteSubjectAllData(schoolFirebaseConfig: any, subjectId: string, classroom: string): Promise<void> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    const collectionsToDelete = ['grades', 'assignments', 'attendance', 'schedules', 'materials'];
+    
+    for (const collectionName of collectionsToDelete) {
+      try {
+        // Query by subjectId is enough and more robust than including classroom
+        const q = query(
+          collection(database, collectionName),
+          where('subjectId', '==', subjectId)
+        );
+        const querySnapshot = await getDocs(q);
+        for (const docSnapshot of querySnapshot.docs) {
+          await deleteDoc(docSnapshot.ref);
+        }
+      } catch (error) {
+        console.error(`Error deleting subject data from school database collection ${collectionName}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Delete all attendance records for a specific subject + classroom from school database (for admin teachers)
+   */
+  async deleteAttendanceBySubject(schoolFirebaseConfig: any, subjectId: string, classroom: string): Promise<void> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    const q = query(
+      collection(database, 'attendance'),
+      where('subjectId', '==', subjectId)
+    );
+    const querySnapshot = await getDocs(q);
+    
+    for (const doc of querySnapshot.docs) {
+      await deleteDoc(doc.ref);
+    }
+  }
+
+  /**
    * Delete all school data (teachers, students, subjects)
    */
   async deleteAllSchoolData(schoolFirebaseConfig: any): Promise<void> {

@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { schoolDatabaseService } from '@/services/school-database.service';
+import { teacherDatabaseService } from '@/services/teacher-database.service';
 import * as XLSX from 'xlsx';
 import { Download, Upload, Trash2, Plus, ArrowLeft } from 'lucide-react';
 
@@ -146,10 +147,36 @@ export default function SubjectsManagement() {
         }
       });
 
-      // Delete ALL existing subjects
+      // Delete ALL existing subjects and their related data
       const existingSubjects = await schoolDatabaseService.getAllSubjects(userAccount.schoolFirebaseConfig);
       for (const subject of existingSubjects) {
         try {
+          // Delete all subject related data from teacher's database
+          const teacher = teachers.find(t => t.teacherId === subject.teacherId);
+          if (teacher?.firebaseConfig) {
+            try {
+              await teacherDatabaseService.deleteSubjectAllData(
+                teacher.firebaseConfig,
+                subject.subjectId,
+                subject.classroom
+              );
+            } catch (error) {
+              console.error('Error deleting subject data from teacher database:', subject.subjectId, error);
+            }
+          }
+          
+          // Always delete all subject related data from school database (for admin teachers or as backup)
+          try {
+            await schoolDatabaseService.deleteSubjectAllData(
+              userAccount.schoolFirebaseConfig,
+              subject.subjectId,
+              subject.classroom
+            );
+          } catch (error) {
+            console.error('Error deleting subject data from school database:', subject.subjectId, error);
+          }
+          
+          // Delete subject from school database
           await schoolDatabaseService.deleteSubject(userAccount.schoolFirebaseConfig, subject.subjectId);
         } catch (error) {
           console.error('Error deleting subject:', subject.subjectId, error);
@@ -207,18 +234,47 @@ export default function SubjectsManagement() {
     if (selectedSubjects.size === 0) return;
     if (!userAccount?.schoolFirebaseConfig) return;
 
-    if (!confirm(`ยืนยันการลบ ${selectedSubjects.size} วิชาเรียน?`)) return;
+    if (!confirm(`ยืนยันการลบ ${selectedSubjects.size} วิชาเรียน? (รวมข้อมูลที่เกี่ยวข้องทั้งหมด เช่น คะแนน เช็คชื่อ การบ้าน ตารางเรียน สื่อการสอน)`)) return;
 
     setLoading(true);
     try {
       const subjectIdsArray = Array.from(selectedSubjects);
       for (const subjectId of subjectIdsArray) {
-        await schoolDatabaseService.deleteSubject(userAccount.schoolFirebaseConfig, subjectId);
+        const subject = subjects.find(s => s.subjectId === subjectId);
+        if (subject) {
+          // Delete all subject related data from teacher's database
+          const teacher = teachers.find(t => t.teacherId === subject.teacherId);
+          if (teacher?.firebaseConfig) {
+            try {
+              await teacherDatabaseService.deleteSubjectAllData(
+                teacher.firebaseConfig,
+                subject.subjectId,
+                subject.classroom
+              );
+            } catch (error) {
+              console.error('Error deleting subject data from teacher database:', subjectId, error);
+            }
+          }
+          
+          // Always delete all subject related data from school database (for admin teachers or as backup)
+          try {
+            await schoolDatabaseService.deleteSubjectAllData(
+              userAccount.schoolFirebaseConfig,
+              subject.subjectId,
+              subject.classroom
+            );
+          } catch (error) {
+            console.error('Error deleting subject data from school database:', subjectId, error);
+          }
+          
+          // Delete subject from school database
+          await schoolDatabaseService.deleteSubject(userAccount.schoolFirebaseConfig, subjectId);
+        }
       }
       setSelectedSubjects(new Set());
       await loadData(true);
       invalidateCache();
-      alert('ลบวิชาเรียนสำเร็จ');
+      alert('ลบวิชาเรียนและข้อมูลที่เกี่ยวข้องทั้งหมดสำเร็จ');
     } catch (error) {
       console.error('Error deleting subjects:', error);
       alert('ไม่สามารถลบวิชาเรียนได้');

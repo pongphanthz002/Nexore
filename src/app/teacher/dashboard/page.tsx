@@ -4,16 +4,60 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import ScheduleWidget from '@/components/ScheduleWidget';
-import { CheckCircle } from 'lucide-react';
+import { CheckCircle, Clock } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { schoolDatabaseService } from '@/services/school-database.service';
+
+interface SubjectData {
+  subjectId: string;
+  subjectName: string;
+  classroom: string;
+  time: string;
+  day: string;
+  duration?: string;
+  teacherId: string;
+}
+
+function getCurrentDayThai(): string {
+  const dayMap: Record<number, string> = {
+    0: 'อาทิตย์', 1: 'จันทร์', 2: 'อังคาร', 3: 'พุธ', 4: 'พฤหัสบดี', 5: 'ศุกร์', 6: 'เสาร์',
+  };
+  return dayMap[new Date().getDay()] || '';
+}
+
+function isTimeInRange(time: string, minutesBefore: number = 15, minutesAfter: number = 120): boolean {
+  if (!time) return false;
+  // Support formats like "8:30-9:20", "08.30 - 09.20", "8:30 - 10:30"
+  const timeParts = time.split('-');
+  if (timeParts.length < 1) return false;
+  
+  const startPart = timeParts[0].trim();
+  // Support both : and . as time separators
+  const startSplit = startPart.includes(':') ? startPart.split(':') : startPart.split('.');
+  if (startSplit.length < 2) return false;
+  
+  const h = parseInt(startSplit[0]);
+  const m = parseInt(startSplit[1]);
+  if (isNaN(h) || isNaN(m)) return false;
+
+  const now = new Date();
+  const currentTime = now.getHours() * 60 + now.getMinutes();
+  const classStartTime = h * 60 + m;
+  
+  // Show button from minutesBefore until minutesAfter (increased window)
+  return currentTime >= classStartTime - minutesBefore && currentTime <= classStartTime + minutesAfter;
+}
 
 export default function TeacherDashboard() {
   const [isDark, setIsDark] = useState(false);
+  const [currentSubjects, setCurrentSubjects] = useState<SubjectData[]>([]);
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { userAccount } = useAuth();
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains('dark'));
 
-    // Listen for theme changes
     const observer = new MutationObserver(() => {
       setIsDark(document.documentElement.classList.contains('dark'));
     });
@@ -26,8 +70,34 @@ export default function TeacherDashboard() {
     return () => observer.disconnect();
   }, []);
 
-  const handleAttendanceShortcut = () => {
-    router.push('/teacher/dashboard/schedules?mode=attendance');
+  useEffect(() => {
+    loadCurrentSubjects();
+  }, [userAccount]);
+
+  const loadCurrentSubjects = async () => {
+    if (!userAccount?.schoolFirebaseConfig) return;
+    
+    try {
+      setLoading(true);
+      const subjects = await schoolDatabaseService.getAllSubjects(userAccount.schoolFirebaseConfig);
+      const today = getCurrentDayThai();
+      
+      const current = subjects.filter(subject => 
+        subject.teacherId === userAccount.userId && // Only show teacher's own subjects
+        subject.day === today && 
+        isTimeInRange(subject.time)
+      );
+      
+      setCurrentSubjects(current);
+    } catch (error) {
+      console.error('Error loading current subjects:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSelectSubject = (subject: SubjectData) => {
+    router.push(`/teacher/dashboard/schedules?subjectId=${subject.subjectId}&mode=attendance`);
   };
 
   return (
@@ -38,33 +108,49 @@ export default function TeacherDashboard() {
         {/* Schedule Widget */}
         <ScheduleWidget isDark={isDark} />
 
-        {/* Attendance Shortcut */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 300, damping: 30, delay: 0.1 }}
-          whileHover={{ scale: 1.02, y: -2 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={handleAttendanceShortcut}
-          className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg cursor-pointer flex items-center gap-4`}
-        >
-          <div className={`p-4 rounded-xl ${isDark ? 'bg-green-600/20' : 'bg-green-100'}`}>
-            <CheckCircle className={`w-8 h-8 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
-          </div>
-          <div className="flex-1">
-            <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+        {/* Quick Attendance Section */}
+        <div className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}>
+          <div className="flex items-center gap-2 mb-4">
+            <CheckCircle size={22} className={isDark ? 'text-green-400' : 'text-green-600'} />
+            <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
               เช็คชื่อแบบด่วน
-            </h3>
-            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              บันทึกการเข้าเรียนของนักเรียน
-            </p>
+            </h2>
           </div>
-          <div className={`p-2 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
-            <span className={`text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              เร็วๆ นี้
-            </span>
-          </div>
-        </motion.div>
+          
+          {currentSubjects.length > 0 ? (
+            <div className="space-y-3">
+              {currentSubjects.map((subject) => (
+                <motion.div
+                  key={subject.subjectId}
+                  whileHover={{ scale: 1.01, y: -2 }}
+                  whileTap={{ scale: 0.99 }}
+                  onClick={() => handleSelectSubject(subject)}
+                  className={`p-4 rounded-xl cursor-pointer border-2 ${isDark ? 'bg-green-900/30 border-green-700 hover:bg-green-900/50' : 'bg-green-50 border-green-300 hover:bg-green-100'} transition-colors`}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={`text-center min-w-[80px] p-2 rounded-lg ${isDark ? 'bg-green-800/50' : 'bg-green-200'}`}>
+                      <div className={`text-sm font-bold ${isDark ? 'text-green-300' : 'text-green-800'}`}>
+                        {subject.time}
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <div className={`font-bold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        {subject.subjectName}
+                      </div>
+                      <div className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                        ห้อง {subject.classroom}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            <div className={`text-center py-6 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              ไม่มีวิชาที่กำลังสอนอยู่ขณะนี้
+            </div>
+          )}
+        </div>
 
       </div>
     </div>

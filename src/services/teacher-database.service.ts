@@ -96,21 +96,38 @@ class TeacherDatabaseService {
    * Save attendance data to teacher's database
    */
   async saveAttendance(teacherFirebaseConfig: any, data: AttendanceData): Promise<void> {
+    if (!teacherFirebaseConfig || !teacherFirebaseConfig.projectId) {
+      throw new Error('Invalid Firebase configuration');
+    }
+    
     const database = this.getTeacherDB(teacherFirebaseConfig);
-    const docId = `${data.subjectId}_${data.classroom}_${data.date}`;
+    if (!data.subjectId || !data.classroom || !data.date) {
+      throw new Error('Missing subjectId, classroom, or date');
+    }
+    
+    // Normalize docId for Firestore (must be unique per subject-classroom-date)
+    const safeClassroom = String(data.classroom).replace(/\//g, '-').replace(/\s+/g, '');
+    const safeDate = String(data.date).replace(/\//g, '-').replace(/\s+/g, '');
+    const docId = `${data.subjectId}_${safeClassroom}_${safeDate}`;
     const attendanceRef = doc(database, 'attendance', docId);
     
+    // Ensure all data is Firestore-friendly and serializable
     const existingDoc = await getDoc(attendanceRef);
-    const saveData: any = {
-      ...data,
+    const saveData = {
+      subjectId: String(data.subjectId),
+      subjectName: String(data.subjectName || ''),
+      classroom: String(data.classroom),
+      date: String(data.date),
+      hours: Number(data.hours) || 1,
+      records: Array.isArray(data.records) ? data.records.map(r => ({
+        studentId: String(r.studentId),
+        name: String(r.name || ''),
+        number: String(r.number || ''),
+        status: String(r.status || '')
+      })) : [],
       updatedAt: new Date(),
+      createdAt: (existingDoc.exists() && existingDoc.data()?.createdAt) ? existingDoc.data().createdAt : new Date()
     };
-    
-    if (existingDoc.exists()) {
-      saveData.createdAt = existingDoc.data().createdAt;
-    } else {
-      saveData.createdAt = new Date();
-    }
     
     await setDoc(attendanceRef, saveData);
   }
@@ -120,7 +137,12 @@ class TeacherDatabaseService {
    */
   async getAttendance(teacherFirebaseConfig: any, subjectId: string, classroom: string, date: string): Promise<AttendanceData | null> {
     const database = this.getTeacherDB(teacherFirebaseConfig);
-    const docId = `${subjectId}_${classroom}_${date}`;
+    if (!subjectId || !classroom || !date) return null;
+    
+    // Use the same safe formatting for docId
+    const safeClassroom = classroom.replace(/\//g, '-').replace(/\s+/g, '');
+    const safeDate = date.replace(/\//g, '-').replace(/\s+/g, '');
+    const docId = `${subjectId}_${safeClassroom}_${safeDate}`;
     const attendanceRef = doc(database, 'attendance', docId);
     const snap = await getDoc(attendanceRef);
     
@@ -137,11 +159,50 @@ class TeacherDatabaseService {
     const database = this.getTeacherDB(teacherFirebaseConfig);
     const q = query(
       collection(database, 'attendance'),
-      where('subjectId', '==', subjectId),
-      where('classroom', '==', classroom)
+      where('subjectId', '==', subjectId)
     );
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(d => d.data() as AttendanceData);
+  }
+
+  /**
+   * Delete all data related to a subject from teacher database (grades, assignments, attendance, schedules, materials)
+   */
+  async deleteSubjectAllData(teacherFirebaseConfig: any, subjectId: string, classroom: string): Promise<void> {
+    const database = this.getTeacherDB(teacherFirebaseConfig);
+    const collectionsToDelete = ['grades', 'assignments', 'attendance', 'schedules', 'materials'];
+    
+    for (const collectionName of collectionsToDelete) {
+      try {
+        // Query by subjectId is enough and more robust than including classroom
+        const q = query(
+          collection(database, collectionName),
+          where('subjectId', '==', subjectId)
+        );
+        const querySnapshot = await getDocs(q);
+        for (const docSnapshot of querySnapshot.docs) {
+          await deleteDoc(docSnapshot.ref);
+        }
+      } catch (error) {
+        console.error(`Error deleting subject data from teacher database collection ${collectionName}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Delete all attendance records for a specific subject + classroom
+   */
+  async deleteAttendanceBySubject(teacherFirebaseConfig: any, subjectId: string, classroom: string): Promise<void> {
+    const database = this.getTeacherDB(teacherFirebaseConfig);
+    const q = query(
+      collection(database, 'attendance'),
+      where('subjectId', '==', subjectId)
+    );
+    const querySnapshot = await getDocs(q);
+    
+    for (const doc of querySnapshot.docs) {
+      await deleteDoc(doc.ref);
+    }
   }
 }
 

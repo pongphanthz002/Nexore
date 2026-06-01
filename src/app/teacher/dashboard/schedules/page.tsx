@@ -3,18 +3,44 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, Suspense } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { schoolDatabaseService, SubjectData, StudentData } from '@/services/school-database.service';
 import { teacherDatabaseService, AttendanceRecord, AttendanceData } from '@/services/teacher-database.service';
 import { ChevronLeft, Clock, Users, ClipboardList, Save, CheckCircle2 } from 'lucide-react';
 
 // Parse "08:30-09:30" → { startMinutes, endMinutes }
 function parseTimeRange(time: string): { startMinutes: number; endMinutes: number } | null {
-  const match = time.match(/^(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})$/);
-  if (!match) return null;
+  if (!time) return null;
+  // Support formats like "8:30-9:20", "08.30 - 09.20", "8:30 - 10:30"
+  const normalized = time.replace(/\./g, ':').replace(/\s+/g, '');
+  const parts = normalized.split('-');
+  if (parts.length < 1) return null;
+  
+  const startPart = parts[0];
+  const startSplit = startPart.split(':');
+  if (startSplit.length < 2) return null;
+  
+  const startH = parseInt(startSplit[0]);
+  const startM = parseInt(startSplit[1]);
+  if (isNaN(startH) || isNaN(startM)) return null;
+
+  // If end time is missing, assume 1 hour duration
+  let endMinutes = (startH + 1) * 60 + startM;
+  if (parts.length >= 2) {
+    const endPart = parts[1];
+    const endSplit = endPart.split(':');
+    if (endSplit.length >= 2) {
+      const endH = parseInt(endSplit[0]);
+      const endM = parseInt(endSplit[1]);
+      if (!isNaN(endH) && !isNaN(endM)) {
+        endMinutes = endH * 60 + endM;
+      }
+    }
+  }
+
   return {
-    startMinutes: parseInt(match[1]) * 60 + parseInt(match[2]),
-    endMinutes: parseInt(match[3]) * 60 + parseInt(match[4]),
+    startMinutes: startH * 60 + startM,
+    endMinutes: endMinutes,
   };
 }
 
@@ -30,7 +56,7 @@ function getNowMinutes(): number {
   return now.getHours() * 60 + now.getMinutes();
 }
 
-// Format date as "Mon 23/5"
+// Format date as "Mon 23/5" using local date
 function formatDate(date: Date): string {
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const dayName = days[date.getDay()];
@@ -39,19 +65,79 @@ function formatDate(date: Date): string {
   return `${dayName} ${day}/${month}`;
 }
 
-// Parse "Mon 23/5" back to Date (approximate)
+// Format date as "YYYY-MM-DD" for input type="date"
+function formatDateForInput(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+// Parse "Mon 23/5" back to Date using local timezone
 function parseDate(dateStr: string): Date {
   const parts = dateStr.split(' ');
   const dayMonth = parts[1].split('/');
   const day = parseInt(dayMonth[0]);
   const month = parseInt(dayMonth[1]) - 1;
   const now = new Date();
-  return new Date(now.getFullYear(), month, day);
+  // Create date with local timezone (no UTC conversion)
+  const date = new Date(now.getFullYear(), month, day, 0, 0, 0, 0);
+  return date;
+}
+
+// Parse "YYYY-MM-DD" and convert to "Mon 23/5" format
+function parseInputDateToFormat(dateStr: string): string {
+  if (!dateStr) return '';
+  if (!dateStr.includes('-')) {
+    return dateStr;
+  }
+  const [year, month, day] = dateStr.split('-');
+  const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), 0, 0, 0, 0);
+  return formatDate(date);
+}
+
+// Map attendance status to beautiful background/border/text colors
+function getStatusStyles(status: string, isDark: boolean): string {
+  switch (status) {
+    case 'มา':
+      return isDark 
+        ? 'bg-gray-800 border-gray-700 text-white' 
+        : 'bg-white border-gray-200 text-gray-900';
+    case 'ขาด':
+      return isDark 
+        ? 'bg-red-950/40 border-red-900/60 text-red-200' 
+        : 'bg-red-50 border-red-200 text-red-900';
+    case 'สาย':
+      return isDark 
+        ? 'bg-yellow-950/40 border-yellow-900/60 text-yellow-200' 
+        : 'bg-yellow-50 border-yellow-200 text-yellow-900';
+    case 'ลาป่วย':
+      return isDark 
+        ? 'bg-emerald-950/40 border-emerald-900/60 text-emerald-200' 
+        : 'bg-emerald-50 border-emerald-200 text-emerald-900';
+    case 'ลากิจ':
+      return isDark 
+        ? 'bg-fuchsia-950/40 border-fuchsia-900/60 text-fuchsia-200' 
+        : 'bg-fuchsia-50 border-fuchsia-200 text-fuchsia-900';
+    case 'กิจกรรม':
+      return isDark 
+        ? 'bg-sky-950/40 border-sky-900/60 text-sky-200' 
+        : 'bg-sky-50 border-sky-200 text-sky-900';
+    case 'หนี':
+      return isDark 
+        ? 'bg-orange-950/40 border-orange-900/60 text-orange-200' 
+        : 'bg-orange-50 border-orange-200 text-orange-900';
+    default:
+      return isDark 
+        ? 'bg-gray-700/50 border-gray-600 text-gray-300' 
+        : 'bg-gray-50 border-gray-100 text-gray-500';
+  }
 }
 
 function SchedulesContent() {
   const { userAccount } = useAuth();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [isDark, setIsDark] = useState(false);
   const [subjects, setSubjects] = useState<SubjectData[]>([]);
   const [students, setStudents] = useState<StudentData[]>([]);
@@ -63,11 +149,12 @@ function SchedulesContent() {
   
   // Attendance state
   const [isAttendanceMode, setIsAttendanceMode] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
+  const [selectedDate, setSelectedDate] = useState(formatDateForInput(new Date()));
   const [selectedHours, setSelectedHours] = useState(1);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [loadingAttendance, setLoadingAttendance] = useState(false);
   const [fromSection, setFromSection] = useState<'current' | 'all'>('current');
+  const [paramsProcessed, setParamsProcessed] = useState(false);
   const [attendanceSummaries, setAttendanceSummaries] = useState<Record<string, any>>({});
 
   useEffect(() => {
@@ -108,40 +195,120 @@ function SchedulesContent() {
     loadData();
   }, [userAccount]);
 
-  // Current subjects: show 10 min before start, hide 10 min after end
+  // Current subjects: show 15 min before start, hide 180 min after start
   const todayThai = getCurrentDayThai();
   const currentSubjects = subjects.filter(s => {
     if (s.day !== todayThai) return false;
     const range = parseTimeRange(s.time);
     if (!range) return false;
-    return nowMinutes >= range.startMinutes - 10 && nowMinutes <= range.endMinutes + 10;
+    // Show from 15 mins before start up to 180 mins after start
+    return nowMinutes >= range.startMinutes - 15 && nowMinutes <= range.startMinutes + 180;
   }).sort((a, b) => a.time.localeCompare(b.time));
 
-  // Handle mode=attendance query parameter
+  // Handle mode=attendance and subjectId query parameters
   useEffect(() => {
     const mode = searchParams.get('mode');
-    if (mode === 'attendance' && currentSubjects.length > 0 && !loading) {
-      // Auto-select first current subject and open attendance
-      handleSelectSubject(currentSubjects[0], 'current');
-    }
-  }, [searchParams, currentSubjects, loading]);
-
-  // Load attendance summaries when subject is selected (for all subjects view)
-  useEffect(() => {
-    async function loadSummaries() {
-      if (selectedSubject && filteredStudents.length > 0 && !isAttendanceMode) {
-        const summaries: Record<string, any> = {};
-        for (const student of filteredStudents) {
-          const summary = await calculateAttendanceSummary(selectedSubject, student.studentId);
-          if (summary) {
-            summaries[student.studentId] = summary;
+    const subjectId = searchParams.get('subjectId');
+    
+    if (!loading && !paramsProcessed) {
+      if (subjectId) {
+        // Find subject by ID
+        const subject = subjects.find(s => s.subjectId === subjectId);
+        if (subject) {
+          setParamsProcessed(true);
+          if (mode === 'attendance') {
+            // Auto-open attendance mode for current subjects
+            handleSelectSubject(subject, 'current');
+          } else if (mode === 'list') {
+            // Show student list view (from Short cut)
+            handleSelectSubject(subject, 'all');
           }
+        } else {
+          // If subjectId is in query params but not found in the loaded subjects list (e.g. invalid or not user's), mark as processed anyway to avoid loop
+          setParamsProcessed(true);
         }
-        setAttendanceSummaries(summaries);
+      } else if (mode === 'attendance' && currentSubjects.length > 0) {
+        setParamsProcessed(true);
+        // Auto-select first current subject for attendance
+        handleSelectSubject(currentSubjects[0], 'current');
+      } else if (mode) {
+        // If there are other query parameters but we can't process them, mark as processed to prevent loops
+        setParamsProcessed(true);
       }
     }
+  }, [searchParams, subjects, currentSubjects, loading, paramsProcessed]);
+
+  // Reusable function to load attendance summaries (Optimized to O(1) database queries)
+  const loadSummaries = async (subject?: SubjectData, studentsList?: StudentData[]) => {
+    const targetSubject = subject || selectedSubject;
+    const targetStudents = studentsList || filteredStudents;
+    
+    if (targetSubject && targetStudents.length > 0) {
+      try {
+        const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
+        if (!firebaseConfig) return;
+
+        let allAttendance: AttendanceData[] = [];
+        if (teacherConfig?.firebaseConfig) {
+          allAttendance = await teacherDatabaseService.getAttendanceBySubject(
+            teacherConfig.firebaseConfig,
+            targetSubject.subjectId,
+            targetSubject.classroom
+          );
+        } else {
+          allAttendance = await schoolDatabaseService.getAttendanceBySubject(
+            userAccount!.schoolFirebaseConfig,
+            targetSubject.subjectId,
+            targetSubject.classroom
+          );
+        }
+
+        const summaries: Record<string, any> = {};
+        for (const student of targetStudents) {
+          let present = 0;
+          let absent = 0;
+          let late = 0;
+          let sickLeave = 0;
+          let personalLeave = 0;
+          let activity = 0;
+          let skipped = 0;
+          let total = allAttendance.length;
+
+          allAttendance.forEach((att: any) => {
+            const record = att.records?.find((r: any) => r.studentId === student.studentId);
+            if (record) {
+              if (record.status === 'มา') {
+                present++;
+              } else if (record.status === 'ขาด') {
+                absent++;
+              } else if (record.status === 'สาย') {
+                late++;
+              } else if (record.status === 'ลาป่วย') {
+                sickLeave++;
+              } else if (record.status === 'ลากิจ') {
+                personalLeave++;
+              } else if (record.status === 'กิจกรรม') {
+                activity++;
+              } else if (record.status === 'หนี') {
+                skipped++;
+              }
+            }
+          });
+
+          const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
+          summaries[student.studentId] = { present, absent, late, sickLeave, personalLeave, activity, skipped, total, percentage };
+        }
+        setAttendanceSummaries(summaries);
+      } catch (error) {
+        console.error('Error loading attendance summaries:', error);
+      }
+    }
+  };
+
+  // Load attendance summaries when subject is selected or teacher configuration changes
+  useEffect(() => {
     loadSummaries();
-  }, [selectedSubject, filteredStudents, isAttendanceMode]);
+  }, [selectedSubject, filteredStudents, teacherConfig]);
 
   // All unique subjects (unique by subjectName + classroom)
   const allUniqueSubjects = subjects
@@ -172,16 +339,16 @@ function SchedulesContent() {
     }
     
     // Auto-open attendance mode for current subjects
-    if (section === 'current' && teacherConfig?.firebaseConfig) {
-      await handleOpenAttendance();
+    if (section === 'current') {
+      await handleOpenAttendance(subject, matched);
     }
   };
 
-  const handleOpenAttendance = async () => {
-    if (!selectedSubject) {
-      alert('กรุณาเลือกวิชาก่อน');
-      return;
-    }
+  const handleOpenAttendance = async (subject?: SubjectData | React.MouseEvent, studentList?: StudentData[]) => {
+    // Handle both direct subject parameter and click event
+    const targetSubject = (subject && 'subjectId' in subject) ? subject : selectedSubject;
+    const targetStudents = studentList || filteredStudents;
+    if (!targetSubject) return;
     
     // Use teacher's Firebase config if available, otherwise use school config (for admin teachers)
     const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
@@ -195,11 +362,13 @@ function SchedulesContent() {
     setLoadingAttendance(true);
     
     try {
+      // Convert selectedDate from YYYY-MM-DD to "Mon 23/5" format
+      const formattedDate = parseInputDateToFormat(selectedDate);
       const existingAttendance = await teacherDatabaseService.getAttendance(
         firebaseConfig,
-        selectedSubject.subjectId,
-        selectedSubject.classroom,
-        selectedDate
+        targetSubject.subjectId,
+        targetSubject.classroom,
+        formattedDate
       );
       
       if (existingAttendance) {
@@ -207,7 +376,7 @@ function SchedulesContent() {
         setSelectedHours(existingAttendance.hours);
       } else {
         // Initialize empty records
-        const initialRecords: AttendanceRecord[] = filteredStudents.map(s => ({
+        const initialRecords: AttendanceRecord[] = targetStudents.map(s => ({
           studentId: s.studentId,
           name: s.name,
           number: s.number,
@@ -217,7 +386,7 @@ function SchedulesContent() {
       }
     } catch (error) {
       console.error('Error loading attendance:', error);
-      const initialRecords: AttendanceRecord[] = filteredStudents.map(s => ({
+      const initialRecords: AttendanceRecord[] = targetStudents.map(s => ({
         studentId: s.studentId,
         name: s.name,
         number: s.number,
@@ -254,12 +423,14 @@ function SchedulesContent() {
     
     setLoadingAttendance(true);
     try {
+      // Convert selectedDate from YYYY-MM-DD to "Mon 23/5" format
+      const formattedDate = parseInputDateToFormat(selectedDate);
       const attendanceData: AttendanceData = {
         subjectId: selectedSubject.subjectId,
-        subjectName: selectedSubject.subjectName,
+        subjectName: selectedSubject.subjectName || '',
         classroom: selectedSubject.classroom,
-        date: selectedDate,
-        hours: selectedHours,
+        date: formattedDate,
+        hours: Number(selectedHours) || 1,
         records: attendanceRecords,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -267,7 +438,14 @@ function SchedulesContent() {
       
       await teacherDatabaseService.saveAttendance(firebaseConfig, attendanceData);
       alert('บันทึกเช็คชื่อสำเร็จ');
-      setIsAttendanceMode(false);
+      
+      if (fromSection === 'current') {
+        handleBackToMain();
+      } else {
+        // Reload summaries before returning to student list
+        await loadSummaries(selectedSubject, filteredStudents);
+        setIsAttendanceMode(false);
+      }
     } catch (error) {
       console.error('Error saving attendance:', error);
       alert('เกิดข้อผิดพลาดในการบันทึก');
@@ -279,7 +457,7 @@ function SchedulesContent() {
   const handleDateChange = (daysOffset: number) => {
     const newDate = new Date();
     newDate.setDate(newDate.getDate() + daysOffset);
-    setSelectedDate(formatDate(newDate));
+    setSelectedDate(formatDateForInput(newDate));
   };
 
   // Reload attendance data when date changes
@@ -289,40 +467,10 @@ function SchedulesContent() {
     }
   }, [selectedDate]);
 
-  // Calculate attendance summary for a student
-  const calculateAttendanceSummary = async (subject: SubjectData, studentId: string) => {
-    const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
-    if (!firebaseConfig) return null;
-
-    try {
-      const allAttendance = await teacherDatabaseService.getAttendanceBySubject(
-        firebaseConfig,
-        subject.subjectId,
-        subject.classroom
-      );
-
-      let present = 0;
-      let absent = 0;
-      let total = allAttendance.length;
-
-      allAttendance.forEach(att => {
-        const record = att.records.find(r => r.studentId === studentId);
-        if (record) {
-          if (record.status === 'มา') {
-            present++;
-          } else if (record.status === 'ขาด' || record.status === 'หนี') {
-            absent++;
-          }
-        }
-      });
-
-      const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
-
-      return { present, absent, total, percentage };
-    } catch (error) {
-      console.error('Error calculating attendance summary:', error);
-      return null;
-    }
+  const handleBackToMain = () => {
+    setSelectedSubject(null);
+    setIsAttendanceMode(false);
+    router.replace('/teacher/dashboard/schedules');
   };
 
   if (loading) {
@@ -451,7 +599,13 @@ function SchedulesContent() {
                   <motion.button
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.9 }}
-                    onClick={() => setIsAttendanceMode(false)}
+                    onClick={() => {
+                      if (fromSection === 'current') {
+                        handleBackToMain();
+                      } else {
+                        setIsAttendanceMode(false);
+                      }
+                    }}
                     className={`p-2 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
                   >
                     <ChevronLeft size={24} />
@@ -470,11 +624,10 @@ function SchedulesContent() {
                   {/* Date picker */}
                   <input
                     type="date"
-                    value={parseDate(selectedDate).toISOString().split('T')[0]}
+                    value={selectedDate}
                     onChange={(e) => {
                       if (e.target.value) {
-                        const newDate = new Date(e.target.value);
-                        setSelectedDate(formatDate(newDate));
+                        setSelectedDate(e.target.value);
                       }
                     }}
                     className={`px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
@@ -523,36 +676,43 @@ function SchedulesContent() {
                 </div>
               ) : attendanceRecords.length > 0 ? (
                 <div className="space-y-2">
-                  {attendanceRecords.map((record, index) => (
-                    <motion.div
-                      key={record.studentId}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.02 }}
-                      className={`flex items-center gap-3 p-3 rounded-xl ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
-                    >
-                      <span className={`w-12 text-center font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                        {record.number}
-                      </span>
-                      <span className={`flex-1 font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {record.name}
-                      </span>
-                      <select
-                        value={record.status}
-                        onChange={(e) => handleStatusChange(record.studentId, e.target.value)}
-                        className={`px-3 py-2 rounded-lg border text-sm ${isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+                  {attendanceRecords.map((record, index) => {
+                    const statusClass = getStatusStyles(record.status, isDark);
+                    return (
+                      <motion.div
+                        key={record.studentId}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.02 }}
+                        className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${statusClass}`}
                       >
-                        <option value="">เลือก</option>
-                        <option value="มา">มา</option>
-                        <option value="ขาด">ขาด</option>
-                        <option value="สาย">สาย</option>
-                        <option value="ลาป่วย">ลาป่วย</option>
-                        <option value="ลากิจ">ลากิจ</option>
-                        <option value="กิจกรรม">กิจกรรม</option>
-                        <option value="หนี">หนี</option>
-                      </select>
-                    </motion.div>
-                  ))}
+                        <span className="w-12 text-center font-medium opacity-80">
+                          {record.number}
+                        </span>
+                        <span className="flex-1 font-bold">
+                          {record.name}
+                        </span>
+                        <select
+                          value={record.status}
+                          onChange={(e) => handleStatusChange(record.studentId, e.target.value)}
+                          className={`px-3 py-2 rounded-lg border text-sm font-semibold transition-all ${
+                            isDark 
+                              ? 'bg-gray-800 border-gray-600 text-white focus:ring-2 focus:ring-blue-500' 
+                              : 'bg-white border-gray-300 text-gray-900 focus:ring-2 focus:ring-blue-500'
+                          }`}
+                        >
+                          <option value="">เลือก</option>
+                          <option value="มา">มา</option>
+                          <option value="ขาด">ขาด</option>
+                          <option value="สาย">สาย</option>
+                          <option value="ลาป่วย">ลาป่วย</option>
+                          <option value="ลากิจ">ลากิจ</option>
+                          <option value="กิจกรรม">กิจกรรม</option>
+                          <option value="หนี">หนี</option>
+                        </select>
+                      </motion.div>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -573,7 +733,7 @@ function SchedulesContent() {
                 <motion.button
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
-                  onClick={() => setSelectedSubject(null)}
+                  onClick={handleBackToMain}
                   className={`p-2 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
                 >
                   <ChevronLeft size={24} />
@@ -590,7 +750,7 @@ function SchedulesContent() {
                   <motion.button
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.9 }}
-                    onClick={handleOpenAttendance}
+                    onClick={() => handleOpenAttendance()}
                     className={`p-2 rounded-xl ${isDark ? 'bg-blue-600 text-white' : 'bg-blue-500 text-white'}`}
                   >
                     <ClipboardList size={24} />
@@ -608,11 +768,15 @@ function SchedulesContent() {
                         <th className={`py-3 px-4 text-left text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>ชื่อ</th>
                         {fromSection === 'all' && (
                           <>
+                            <th className={`py-3 px-4 text-center text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>ทั้งหมด</th>
+                            <th className={`py-3 px-4 text-center text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>%</th>
                             <th className={`py-3 px-4 text-center text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>มา</th>
                             <th className={`py-3 px-4 text-center text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>ขาด</th>
                             <th className={`py-3 px-4 text-center text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>สาย</th>
-                            <th className={`py-3 px-4 text-center text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>ลา</th>
-                            <th className={`py-3 px-4 text-center text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>%</th>
+                            <th className={`py-3 px-4 text-center text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>ลาป่วย</th>
+                            <th className={`py-3 px-4 text-center text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>ลากิจ</th>
+                            <th className={`py-3 px-4 text-center text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>กิจกรรม</th>
+                            <th className={`py-3 px-4 text-center text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>หนี</th>
                           </>
                         )}
                       </tr>
@@ -631,20 +795,32 @@ function SchedulesContent() {
                           <td className={`py-3 px-4 text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{student.name}</td>
                           {fromSection === 'all' && (
                             <>
-                              <td className={`py-3 px-4 text-sm text-center ${isDark ? 'text-green-400' : 'text-green-600'}`}>
-                                {attendanceSummaries[student.studentId]?.present || 0}
-                              </td>
-                              <td className={`py-3 px-4 text-sm text-center ${isDark ? 'text-red-400' : 'text-red-600'}`}>
-                                {attendanceSummaries[student.studentId]?.absent || 0}
-                              </td>
-                              <td className={`py-3 px-4 text-sm text-center ${isDark ? 'text-yellow-400' : 'text-yellow-600'}`}>
-                                {attendanceSummaries[student.studentId]?.total ? attendanceSummaries[student.studentId].total - attendanceSummaries[student.studentId].present - attendanceSummaries[student.studentId].absent : 0}
-                              </td>
-                              <td className={`py-3 px-4 text-sm text-center ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
+                              <td className={`py-3 px-4 text-sm text-center font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
                                 {attendanceSummaries[student.studentId]?.total || 0}
                               </td>
                               <td className={`py-3 px-4 text-sm text-center font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
                                 {attendanceSummaries[student.studentId]?.percentage || 0}%
+                              </td>
+                              <td className={`py-3 px-4 text-sm text-center font-semibold ${isDark ? 'text-green-400' : 'text-green-600'}`}>
+                                {attendanceSummaries[student.studentId]?.present || 0}
+                              </td>
+                              <td className={`py-3 px-4 text-sm text-center font-semibold ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                                {attendanceSummaries[student.studentId]?.absent || 0}
+                              </td>
+                              <td className={`py-3 px-4 text-sm text-center font-semibold ${isDark ? 'text-yellow-400' : 'text-yellow-600'}`}>
+                                {attendanceSummaries[student.studentId]?.late || 0}
+                              </td>
+                              <td className={`py-3 px-4 text-sm text-center font-semibold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                                {attendanceSummaries[student.studentId]?.sickLeave || 0}
+                              </td>
+                              <td className={`py-3 px-4 text-sm text-center font-semibold ${isDark ? 'text-fuchsia-400' : 'text-fuchsia-600'}`}>
+                                {attendanceSummaries[student.studentId]?.personalLeave || 0}
+                              </td>
+                              <td className={`py-3 px-4 text-sm text-center font-semibold ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>
+                                {attendanceSummaries[student.studentId]?.activity || 0}
+                              </td>
+                              <td className={`py-3 px-4 text-sm text-center font-semibold ${isDark ? 'text-orange-400' : 'text-orange-600'}`}>
+                                {attendanceSummaries[student.studentId]?.skipped || 0}
                               </td>
                             </>
                           )}
