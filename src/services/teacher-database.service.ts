@@ -140,8 +140,8 @@ class TeacherDatabaseService {
     if (!subjectId || !classroom || !date) return null;
     
     // Use the same safe formatting for docId
-    const safeClassroom = classroom.replace(/\//g, '-').replace(/\s+/g, '');
-    const safeDate = date.replace(/\//g, '-').replace(/\s+/g, '');
+    const safeClassroom = String(classroom).replace(/\//g, '-').replace(/\s+/g, '');
+    const safeDate = String(date).replace(/\//g, '-').replace(/\s+/g, '');
     const docId = `${subjectId}_${safeClassroom}_${safeDate}`;
     const attendanceRef = doc(database, 'attendance', docId);
     const snap = await getDoc(attendanceRef);
@@ -150,6 +150,21 @@ class TeacherDatabaseService {
       return snap.data() as AttendanceData;
     }
     return null;
+  }
+
+  /**
+   * Get all attendance records for a specific date
+   */
+  async getAttendanceByDate(teacherFirebaseConfig: any, date: string): Promise<AttendanceData[]> {
+    const database = this.getTeacherDB(teacherFirebaseConfig);
+    if (!date) return [];
+    
+    const q = query(
+      collection(database, 'attendance'),
+      where('date', '==', date)
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(d => d.data() as AttendanceData);
   }
 
   /**

@@ -7,6 +7,7 @@ import ScheduleWidget from '@/components/ScheduleWidget';
 import { CheckCircle, Clock } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { schoolDatabaseService } from '@/services/school-database.service';
+import { teacherDatabaseService, AttendanceData } from '@/services/teacher-database.service';
 
 interface SubjectData {
   subjectId: string;
@@ -23,6 +24,14 @@ function getCurrentDayThai(): string {
     0: 'อาทิตย์', 1: 'จันทร์', 2: 'อังคาร', 3: 'พุธ', 4: 'พฤหัสบดี', 5: 'ศุกร์', 6: 'เสาร์',
   };
   return dayMap[new Date().getDay()] || '';
+}
+
+function formatDate(date: Date): string {
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dayName = days[date.getDay()];
+  const day = date.getDate();
+  const month = date.getMonth() + 1;
+  return `${dayName} ${day}/${month}`;
 }
 
 function isTimeInRange(time: string, minutesBefore: number = 15, minutesAfter: number = 120): boolean {
@@ -75,18 +84,47 @@ export default function TeacherDashboard() {
   }, [userAccount]);
 
   const loadCurrentSubjects = async () => {
-    if (!userAccount?.schoolFirebaseConfig) return;
+    if (!userAccount?.schoolFirebaseConfig || !userAccount?.userId) return;
     
     try {
       setLoading(true);
-      const subjects = await schoolDatabaseService.getAllSubjects(userAccount.schoolFirebaseConfig);
-      const today = getCurrentDayThai();
       
-      const current = subjects.filter(subject => 
-        subject.teacherId === userAccount.userId && // Only show teacher's own subjects
-        subject.day === today && 
-        isTimeInRange(subject.time)
-      );
+      // Parallel loading: subjects and teacher config
+      const [subjects, teacherConfig] = await Promise.all([
+        schoolDatabaseService.getAllSubjects(userAccount.schoolFirebaseConfig),
+        schoolDatabaseService.getTeacherConfig(userAccount.schoolFirebaseConfig, userAccount.userId)
+      ]);
+
+      const today = getCurrentDayThai();
+      const todayFormatted = formatDate(new Date());
+
+      // Fetch today's attendance records to filter them out
+      let todayAttendance: AttendanceData[] = [];
+      if (teacherConfig?.firebaseConfig) {
+        todayAttendance = await teacherDatabaseService.getAttendanceByDate(
+          teacherConfig.firebaseConfig,
+          todayFormatted
+        );
+      }
+
+      const current = subjects.filter(subject => {
+        // 1. Must be teacher's own subject
+        if (subject.teacherId !== userAccount.userId) return false;
+        
+        // 2. Must be today
+        if (subject.day !== today) return false;
+        
+        // 3. Must be in time range
+        if (!isTimeInRange(subject.time)) return false;
+        
+        // 4. Must NOT have been checked today
+        const alreadyChecked = todayAttendance.some(att => 
+          att.subjectId === subject.subjectId && 
+          att.classroom === subject.classroom
+        );
+        
+        return !alreadyChecked;
+      });
       
       setCurrentSubjects(current);
     } catch (error) {

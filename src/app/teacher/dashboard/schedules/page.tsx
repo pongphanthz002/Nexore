@@ -6,7 +6,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { schoolDatabaseService, SubjectData, StudentData } from '@/services/school-database.service';
 import { teacherDatabaseService, AttendanceRecord, AttendanceData } from '@/services/teacher-database.service';
-import { ChevronLeft, Clock, Users, ClipboardList, Save, CheckCircle2 } from 'lucide-react';
+import { ChevronLeft, Clock, Users, ClipboardList, Save, CheckCircle2, FileDown, Download, X, Calendar } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 // Parse "08:30-09:30" → { startMinutes, endMinutes }
 function parseTimeRange(time: string): { startMinutes: number; endMinutes: number } | null {
@@ -156,6 +157,15 @@ function SchedulesContent() {
   const [fromSection, setFromSection] = useState<'current' | 'all'>('current');
   const [paramsProcessed, setParamsProcessed] = useState(false);
   const [attendanceSummaries, setAttendanceSummaries] = useState<Record<string, any>>({});
+  const [todayAttendance, setTodayAttendance] = useState<AttendanceData[]>([]);
+  
+  // Download Modal state
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [selectedSubjectsForDownload, setSelectedSubjectsForDownload] = useState<string[]>([]);
+  const [downloadRange, setDownloadRange] = useState<'term' | 'month'>('term');
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains('dark'));
@@ -185,6 +195,16 @@ function SchedulesContent() {
           setSubjects(teacherSubjects);
           setStudents(allStudents);
           setTeacherConfig(teacherData);
+
+          // Fetch today's attendance to filter currently teaching subjects
+          if (teacherData?.firebaseConfig) {
+            const todayFormatted = formatDate(new Date());
+            const attendance = await teacherDatabaseService.getAttendanceByDate(
+              teacherData.firebaseConfig,
+              todayFormatted
+            );
+            setTodayAttendance(attendance);
+          }
         } catch (error) {
           console.error('Error loading data:', error);
         } finally {
@@ -196,13 +216,24 @@ function SchedulesContent() {
   }, [userAccount]);
 
   // Current subjects: show 15 min before start, hide 180 min after start
+  // Also filter out subjects that have already been checked today
   const todayThai = getCurrentDayThai();
   const currentSubjects = subjects.filter(s => {
     if (s.day !== todayThai) return false;
     const range = parseTimeRange(s.time);
     if (!range) return false;
-    // Show from 15 mins before start up to 180 mins after start
-    return nowMinutes >= range.startMinutes - 15 && nowMinutes <= range.startMinutes + 180;
+    
+    // 1. Check time range (show from 15 mins before start up to 180 mins after start)
+    const isInTime = nowMinutes >= range.startMinutes - 15 && nowMinutes <= range.startMinutes + 180;
+    if (!isInTime) return false;
+
+    // 2. Check if already checked today
+    const alreadyChecked = todayAttendance.some(att => 
+      att.subjectId === s.subjectId && 
+      att.classroom === s.classroom
+    );
+
+    return !alreadyChecked;
   }).sort((a, b) => a.time.localeCompare(b.time));
 
   // Handle mode=attendance and subjectId query parameters
@@ -238,7 +269,180 @@ function SchedulesContent() {
     }
   }, [searchParams, subjects, currentSubjects, loading, paramsProcessed]);
 
-  // Reusable function to load attendance summaries (Optimized to O(1) database queries)
+  // Helper to get status counts
+  const getStatusSummary = (records: AttendanceData[], studentId: string) => {
+    let total = 0;
+    let present = 0;
+    let absent = 0;
+    let late = 0;
+    let sickLeave = 0;
+    let personalLeave = 0;
+    let activity = 0;
+    let skipped = 0;
+
+    records.forEach(att => {
+      const record = att.records.find(r => r.studentId === studentId);
+      if (record && record.status) {
+        total++;
+        if (record.status === 'มา') present++;
+        else if (record.status === 'ขาด') absent++;
+        else if (record.status === 'สาย') late++;
+        else if (record.status === 'ลาป่วย') sickLeave++;
+        else if (record.status === 'ลากิจ') personalLeave++;
+        else if (record.status === 'กิจกรรม') activity++;
+        else if (record.status === 'หนี') skipped++;
+      }
+    });
+
+    const percentage = total > 0 ? Math.round(((present + late + sickLeave + personalLeave + activity) / total) * 100) : 0;
+
+    return { total, present, absent, late, sickLeave, personalLeave, activity, skipped, percentage };
+  };
+
+  const handleDownloadExcel = async () => {
+    if (selectedSubjectsForDownload.length === 0) {
+      alert('โปรดเลือกอย่างน้อยหนึ่งวิชา');
+      return;
+    }
+
+    setIsDownloading(true);
+    try {
+      const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
+      if (!firebaseConfig) throw new Error('Firebase configuration not found');
+
+      const wb = XLSX.utils.book_new();
+
+      for (const subjectKey of selectedSubjectsForDownload) {
+        const [subjectName, classroom] = subjectKey.split('|||');
+        const subjectId = subjects.find(s => s.subjectName === subjectName && s.classroom === classroom)?.subjectId;
+        if (!subjectId) continue;
+
+        let allAttendance = await teacherDatabaseService.getAttendanceBySubject(firebaseConfig, subjectId, classroom);
+
+        // Filter by month if needed
+        if (downloadRange === 'month') {
+          allAttendance = allAttendance.filter(att => {
+            const date = parseDate(att.date);
+            return (date.getMonth() + 1) === selectedMonth && date.getFullYear() === selectedYear;
+          });
+        }
+
+        if (allAttendance.length === 0) continue;
+
+        // Sort attendance by date
+        allAttendance.sort((a, b) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
+
+        // Get unique students for this subject/classroom
+        const studentIds = new Set<string>();
+        const studentMap: Record<string, { name: string, number: string }> = {};
+        
+        allAttendance.forEach(att => {
+          att.records.forEach(r => {
+            studentIds.add(r.studentId);
+            if (!studentMap[r.studentId]) {
+              studentMap[r.studentId] = { name: r.name, number: r.number };
+            }
+          });
+        });
+
+        const sortedStudentIds = Array.from(studentIds).sort((a, b) => {
+          const numA = parseInt(studentMap[a].number) || 999;
+          const numB = parseInt(studentMap[b].number) || 999;
+          return numA - numB;
+        });
+
+        // Prepare Worksheet Data
+        const wsData: any[][] = [];
+        
+        // Row 1: Subject Name
+        wsData.push([`วิชา: ${subjectName} (ห้อง ${classroom})`]);
+        
+        // Row 2: Headers
+        const dateHeaders = allAttendance.map(att => att.date);
+        wsData.push([
+          'เลขที่', 'รหัสประจำตัว', 'ชื่อ', 
+          'ทั้งหมด', 'มา', 'ขาด', 'สาย', 'ลาป่วย', 'ลากิจ', 'กิจกรรม', 'หนี', '%',
+          ...dateHeaders
+        ]);
+
+        // Student Rows
+        sortedStudentIds.forEach(studentId => {
+          const student = studentMap[studentId];
+          const summary = getStatusSummary(allAttendance, studentId);
+          
+          const row = [
+            student.number,
+            studentId,
+            student.name,
+            summary.total,
+            summary.present,
+            summary.absent,
+            summary.late,
+            summary.sickLeave,
+            summary.personalLeave,
+            summary.activity,
+            summary.skipped,
+            `${summary.percentage}%`,
+          ];
+
+          // Add daily attendance statuses
+          allAttendance.forEach(att => {
+            const record = att.records.find(r => r.studentId === studentId);
+            row.push(record?.status || '-');
+          });
+
+          wsData.push(row);
+        });
+
+        // Row for Hours
+        const hoursRow = [
+          '', '', 'จำนวนชั่วโมงเรียน',
+          '', '', '', '', '', '', '', '', '', // Summary columns
+          ...allAttendance.map(att => `${att.hours} ชม.`)
+        ];
+        wsData.push(hoursRow);
+
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        
+        // Basic column widths
+        const wscols = [
+          { wch: 6 },  // No
+          { wch: 15 }, // ID
+          { wch: 25 }, // Name
+          { wch: 8 },  // Total
+          { wch: 5 },  // Present
+          { wch: 5 },  // Absent
+          { wch: 5 },  // Late
+          { wch: 8 },  // Sick
+          { wch: 8 },  // Personal
+          { wch: 8 },  // Activity
+          { wch: 5 },  // Skipped
+          { wch: 6 },  // %
+          ...dateHeaders.map(() => ({ wch: 10 }))
+        ];
+        ws['!cols'] = wscols;
+
+        XLSX.utils.book_append_sheet(wb, ws, `${subjectName.substring(0, 20)} (${classroom})`.replace(/[\/\\?*:[\]]/g, '-'));
+      }
+
+      if (wb.SheetNames.length === 0) {
+        alert('ไม่พบข้อมูลในช่วงเวลาที่เลือก');
+        return;
+      }
+
+      const fileName = downloadRange === 'term' 
+        ? `Attendance_Report_Term.xlsx`
+        : `Attendance_Report_${selectedMonth}_${selectedYear}.xlsx`;
+        
+      XLSX.writeFile(wb, fileName);
+      setShowDownloadModal(false);
+    } catch (error) {
+      console.error('Download error:', error);
+      alert('เกิดข้อผิดพลาดในการดาวน์โหลด');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
   const loadSummaries = async (subject?: SubjectData, studentsList?: StudentData[]) => {
     const targetSubject = subject || selectedSubject;
     const targetStudents = studentsList || filteredStudents;
@@ -439,6 +643,17 @@ function SchedulesContent() {
       await teacherDatabaseService.saveAttendance(firebaseConfig, attendanceData);
       alert('บันทึกเช็คชื่อสำเร็จ');
       
+      // Update todayAttendance state after successful save
+      const todayFormatted = formatDate(new Date());
+      if (formattedDate === todayFormatted) {
+        setTodayAttendance(prev => {
+          const filtered = prev.filter(att => 
+            !(att.subjectId === attendanceData.subjectId && att.classroom === attendanceData.classroom)
+          );
+          return [...filtered, attendanceData];
+        });
+      }
+      
       if (fromSection === 'current') {
         handleBackToMain();
       } else {
@@ -552,11 +767,31 @@ function SchedulesContent() {
 
               {/* Section 2: All subjects */}
               <div className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}>
-                <div className="flex items-center gap-2 mb-4">
-                  <Users size={22} className={isDark ? 'text-blue-400' : 'text-blue-600'} />
-                  <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    ทุกวิชาที่สอน
-                  </h2>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Users size={22} className={isDark ? 'text-blue-400' : 'text-blue-600'} />
+                    <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      ทุกวิชาที่สอน
+                    </h2>
+                  </div>
+                  
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      // Pre-select all subjects
+                      setSelectedSubjectsForDownload(allUniqueSubjects.map(s => `${s.subjectName}|||${s.classroom}`));
+                      setShowDownloadModal(true);
+                    }}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+                      isDark 
+                        ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30' 
+                        : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                    }`}
+                  >
+                    <FileDown size={18} />
+                    ดาวน์โหลดข้อมูลการมาเรียน
+                  </motion.button>
                 </div>
                 {allUniqueSubjects.length > 0 ? (
                   <div className="space-y-3">
@@ -583,6 +818,159 @@ function SchedulesContent() {
                   </div>
                 )}
               </div>
+
+              {/* Download Modal */}
+              <AnimatePresence>
+                {showDownloadModal && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                      className={`w-full max-w-lg rounded-3xl p-6 shadow-2xl ${isDark ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'}`}
+                    >
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-2">
+                          <div className={`p-2 rounded-xl ${isDark ? 'bg-blue-900/30' : 'bg-blue-50'}`}>
+                            <Download className="text-blue-500" size={24} />
+                          </div>
+                          <h3 className="text-xl font-bold">ดาวน์โหลดรายงานเช็คชื่อ</h3>
+                        </div>
+                        <button 
+                          onClick={() => setShowDownloadModal(false)}
+                          className={`p-2 rounded-xl transition-colors ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                        >
+                          <X size={20} />
+                        </button>
+                      </div>
+
+                      <div className="space-y-6">
+                        {/* Subject Selection */}
+                        <div>
+                          <label className="block text-sm font-bold mb-3 opacity-70">เลือกวิชาที่ต้องการ</label>
+                          <div className={`max-h-48 overflow-y-auto rounded-2xl p-2 border ${isDark ? 'bg-gray-900/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                            {allUniqueSubjects.map((subject) => {
+                              const key = `${subject.subjectName}|||${subject.classroom}`;
+                              const isSelected = selectedSubjectsForDownload.includes(key);
+                              return (
+                                <label 
+                                  key={key}
+                                  className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
+                                    isSelected 
+                                      ? (isDark ? 'bg-blue-600/20 text-blue-400' : 'bg-blue-50 text-blue-600') 
+                                      : (isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-100')
+                                  }`}
+                                >
+                                  <input 
+                                    type="checkbox" 
+                                    checked={isSelected}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedSubjectsForDownload(prev => [...prev, key]);
+                                      } else {
+                                        setSelectedSubjectsForDownload(prev => prev.filter(k => k !== key));
+                                      }
+                                    }}
+                                    className="w-5 h-5 rounded-lg border-2 border-gray-400 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <div className="flex-1">
+                                    <div className="font-bold">{subject.subjectName}</div>
+                                    <div className="text-xs opacity-70">ห้อง {subject.classroom}</div>
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Range Selection */}
+                        <div className="space-y-3">
+                          <label className="block text-sm font-bold opacity-70">ช่วงเวลา</label>
+                          <div className="grid grid-cols-2 gap-3">
+                            <button
+                              onClick={() => setDownloadRange('term')}
+                              className={`p-3 rounded-2xl border-2 font-bold transition-all ${
+                                downloadRange === 'term'
+                                  ? 'border-blue-500 bg-blue-500/10 text-blue-500'
+                                  : (isDark ? 'border-gray-700 bg-gray-900/30' : 'border-gray-200 bg-gray-50')
+                              }`}
+                            >
+                              ตลอดเทอม
+                            </button>
+                            <button
+                              onClick={() => setDownloadRange('month')}
+                              className={`p-3 rounded-2xl border-2 font-bold transition-all ${
+                                downloadRange === 'month'
+                                  ? 'border-blue-500 bg-blue-500/10 text-blue-500'
+                                  : (isDark ? 'border-gray-700 bg-gray-900/30' : 'border-gray-200 bg-gray-50')
+                              }`}
+                            >
+                              รายเดือน
+                            </button>
+                          </div>
+
+                          {downloadRange === 'month' && (
+                            <motion.div 
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              className="flex gap-2"
+                            >
+                              <select
+                                value={selectedMonth}
+                                onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                                className={`flex-1 p-3 rounded-2xl border ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'}`}
+                              >
+                                {Array.from({ length: 12 }).map((_, i) => (
+                                  <option key={i + 1} value={i + 1}>
+                                    {new Date(0, i).toLocaleString('th-TH', { month: 'long' })}
+                                  </option>
+                                ))}
+                              </select>
+                              <select
+                                value={selectedYear}
+                                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                                className={`w-32 p-3 rounded-2xl border ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'}`}
+                              >
+                                {Array.from({ length: 3 }).map((_, i) => (
+                                  <option key={i} value={new Date().getFullYear() - i}>
+                                    {new Date().getFullYear() - i + 543}
+                                  </option>
+                                ))}
+                              </select>
+                            </motion.div>
+                          )}
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="pt-4 space-y-3">
+                          <button
+                            onClick={handleDownloadExcel}
+                            disabled={isDownloading || selectedSubjectsForDownload.length === 0}
+                            className={`w-full py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg ${
+                              isDownloading || selectedSubjectsForDownload.length === 0
+                                ? 'bg-gray-500 cursor-not-allowed'
+                                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200'
+                            }`}
+                          >
+                            {isDownloading ? (
+                              <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <FileDown size={22} />
+                            )}
+                            {isDownloading ? 'กำลังสร้างไฟล์...' : 'ดาวน์โหลด Excel'}
+                          </button>
+                          <button
+                            onClick={() => setShowDownloadModal(false)}
+                            className="w-full py-4 rounded-2xl font-bold opacity-60 hover:opacity-100 transition-all"
+                          >
+                            ยกเลิก
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  </div>
+                )}
+              </AnimatePresence>
             </motion.div>
           ) : isAttendanceMode ? (
             <motion.div
