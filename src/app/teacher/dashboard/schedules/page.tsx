@@ -269,7 +269,7 @@ function SchedulesContent() {
     }
   }, [searchParams, subjects, currentSubjects, loading, paramsProcessed]);
 
-  // Helper to get status counts
+  // Helper to get status counts (Updated: Count by hours and new categories)
   const getStatusSummary = (records: AttendanceData[], studentId: string) => {
     let total = 0;
     let present = 0;
@@ -283,18 +283,22 @@ function SchedulesContent() {
     records.forEach(att => {
       const record = att.records.find(r => r.studentId === studentId);
       if (record && record.status) {
-        total++;
-        if (record.status === 'มา') present++;
-        else if (record.status === 'ขาด') absent++;
-        else if (record.status === 'สาย') late++;
-        else if (record.status === 'ลาป่วย') sickLeave++;
-        else if (record.status === 'ลากิจ') personalLeave++;
-        else if (record.status === 'กิจกรรม') activity++;
-        else if (record.status === 'หนี') skipped++;
+        const hours = Number(att.hours) || 1;
+        total += hours;
+        
+        if (record.status === 'มา') present += hours;
+        else if (record.status === 'ขาด') absent += hours;
+        else if (record.status === 'สาย') late += hours;
+        else if (record.status === 'ลาป่วย') sickLeave += hours;
+        else if (record.status === 'ลากิจ') personalLeave += hours;
+        else if (record.status === 'กิจกรรม') activity += hours;
+        else if (record.status === 'หนี') skipped += hours;
       }
     });
 
-    const percentage = total > 0 ? Math.round(((present + late + sickLeave + personalLeave + activity) / total) * 100) : 0;
+    // percentage = (มา + สาย + กิจกรรม) / ทั้งหมด
+    const totalPresentHours = present + late + activity;
+    const percentage = total > 0 ? Math.round((totalPresentHours / total) * 100) : 0;
 
     return { total, present, absent, late, sickLeave, personalLeave, activity, skipped, percentage };
   };
@@ -476,30 +480,35 @@ function SchedulesContent() {
           let personalLeave = 0;
           let activity = 0;
           let skipped = 0;
-          let total = allAttendance.length;
+          let total = 0;
 
           allAttendance.forEach((att: any) => {
             const record = att.records?.find((r: any) => r.studentId === student.studentId);
-            if (record) {
+            if (record && record.status) {
+              const hours = Number(att.hours) || 1;
+              total += hours;
+              
               if (record.status === 'มา') {
-                present++;
+                present += hours;
               } else if (record.status === 'ขาด') {
-                absent++;
+                absent += hours;
               } else if (record.status === 'สาย') {
-                late++;
+                late += hours;
               } else if (record.status === 'ลาป่วย') {
-                sickLeave++;
+                sickLeave += hours;
               } else if (record.status === 'ลากิจ') {
-                personalLeave++;
+                personalLeave += hours;
               } else if (record.status === 'กิจกรรม') {
-                activity++;
+                activity += hours;
               } else if (record.status === 'หนี') {
-                skipped++;
+                skipped += hours;
               }
             }
           });
 
-          const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
+          // percentage = (มา + สาย + กิจกรรม) / ทั้งหมด
+          const totalPresentHours = present + late + activity;
+          const percentage = total > 0 ? Math.round((totalPresentHours / total) * 100) : 0;
           summaries[student.studentId] = { present, absent, late, sickLeave, personalLeave, activity, skipped, total, percentage };
         }
         setAttendanceSummaries(summaries);
@@ -1147,7 +1156,8 @@ function SchedulesContent() {
               </div>
 
               {filteredStudents.length > 0 ? (
-                <div className="overflow-x-auto">
+                <>
+                  <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
                       <tr className={isDark ? 'border-b border-gray-600' : 'border-b border-gray-200'}>
@@ -1217,7 +1227,14 @@ function SchedulesContent() {
                     </tbody>
                   </table>
                 </div>
-              ) : (
+                {fromSection === 'all' && (
+                  <div className={`mt-4 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} italic flex items-center gap-1`}>
+                    <Clock size={12} />
+                    หมายเหตุ: การมาเรียนถูกเก็บบันทึกข้อมูลนับตามชั่วโมงเรียน
+                  </div>
+                )}
+              </>
+            ) : (
                 <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                   ไม่พบนักเรียนในห้องนี้
                 </div>
