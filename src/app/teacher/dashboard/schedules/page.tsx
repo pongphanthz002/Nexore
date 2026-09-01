@@ -5,8 +5,13 @@ import { useState, useEffect, Suspense } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { schoolDatabaseService, SubjectData, StudentData } from '@/services/school-database.service';
-import { teacherDatabaseService, AttendanceRecord, AttendanceData } from '@/services/teacher-database.service';
-import { ChevronLeft, Clock, Users, ClipboardList, Save, CheckCircle2, FileDown, Download, X, Calendar } from 'lucide-react';
+import { 
+  teacherDatabaseService, AttendanceRecord, AttendanceData 
+} from '@/services/teacher-database.service';
+import { 
+  ChevronLeft, Clock, Users, ClipboardList, Save, CheckCircle2, 
+  FileDown, Download, X, Calendar 
+} from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 // Parse "08:30-09:30" → { startMinutes, endMinutes }
@@ -158,6 +163,31 @@ function SchedulesContent() {
   const [paramsProcessed, setParamsProcessed] = useState(false);
   const [attendanceSummaries, setAttendanceSummaries] = useState<Record<string, any>>({});
   const [todayAttendance, setTodayAttendance] = useState<AttendanceData[]>([]);
+  
+  // Load todayAttendance from localStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem('NEXORE_TODAY_ATTENDANCE');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      const storedDate = parsed.date;
+      const todayFormatted = formatDate(new Date());
+      // Only use stored data if it's from today
+      if (storedDate === todayFormatted) {
+        setTodayAttendance(parsed.data);
+      }
+    }
+  }, []);
+  
+  // Save todayAttendance to localStorage whenever it changes
+  useEffect(() => {
+    if (todayAttendance.length > 0) {
+      const todayFormatted = formatDate(new Date());
+      localStorage.setItem('NEXORE_TODAY_ATTENDANCE', JSON.stringify({
+        date: todayFormatted,
+        data: todayAttendance
+      }));
+    }
+  }, [todayAttendance]);
   
   // Download Modal state
   const [showDownloadModal, setShowDownloadModal] = useState(false);
@@ -763,6 +793,20 @@ function SchedulesContent() {
                               ห้อง {subject.classroom}
                             </div>
                           </div>
+                          <div className="flex gap-2">
+                            <motion.button
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectSubject(subject, 'current');
+                                handleOpenAttendance(subject);
+                              }}
+                              className={`p-2 rounded-xl ${isDark ? 'bg-green-600/20 text-green-400' : 'bg-green-100 text-green-700'}`}
+                            >
+                              <ClipboardList size={20} />
+                            </motion.button>
+                          </div>
                         </div>
                       </motion.div>
                     ))}
@@ -799,7 +843,7 @@ function SchedulesContent() {
                     }`}
                   >
                     <FileDown size={18} />
-                    ดาวน์โหลดข้อมูลการมาเรียน
+                    ดาวน์โหลด
                   </motion.button>
                 </div>
                 {allUniqueSubjects.length > 0 ? (
@@ -812,11 +856,29 @@ function SchedulesContent() {
                         onClick={() => handleSelectSubject(subject, 'all')}
                         className={`p-4 rounded-xl cursor-pointer ${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'} transition-colors`}
                       >
-                        <div className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                          {subject.subjectName}
-                        </div>
-                        <div className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                          ห้อง {subject.classroom}
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                              {subject.subjectName}
+                            </div>
+                            <div className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                              ห้อง {subject.classroom}
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <motion.button
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectSubject(subject, 'all');
+                                handleOpenAttendance(subject);
+                              }}
+                              className={`p-2 rounded-xl ${isDark ? 'bg-green-600/20 text-green-400' : 'bg-green-100 text-green-700'}`}
+                            >
+                              <ClipboardList size={20} />
+                            </motion.button>
+                          </div>
                         </div>
                       </motion.div>
                     ))}

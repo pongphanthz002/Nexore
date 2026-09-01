@@ -1,6 +1,6 @@
 import { firebaseManager } from '@/lib/firebase';
 import { collection, doc, setDoc, getDoc, getDocs, query, where, updateDoc, deleteDoc, Firestore } from 'firebase/firestore';
-import { teacherDatabaseService } from '@/services/teacher-database.service';
+import { teacherDatabaseService, GradeConfig, Assignment, AssignmentGroup, StudentScore } from '@/services/teacher-database.service';
 import { firestoreService } from '@/services/firestore.service';
 
 export interface TeacherFirebaseConfig {
@@ -404,7 +404,16 @@ class SchoolDatabaseService {
    */
   async deleteSubjectAllData(schoolFirebaseConfig: any, subjectId: string, classroom: string): Promise<void> {
     const database = this.getSchoolDB(schoolFirebaseConfig);
-    const collectionsToDelete = ['grades', 'assignments', 'attendance', 'schedules', 'materials'];
+    const collectionsToDelete = [
+      'grades', 
+      'assignments', 
+      'attendance', 
+      'schedules', 
+      'materials',
+      'gradeConfigs',
+      'assignmentGroups',
+      'studentScores'
+    ];
     
     for (const collectionName of collectionsToDelete) {
       try {
@@ -437,6 +446,126 @@ class SchoolDatabaseService {
     for (const doc of querySnapshot.docs) {
       await deleteDoc(doc.ref);
     }
+  }
+
+  /**
+   * GRADE & ASSIGNMENT METHODS (for admin teachers)
+   */
+
+  async getGradeConfig(schoolFirebaseConfig: any, subjectId: string): Promise<GradeConfig | null> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    const configRef = doc(database, 'gradeConfigs', subjectId);
+    const snap = await getDoc(configRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      return {
+        ...data,
+        updatedAt: data.updatedAt?.toDate() || new Date()
+      } as GradeConfig;
+    }
+    return null;
+  }
+
+  async saveGradeConfig(schoolFirebaseConfig: any, config: GradeConfig): Promise<void> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    const configRef = doc(database, 'gradeConfigs', config.subjectId);
+    await setDoc(configRef, {
+      ...config,
+      updatedAt: new Date()
+    });
+  }
+
+  async getAssignments(schoolFirebaseConfig: any, subjectId: string, classroom: string): Promise<Assignment[]> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    const q = query(
+      collection(database, 'assignments'),
+      where('subjectId', '==', subjectId),
+      where('classroom', '==', classroom)
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(d => {
+      const data = d.data();
+      return {
+        ...data,
+        createdAt: data.createdAt?.toDate() || new Date(),
+        updatedAt: data.updatedAt?.toDate() || new Date()
+      } as Assignment;
+    });
+  }
+
+  async saveAssignment(schoolFirebaseConfig: any, assignment: Assignment): Promise<void> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    const assignmentRef = doc(database, 'assignments', assignment.id);
+    await setDoc(assignmentRef, {
+      ...assignment,
+      createdAt: assignment.createdAt || new Date(),
+      updatedAt: new Date()
+    });
+  }
+
+  async deleteAssignment(schoolFirebaseConfig: any, assignmentId: string): Promise<void> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    await deleteDoc(doc(database, 'assignments', assignmentId));
+  }
+
+  async getAssignmentGroups(schoolFirebaseConfig: any, subjectId: string, classroom: string): Promise<AssignmentGroup[]> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    const q = query(
+      collection(database, 'assignmentGroups'),
+      where('subjectId', '==', subjectId),
+      where('classroom', '==', classroom)
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(d => {
+      const data = d.data();
+      return {
+        ...data,
+        createdAt: data.createdAt?.toDate() || new Date(),
+        updatedAt: data.updatedAt?.toDate() || new Date()
+      } as AssignmentGroup;
+    });
+  }
+
+  async saveAssignmentGroup(schoolFirebaseConfig: any, group: AssignmentGroup): Promise<void> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    const groupRef = doc(database, 'assignmentGroups', group.id);
+    await setDoc(groupRef, {
+      ...group,
+      createdAt: group.createdAt || new Date(),
+      updatedAt: new Date()
+    });
+  }
+
+  async deleteAssignmentGroup(schoolFirebaseConfig: any, groupId: string): Promise<void> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    await deleteDoc(doc(database, 'assignmentGroups', groupId));
+  }
+
+  async getStudentScores(schoolFirebaseConfig: any, subjectId: string, classroom: string): Promise<StudentScore[]> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    const q = query(
+      collection(database, 'studentScores'),
+      where('subjectId', '==', subjectId),
+      where('classroom', '==', classroom)
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(d => {
+      const data = d.data();
+      return {
+        ...data,
+        updatedAt: data.updatedAt?.toDate() || new Date()
+      } as StudentScore;
+    });
+  }
+
+  async saveStudentScore(schoolFirebaseConfig: any, score: StudentScore): Promise<void> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    const scoreId = `${score.subjectId}_${score.classroom.replace(/\//g, '-')}_${score.studentId}`;
+    const scoreRef = doc(database, 'studentScores', scoreId);
+    await setDoc(scoreRef, {
+      ...score,
+      updatedAt: new Date()
+    });
   }
 
   /**

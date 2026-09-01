@@ -13,11 +13,11 @@ const TeacherDock = ({ isDark }: TeacherDockProps) => {
   const pathname = usePathname();
 
   const menuItems = [
-    { icon: GraduationCap, label: 'จัดการคะแนน', path: '/teacher/dashboard/grades' },
-    { icon: Clock, label: 'จัดการเวลาเรียน', path: '/teacher/dashboard/schedules' },
-    { icon: Home, label: 'หน้าหลัก', path: '/teacher/dashboard' },
-    { icon: Settings, label: 'ระบบเพิ่มเติม', path: '/teacher/dashboard/additional' },
-    { icon: User, label: 'ข้อมูลส่วนตัว', path: '/teacher/dashboard/profile' },
+    { icon: GraduationCap, path: '/teacher/dashboard/grades' },
+    { icon: Clock, path: '/teacher/dashboard/schedules' },
+    { icon: Home,  path: '/teacher/dashboard' },
+    { icon: Settings, path: '/teacher/dashboard/additional' },
+    { icon: User, path: '/teacher/dashboard/profile' },
   ];
 
   const isActive = (path: string) => {
@@ -53,7 +53,6 @@ const TeacherDock = ({ isDark }: TeacherDockProps) => {
               }`}
             >
               <Icon size={active ? 32 : 24} />
-              <span className="text-xs">{item.label}</span>
             </motion.button>
           );
         })}
