@@ -213,7 +213,7 @@ class SchoolDatabaseService {
   }
 
   /**
-   * Get student data from school database
+   * Get student data from school database by studentId
    */
   async getStudentData(schoolFirebaseConfig: any, studentId: string): Promise<StudentData | null> {
     const database = this.getSchoolDB(schoolFirebaseConfig);
@@ -221,8 +221,32 @@ class SchoolDatabaseService {
     const studentSnap = await getDoc(studentRef);
     
     if (studentSnap.exists()) {
-      return studentSnap.data() as StudentData;
+      const data = studentSnap.data() as StudentData;
+      console.log('getStudentData - studentId:', studentId);
+      console.log('getStudentData - studentData:', data);
+      console.log('getStudentData - teacherNodes:', data.teacherNodes);
+      return data;
     }
+    console.log('getStudentData - student not found for id:', studentId);
+    return null;
+  }
+
+  /**
+   * Get student data from school database by email
+   */
+  async getStudentDataByEmail(schoolFirebaseConfig: any, email: string): Promise<StudentData | null> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    const q = query(collection(database, this.studentsCollection), where('email', '==', email));
+    const querySnapshot = await getDocs(q);
+    
+    if (!querySnapshot.empty) {
+      const data = querySnapshot.docs[0].data() as StudentData;
+      console.log('getStudentDataByEmail - email:', email);
+      console.log('getStudentDataByEmail - studentData:', data);
+      console.log('getStudentDataByEmail - teacherNodes:', data.teacherNodes);
+      return data;
+    }
+    console.log('getStudentDataByEmail - student not found for email:', email);
     return null;
   }
 

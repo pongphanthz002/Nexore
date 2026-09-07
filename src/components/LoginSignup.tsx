@@ -98,6 +98,9 @@ export default function LoginSignup() {
     setIsSignup(false);
     setLoading(true);
     try {
+      // Clear cached user account so AuthContext re-fetches fresh data from Firestore
+      localStorage.removeItem('NEXORE_USER_ACCOUNT');
+      localStorage.removeItem('NEXORE_USER_ACCOUNT_TIMESTAMP');
       console.log('Starting Google Sign in...');
       await signInWithGoogle();
       console.log('Google Sign in completed, waiting for auth state...');

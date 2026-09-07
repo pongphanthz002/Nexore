@@ -69,7 +69,7 @@ export function useIdentityCheck() {
                   id: user.email,
                   email: user.email,
                   schoolId: userMapping.schoolId,
-                  schoolFirebaseConfig: userData.firebaseConfig || schoolHub.schoolFirebaseConfig,
+                  schoolFirebaseConfig: schoolHub.schoolFirebaseConfig,
                   role: userData.role,
                   userId: userData.userId,
                   name: userData.name,

@@ -12,7 +12,7 @@ import {
 } from 'firebase/auth';
 import { firestoreService } from '@/services/firestore.service';
 import { schoolDatabaseService } from '@/services/school-database.service';
-import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, where, setDoc } from 'firebase/firestore';
 
 export interface UserAccount {
   id: string;
@@ -117,21 +117,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           
           try {
-            // Parallel loading: fetch user account and hub simultaneously
-            const [accountData, hub] = await Promise.all([
-              firestoreService.getUserAccount(currentUser.email),
-              firestoreService.getHub(currentUser.email).catch(() => null) // getHub might fail if user not in hub yet
-            ]);
+            // Fetch user account from Master Registry
+            const accountData = await firestoreService.getUserAccount(currentUser.email);
             
             console.log('User account data from Master Registry:', accountData);
-            console.log('Hub data:', hub);
             
             if (accountData) {
-              // If hub wasn't loaded in parallel, try loading it with schoolId
-              let finalHub = hub;
-              if (!finalHub && accountData.schoolId) {
+              // Load hub using schoolId from user account
+              let finalHub = null;
+              if (accountData.schoolId) {
                 finalHub = await firestoreService.getHub(accountData.schoolId);
-                console.log('Hub data (fallback):', finalHub);
+                console.log('Hub data:', finalHub);
               }
               
               if (finalHub && finalHub.schoolFirebaseConfig) {
@@ -139,16 +135,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 let finalRole = accountData.role || 'student';
                 let finalUserId = accountData.uid || currentUser.uid; // Default to Firebase Auth UID
                 
+                let teacherDisplayName = currentUser.displayName || '';
+                
                 if (accountData.role === 'teacher' || accountData.role === 'admin') {
                   try {
                     const schoolInstance = firebaseManager.getInstance(
                       finalHub.schoolFirebaseConfig,
                       `school-${finalHub.schoolFirebaseConfig.projectId}`
                     );
-                    // Find teacher by Firebase Auth UID
                     const teachersRef = collection(schoolInstance.db, 'teachers');
-                    const q = query(teachersRef, where('uid', '==', accountData.uid || currentUser.uid));
-                    const querySnapshot = await getDocs(q);
+                    const targetUid = accountData.uid || currentUser.uid;
+                    let q = query(teachersRef, where('uid', '==', targetUid));
+                    let querySnapshot = await getDocs(q);
+
+                    // Fallback lookup by email if query by UID returns empty
+                    if (querySnapshot.empty && currentUser.email) {
+                      const qEmail = query(teachersRef, where('email', '==', currentUser.email));
+                      querySnapshot = await getDocs(qEmail);
+                    }
                     
                     if (!querySnapshot.empty) {
                       const teacherDoc = querySnapshot.docs[0];
@@ -157,12 +161,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         finalRole = teacherData.role;
                         console.log('Role from School Database:', finalRole);
                       }
-                      // Use teacherId as userId (not Firebase Auth UID)
+                      if (teacherData?.name) {
+                        teacherDisplayName = teacherData.name;
+                      }
+                      // Use teacherId as userId (document ID)
                       finalUserId = teacherDoc.id;
                       console.log('TeacherId from School Database:', finalUserId);
+
+                      // Update UID on teacher document if missing or different
+                      if (!teacherData.uid && targetUid) {
+                        setDoc(teacherDoc.ref, { uid: targetUid }, { merge: true }).catch(err => 
+                          console.error('Error updating teacher uid:', err)
+                        );
+                      }
                     }
                   } catch (err) {
                     console.error('Error fetching teacher role from School Database:', err);
+                  }
+                } else if (accountData.role === 'student') {
+                  try {
+                    const schoolInstance = firebaseManager.getInstance(
+                      finalHub.schoolFirebaseConfig,
+                      `school-${finalHub.schoolFirebaseConfig.projectId}`
+                    );
+                    const studentsRef = collection(schoolInstance.db, 'students');
+                    const targetUid = accountData.uid || currentUser.uid;
+                    let q = query(studentsRef, where('uid', '==', targetUid));
+                    let querySnapshot = await getDocs(q);
+
+                    // Fallback lookup by email if query by UID returns empty
+                    if (querySnapshot.empty && currentUser.email) {
+                      const qEmail = query(studentsRef, where('email', '==', currentUser.email));
+                      querySnapshot = await getDocs(qEmail);
+                    }
+                    
+                    if (!querySnapshot.empty) {
+                      const studentDoc = querySnapshot.docs[0];
+                      const studentData = studentDoc.data();
+                      if (studentData?.name) {
+                        teacherDisplayName = studentData.name;
+                      }
+                      finalUserId = studentDoc.id; // studentId is the document ID
+                      console.log('StudentId from School Database:', finalUserId);
+
+                      // Update UID on student document if missing or different
+                      if (!studentData.uid && targetUid) {
+                        setDoc(studentDoc.ref, { uid: targetUid }, { merge: true }).catch(err => 
+                          console.error('Error updating student uid:', err)
+                        );
+                      }
+                    }
+                  } catch (err) {
+                    console.error('Error fetching studentId from School Database:', err);
                   }
                 }
                 
@@ -173,7 +223,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   schoolFirebaseConfig: finalHub.schoolFirebaseConfig,
                   role: finalRole,
                   userId: finalUserId,
-                  name: currentUser.displayName || '',
+                  name: teacherDisplayName || currentUser.displayName || currentUser.email || '',
                   createdAt: new Date(),
                   updatedAt: new Date(),
                 };
