@@ -125,7 +125,7 @@ export default function StudentSchedulePage() {
     return (
       <div className={`min-h-screen ${isDarkMode ? 'bg-[#0F172A]' : 'bg-[#F8FAFC]'} flex items-center justify-center`}>
         <div className="text-center">
-          <RefreshCw className="w-12 h-12 animate-spin text-indigo-500 mx-auto mb-4" />
+          <RefreshCw className="w-12 h-12 animate-spin text-red-500 mx-auto mb-4" />
           <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>กำลังโหลด...</p>
         </div>
       </div>
@@ -135,8 +135,8 @@ export default function StudentSchedulePage() {
   const groupedSchedule = groupScheduleByDay();
   const darkClass = isDarkMode ? "dark bg-[#0F172A] text-slate-100" : "bg-[#F8FAFC] text-slate-900";
   const mainCardGradient = isDarkMode
-    ? 'bg-gradient-to-br from-[#111827] via-[#1F2937] to-[#030712]'
-    : 'bg-gradient-to-br from-[#3730a3] via-[#1e1b4b] to-[#3730a3]';
+    ? 'bg-gradient-to-br from-red-950 via-slate-900 to-red-950 border border-red-900/30'
+    : 'bg-gradient-to-br from-red-600 via-rose-600 to-red-700';
 
   return (
     <div className={`min-h-screen ${darkClass} font-sans transition-colors duration-300 overflow-x-hidden`}>
@@ -151,7 +151,7 @@ export default function StudentSchedulePage() {
         {/* Student Info Card */}
         <div className={`animate-water ${mainCardGradient} rounded-[2.5rem] p-10 text-white shadow-2xl relative overflow-hidden`}>
           <div className="relative z-10">
-            <p className="text-[10px] font-bold mb-2 opacity-80 uppercase tracking-widest text-indigo-100">STUDENT INFORMATION</p>
+            <p className="text-[10px] font-bold mb-2 opacity-80 uppercase tracking-widest text-red-100">STUDENT INFORMATION</p>
             <h2 className="text-3xl font-bold mb-6 leading-tight">{studentInfo?.name || '-'}</h2>
             <div className="flex flex-wrap gap-3">
               <span className="bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl text-sm font-bold border border-white/10">ห้อง {studentInfo?.class || '-'}</span>
@@ -181,8 +181,8 @@ export default function StudentSchedulePage() {
               className="space-y-4"
             >
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDarkMode ? 'bg-indigo-500/20' : 'bg-indigo-50'}`}>
-                  <Calendar className="w-5 h-5 text-indigo-500" />
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDarkMode ? 'bg-red-500/20' : 'bg-red-50'}`}>
+                  <Calendar className="w-5 h-5 text-red-500" />
                 </div>
                 <h3 className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{day}</h3>
               </div>
@@ -196,28 +196,28 @@ export default function StudentSchedulePage() {
                     transition={{ delay: dayIndex * 0.1 + itemIndex * 0.05 }}
                     className={`group relative p-6 rounded-[2rem] cursor-pointer transition-all border ${
                       isDarkMode 
-                        ? 'bg-gray-800/80 border-gray-700/80 hover:border-indigo-500/50 hover:bg-gray-800 shadow-lg shadow-black/20' 
-                        : 'bg-white border-gray-100 hover:border-indigo-300 hover:shadow-xl hover:shadow-indigo-500/5'
+                        ? 'bg-gray-800/80 border-gray-700/80 hover:border-red-500/50 hover:bg-gray-800 shadow-lg shadow-black/20' 
+                        : 'bg-white border-gray-100 hover:border-red-300 hover:shadow-xl hover:shadow-red-500/5'
                     }`}
                   >
                     <div className="flex flex-col gap-4">
                       <div className="flex items-start justify-between gap-4">
                         <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 ${
-                          isDarkMode ? 'bg-indigo-500/15 text-indigo-400' : 'bg-indigo-50 text-indigo-600'
+                          isDarkMode ? 'bg-red-500/15 text-red-400' : 'bg-red-50 text-red-600'
                         }`}>
                           <BookOpen size={28} />
                         </div>
                         <div className={`text-center px-3 py-1.5 rounded-xl border ${
-                          isDarkMode ? 'bg-indigo-500/10 border-indigo-500/20' : 'bg-indigo-50 border-indigo-100'
+                          isDarkMode ? 'bg-red-500/10 border-red-500/20' : 'bg-red-50 border-red-100'
                         }`}>
-                          <div className={`text-sm font-bold ${isDarkMode ? 'text-indigo-300' : 'text-indigo-700'}`}>
+                          <div className={`text-sm font-bold ${isDarkMode ? 'text-red-300' : 'text-red-700'}`}>
                             {item.time}
                           </div>
                         </div>
                       </div>
                       
                       <div className="min-w-0">
-                        <h4 className={`font-bold text-xl leading-tight mb-2 truncate group-hover:text-indigo-500 transition-colors ${
+                        <h4 className={`font-bold text-xl leading-tight mb-2 truncate group-hover:text-red-500 transition-colors ${
                           isDarkMode ? 'text-white' : 'text-gray-900'
                         }`}>
                           {item.subjectName}

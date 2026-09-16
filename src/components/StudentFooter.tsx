@@ -13,57 +13,48 @@ const StudentFooter = ({ isDark }: StudentFooterProps) => {
   const pathname = usePathname();
 
   const menuItems = [
-    {
-      icon: Home,
-      label: 'หน้าหลัก',
-      path: '/student/dashboard',
-    },
-    {
-      icon: BookOpen,
-      label: 'วิชาเรียน',
-      path: '/student/dashboard/subjects',
-    },
-    {
-      icon: Lightbulb,
-      label: 'เรียนรู้เพิ่มเติม',
-      path: '/student/dashboard/learning',
-    },
-    {
-      icon: User,
-      label: 'ข้อมูลส่วนตัว',
-      path: '/student/dashboard/profile',
-    },
+    { icon: BookOpen,  path: '/student/dashboard/subjects' },
+    { icon: Lightbulb, path: '/student/dashboard/learning' },
+    { icon: Home,      path: '/student/dashboard' },          // center
+    { icon: User,      path: '/student/dashboard/profile' },
   ];
+
+  const isActive = (path: string) => {
+    if (path === '/student/dashboard') {
+      return pathname === '/student/dashboard';
+    }
+    return pathname.startsWith(path);
+  };
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ type: "spring", stiffness: 300, damping: 30 }}
-      className={`fixed bottom-0 left-0 right-0 z-50 border-t px-6 py-3 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-md`}
+      initial={{ y: 100 }}
+      animate={{ y: 0 }}
+      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+      className={`fixed bottom-0 left-0 right-0 z-50 border-t px-6 py-4 ${
+        isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'
+      } shadow-md`}
     >
       <div className="flex items-center justify-around max-w-7xl mx-auto">
         {menuItems.map((item) => {
-          const isActive = pathname === item.path;
+          const Icon = item.icon;
+          const active = isActive(item.path);
+          const isHome = item.path === '/student/dashboard';
+
           return (
             <motion.button
               key={item.path}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              transition={{ type: "spring", stiffness: 400, damping: 25 }}
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 25 }}
               onClick={() => router.push(item.path)}
-              className={`flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-colors ${
-                isActive
-                  ? isDark
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-indigo-500 text-white'
-                  : isDark
-                  ? 'text-gray-400 hover:bg-gray-700'
-                  : 'text-gray-600 hover:bg-gray-100'
+              className={`flex flex-col items-center gap-1 rounded-xl transition-colors ${
+                isHome
+                  ? `p-3 ${active ? 'bg-red-500 text-white shadow-lg shadow-red-500/30' : isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`
+                  : `p-2 ${active ? 'text-red-500 font-bold' : isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-900'}`
               }`}
             >
-              <item.icon size={20} />
-              <span className="text-xs font-medium">{item.label}</span>
+              <Icon size={active ? (isHome ? 26 : 28) : (isHome ? 24 : 22)} />
             </motion.button>
           );
         })}

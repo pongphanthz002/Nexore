@@ -836,61 +836,6 @@ export default function GradesPage() {
                 </div>
               </div>
 
-              {/* Section 1: Currently teaching */}
-              {uniqueSubjects.filter(s => {
-                const day = getCurrentDayThai();
-                if (s.day !== day) return false;
-                const range = parseTimeRange(s.time);
-                if (!range) return false;
-                return nowMinutes >= range.startMinutes - 15 && nowMinutes <= range.startMinutes + 180;
-              }).length > 0 && (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Clock size={22} className={isDark ? 'text-green-400' : 'text-green-600'} />
-                    <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      วิชาที่กำลังสอนอยู่
-                    </h2>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {uniqueSubjects.filter(s => {
-                      const day = getCurrentDayThai();
-                      if (s.day !== day) return false;
-                      const range = parseTimeRange(s.time);
-                      if (!range) return false;
-                      return nowMinutes >= range.startMinutes - 15 && nowMinutes <= range.startMinutes + 180;
-                    }).map((subject) => (
-                      <motion.div
-                        key={`current-${subject.subjectName}-${subject.classroom}`}
-                        whileHover={{ scale: 1.01, y: -2 }}
-                        whileTap={{ scale: 0.99 }}
-                        onClick={() => handleSelectSubject(subject)}
-                        className={`p-4 rounded-xl cursor-pointer border-2 ${
-                          isDark 
-                            ? 'bg-green-900/30 border-green-700 hover:bg-green-900/50' 
-                            : 'bg-green-50 border-green-300 hover:bg-green-100'
-                        } transition-colors`}
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className={`text-center min-w-[80px] p-2 rounded-lg ${isDark ? 'bg-green-800/50' : 'bg-green-200'}`}>
-                            <div className={`text-sm font-bold ${isDark ? 'text-green-300' : 'text-green-800'}`}>
-                              {subject.time}
-                            </div>
-                          </div>
-                          <div className="flex-1">
-                            <div className={`font-bold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                              {subject.subjectName}
-                            </div>
-                            <div className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                              ห้อง {subject.classroom}
-                            </div>
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {uniqueSubjects.length > 0 ? (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">

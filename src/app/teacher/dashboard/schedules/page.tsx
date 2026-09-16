@@ -761,93 +761,39 @@ function SchedulesContent() {
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
               className="space-y-6"
             >
-              {/* Section 1: Currently teaching */}
-              <div className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}>
-                <div className="flex items-center gap-2 mb-4">
-                  <Clock size={22} className={isDark ? 'text-green-400' : 'text-green-600'} />
-                  <h1 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    วิชาที่กำลังสอนอยู่
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h1 className={`text-3xl font-black ${isDark ? 'text-white' : 'text-gray-900'} tracking-tight`}>
+                    จัดการเวลาเรียน
                   </h1>
+                  <p className={`text-sm mt-1 font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    เลือกวิชาที่ต้องการจัดการเวลาเรียน
+                  </p>
                 </div>
-                {currentSubjects.length > 0 ? (
-                  <div className="space-y-3">
-                    {currentSubjects.map((subject) => (
-                      <motion.div
-                        key={subject.subjectId}
-                        whileHover={{ scale: 1.01, y: -2 }}
-                        whileTap={{ scale: 0.99 }}
-                        onClick={() => handleSelectSubject(subject, 'current')}
-                        className={`p-4 rounded-xl cursor-pointer border-2 ${isDark ? 'bg-green-900/30 border-green-700 hover:bg-green-900/50' : 'bg-green-50 border-green-300 hover:bg-green-100'} transition-colors`}
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className={`text-center min-w-[80px] p-2 rounded-lg ${isDark ? 'bg-green-800/50' : 'bg-green-200'}`}>
-                            <div className={`text-sm font-bold ${isDark ? 'text-green-300' : 'text-green-800'}`}>
-                              {subject.time}
-                            </div>
-                          </div>
-                          <div className="flex-1">
-                            <div className={`font-bold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                              {subject.subjectName}
-                            </div>
-                            <div className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                              ห้อง {subject.classroom}
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <motion.button
-                              whileHover={{ scale: 1.05 }}
-                              whileTap={{ scale: 0.95 }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSelectSubject(subject, 'current');
-                                handleOpenAttendance(subject);
-                              }}
-                              className={`p-2 rounded-xl ${isDark ? 'bg-green-600/20 text-green-400' : 'bg-green-100 text-green-700'}`}
-                            >
-                              <ClipboardList size={20} />
-                            </motion.button>
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className={`text-center py-6 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    ไม่มีวิชาที่กำลังสอนอยู่ขณะนี้
-                  </div>
-                )}
-              </div>
-
-              {/* Section 2: All subjects */}
-              <div className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Users size={22} className={isDark ? 'text-blue-400' : 'text-blue-600'} />
-                    <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      ทุกวิชาที่สอน
-                    </h2>
-                  </div>
-                  
+                <div className="flex items-center gap-2">
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => {
-                      // Pre-select all subjects
                       setSelectedSubjectsForDownload(allUniqueSubjects.map(s => `${s.subjectName}|||${s.classroom}`));
                       setShowDownloadModal(true);
                     }}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+                    disabled={allUniqueSubjects.length === 0}
+                    className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-sm font-bold shadow-xl transition-all ${
                       isDark 
-                        ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30' 
-                        : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
-                    }`}
+                        ? 'bg-emerald-600 text-white shadow-emerald-900/20 hover:bg-emerald-500' 
+                        : 'bg-emerald-500 text-white shadow-emerald-500/20 hover:bg-emerald-600'
+                    } disabled:opacity-50`}
                   >
                     <FileDown size={18} />
                     ดาวน์โหลด
                   </motion.button>
                 </div>
-                {allUniqueSubjects.length > 0 ? (
-                  <div className="space-y-3">
+              </div>
+              
+              {allUniqueSubjects.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                     {allUniqueSubjects.map((subject) => (
                       <motion.div
                         key={`${subject.subjectName}-${subject.classroom}`}
@@ -883,13 +829,19 @@ function SchedulesContent() {
                       </motion.div>
                     ))}
                   </div>
-                ) : (
-                  <div className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    ไม่พบวิชาที่สอน
+                </div>
+              ) : (
+                <div className={`flex flex-col items-center justify-center py-20 rounded-[3rem] border-2 border-dashed ${
+                  isDark ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'
+                }`}>
+                  <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${isDark ? 'bg-gray-700' : 'bg-white shadow-md'}`}>
+                    <ClipboardList className="opacity-20" size={32} />
                   </div>
-                )}
-              </div>
-
+                  <p className={`text-lg font-bold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    ไม่พบวิชาที่สอน
+                  </p>
+                </div>
+              )}
               {/* Download Modal */}
               <AnimatePresence>
                 {showDownloadModal && (

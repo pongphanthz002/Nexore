@@ -9,7 +9,7 @@ import StudentHeader from '@/components/StudentHeader';
 import StudentFooter from '@/components/StudentFooter';
 import { 
   BookOpen, Clock, RefreshCw, Sparkles, Home, 
-  ChevronDown, ChevronLeft, Layers, Target, GraduationCap, AlertCircle, 
+  ChevronDown, ChevronLeft, ChevronRight, Layers, Target, GraduationCap, AlertCircle, 
   Trophy, Flame, Award, ShieldCheck, ShieldAlert, ShieldX,
   BarChart3, Activity, Info, X, Sun, Moon
 } from 'lucide-react';
@@ -158,7 +158,6 @@ export default function StudentSubjectsPage() {
         userAccount?.userId || ''
       );
 
-      // If not found by userId, try by email
       if (!studentData && userAccount?.email) {
         studentData = await schoolDatabaseService.getStudentDataByEmail(
           userAccount.schoolFirebaseConfig,
@@ -173,31 +172,22 @@ export default function StudentSubjectsPage() {
 
       setStudentInfo(studentData);
 
-      // Get subjects from teacher databases
+      // Fetch subjects first (needed by grades/attendance as dependency)
       const subjectsData = await studentDatabaseService.getStudentSubjects(
         userAccount.schoolFirebaseConfig,
         studentData
       );
-
       setSubjects(subjectsData);
 
-      // Get grades from teacher databases
-      const gradesData = await studentDatabaseService.getStudentGrades(
-        userAccount.schoolFirebaseConfig,
-        studentData
-      );
+      // Fetch grades and attendance in PARALLEL for speed
+      const [gradesData, attendanceData] = await Promise.all([
+        studentDatabaseService.getStudentGrades(userAccount.schoolFirebaseConfig, studentData),
+        studentDatabaseService.getStudentAttendance(userAccount.schoolFirebaseConfig, studentData),
+      ]);
 
       setGrades(gradesData);
-
-      // Get attendance from teacher databases
-      const attendanceData = await studentDatabaseService.getStudentAttendance(
-        userAccount.schoolFirebaseConfig,
-        studentData
-      );
-
       setAttendance(attendanceData);
 
-      // If only one subject, auto-select it
       if (subjectsData.length === 1) {
         setSelectedSubject(subjectsData[0]);
         const matchingGrade = gradesData.find(g => g.subjectId === subjectsData[0].subjectId);
@@ -240,25 +230,70 @@ export default function StudentSubjectsPage() {
 
   if (loading) {
     return (
-      <div className={`min-h-screen ${isDarkMode ? 'bg-[#0F172A]' : 'bg-[#F8FAFC]'} flex items-center justify-center`}>
-        <div className="text-center">
-          <RefreshCw className="w-12 h-12 animate-spin text-indigo-500 mx-auto mb-4" />
-          <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>กำลังโหลด...</p>
+      <div className={`min-h-screen ${isDarkMode ? 'bg-[#0F172A]' : 'bg-[#F8FAFC]'} font-sans`}>
+        <StudentHeader isDark={isDarkMode} toggleTheme={toggleTheme} />
+        <div className="flex flex-col items-center justify-center min-h-screen gap-8">
+          {/* Orbiting rings */}
+          <div className="relative w-36 h-36">
+            {[0,1,2].map((i) => (
+              <motion.div
+                key={i}
+                className={`absolute inset-0 rounded-full border-2 ${
+                  i === 0 ? 'border-red-500/60' : i === 1 ? 'border-rose-400/40' : 'border-red-300/30'
+                }`}
+                style={{ margin: i * 12 }}
+                animate={{ rotate: i % 2 === 0 ? 360 : -360 }}
+                transition={{ duration: 2.5 + i, repeat: Infinity, ease: 'linear' }}
+              />
+            ))}
+            <motion.div
+              className="absolute inset-0 flex items-center justify-center"
+              animate={{ scale: [1, 1.1, 1] }}
+              transition={{ duration: 2, repeat: Infinity }}
+            >
+              <BookOpen className="w-10 h-10 text-red-500" />
+            </motion.div>
+          </div>
+          <div className="text-center space-y-3">
+            <motion.p
+              className={`text-sm font-black uppercase tracking-[0.3em] ${ isDarkMode ? 'text-red-400' : 'text-red-600'}`}
+              animate={{ opacity: [0.6, 1, 0.6] }}
+              transition={{ duration: 2, repeat: Infinity }}
+            >
+              กำลังโหลดข้อมูล
+            </motion.p>
+            <div className="flex gap-2 justify-center">
+              {[0,1,2,3].map(i => (
+                <motion.div
+                  key={i}
+                  className="w-1.5 h-6 rounded-full bg-red-500"
+                  animate={{ scaleY: [0.4, 1, 0.4], opacity: [0.4, 1, 0.4] }}
+                  transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15 }}
+                />
+              ))}
+            </div>
+          </div>
         </div>
+        <StudentFooter isDark={isDarkMode} />
       </div>
     );
   }
 
   const darkClass = isDarkMode ? "dark bg-[#0F172A] text-slate-100" : "bg-[#F8FAFC] text-slate-900";
   const mainCardGradient = isDarkMode
-    ? 'bg-gradient-to-br from-[#111827] via-[#1F2937] to-[#030712]'
-    : 'bg-gradient-to-br from-[#3730a3] via-[#1e1b4b] to-[#3730a3]';
+    ? 'bg-gradient-to-br from-red-950 via-slate-900 to-red-950 border border-red-900/30'
+    : 'bg-gradient-to-br from-red-600 via-rose-600 to-red-700';
 
   return (
     <div className={`min-h-screen ${darkClass} font-sans transition-colors duration-300 overflow-x-hidden`}>
       <style>{`
         @keyframes water-flow { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
         .animate-water { background-size: 200% 200%; animation: water-flow 8s ease infinite; }
+        @keyframes marquee { 0% { transform: translateX(10%); } 100% { transform: translateX(-100%); } }
+        .animate-marquee { animation: marquee 20s linear infinite; display: inline-flex; }
+        .pause-marquee:hover .animate-marquee { animation-play-state: paused; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
 
       <StudentHeader isDark={isDarkMode} toggleTheme={toggleTheme} />
@@ -280,27 +315,37 @@ export default function StudentSubjectsPage() {
               </h3>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="flex flex-col gap-3">
               {subjects.map((subject, idx) => (
                 <motion.div
                   key={idx}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.05 }}
+                  transition={{ delay: idx * 0.04, type: 'spring', stiffness: 260, damping: 20 }}
+                  whileHover={{ x: 4 }}
+                  whileTap={{ scale: 0.98 }}
                   onClick={() => handleSubjectSelect(subject)}
-                  className={`${isDarkMode ? 'bg-[#1E293B] border-[#334155]' : 'bg-white border-slate-100'} rounded-[2rem] p-7 shadow-sm border flex flex-col cursor-pointer active:scale-[0.98] transition-all hover:border-indigo-500/50 group`}
+                  className={`${
+                    isDarkMode
+                      ? 'bg-[#1E293B] border-[#334155] hover:border-red-500/60 hover:bg-red-950/20'
+                      : 'bg-white border-slate-100 hover:border-red-300 hover:shadow-red-500/5'
+                  } rounded-2xl p-4 shadow-sm border flex items-center justify-between cursor-pointer transition-all hover:shadow-md group`}
                 >
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className={`w-16 h-16 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-50'} rounded-[1.5rem] flex items-center justify-center group-hover:bg-indigo-500/10 transition-colors shrink-0`}>
-                      <BookOpen className={`w-8 h-8 ${isDarkMode ? 'text-slate-500' : 'text-slate-300'} group-hover:text-indigo-500`} />
+                  <div className="flex items-center gap-4 min-w-0">
+                    <div className={`w-12 h-12 ${isDarkMode ? 'bg-red-950/40 text-red-400 group-hover:bg-red-900/50' : 'bg-red-50 text-red-500 group-hover:bg-red-100'} rounded-2xl flex items-center justify-center shrink-0 transition-colors`}>
+                      <BookOpen className="w-6 h-6" />
                     </div>
-                    <div className="truncate flex-1">
-                      <h4 className="font-bold text-xl leading-tight truncate">{subject.subjectName}</h4>
+                    <div className="min-w-0">
+                      <h4 className={`font-bold text-base leading-snug truncate ${isDarkMode ? 'text-slate-100' : 'text-slate-800'} group-hover:text-red-500 transition-colors`}>
+                        {subject.subjectName}
+                      </h4>
+                      <p className={`text-xs font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-500'} mt-0.5`}>
+                        ห้อง {subject.classroom} • ครู {subject.teacherName || '-'}
+                      </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`text-sm font-bold ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>ห้อง {subject.classroom}</span>
-                    <span className={`text-sm font-bold ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>ครู {subject.teacherName}</span>
+                  <div className={`p-2 rounded-xl ${isDarkMode ? 'bg-slate-800 text-slate-400 group-hover:text-red-400' : 'bg-slate-50 text-slate-400 group-hover:text-red-500'} transition-colors shrink-0 ml-3`}>
+                    <ChevronRight className="w-5 h-5" />
                   </div>
                 </motion.div>
               ))}
@@ -329,54 +374,56 @@ export default function StudentSubjectsPage() {
             {/* Subject Header */}
             <div className={`animate-water ${mainCardGradient} rounded-[2.5rem] p-10 text-white shadow-2xl relative overflow-hidden`}>
               <div className="relative z-10">
-                <p className="text-[10px] font-bold mb-2 opacity-80 uppercase tracking-widest text-indigo-100">SUBJECT INFORMATION</p>
+                <p className="text-[10px] font-bold mb-2 opacity-80 uppercase tracking-widest text-red-100">SUBJECT INFORMATION</p>
                 <h2 className="text-3xl font-bold mb-4 leading-tight">{selectedSubject.subjectName}</h2>
-                <div className="flex flex-wrap gap-3">
-                  <span className="bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl text-sm font-bold border border-white/10">ห้อง {selectedSubject.classroom}</span>
-                  <span className="bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl text-sm font-bold border border-white/10">ครู {selectedSubject.teacherName}</span>
-                  {selectedSubject.schedules && selectedSubject.schedules.length > 0 ? (
-                    selectedSubject.schedules.map((schedule, idx) => (
-                      <span key={idx} className="bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl text-sm font-bold border border-white/10">{schedule.day} {schedule.time}</span>
-                    ))
-                  ) : (
-                    <>
-                      <span className="bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl text-sm font-bold border border-white/10">{selectedSubject.day}</span>
-                      <span className="bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl text-sm font-bold border border-white/10">{selectedSubject.time}</span>
-                    </>
-                  )}
+                <div className="w-full overflow-x-auto no-scrollbar pause-marquee relative">
+                  <div className="animate-marquee gap-3 whitespace-nowrap min-w-min flex pr-8">
+                    <span className="bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl text-sm font-bold border border-white/10 shrink-0">รหัส {selectedSubject.subjectId}</span>
+                    <span className="bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl text-sm font-bold border border-white/10 shrink-0">ห้อง {selectedSubject.classroom}</span>
+                    <span className="bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl text-sm font-bold border border-white/10 shrink-0">ครู {selectedSubject.teacherName}</span>
+                    {selectedSubject.schedules && selectedSubject.schedules.length > 0 ? (
+                      selectedSubject.schedules.map((schedule, idx) => (
+                        <span key={idx} className="bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl text-sm font-bold border border-white/10 shrink-0">{schedule.day} {schedule.time}</span>
+                      ))
+                    ) : (
+                      <>
+                        <span className="bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl text-sm font-bold border border-white/10 shrink-0">{selectedSubject.day}</span>
+                        <span className="bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl text-sm font-bold border border-white/10 shrink-0">{selectedSubject.time}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
               <Sparkles className="absolute top-6 right-6 w-16 h-16 text-white/10" />
             </div>
 
-            {/* View Mode Toggle */}
-            <div className="flex gap-2">
-              <button
-                onClick={() => setViewMode('grades')}
-                className={`flex-1 p-4 rounded-2xl font-bold transition-all ${
-                  viewMode === 'grades'
-                    ? 'bg-indigo-600 text-white'
-                    : (isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-600')
-                }`}
-              >
-                <Trophy className="w-5 h-5 mx-auto mb-1" />
-                คะแนน
-              </button>
-              <button
-                onClick={() => setViewMode('attendance')}
-                className={`flex-1 p-4 rounded-2xl font-bold transition-all ${
-                  viewMode === 'attendance'
-                    ? 'bg-indigo-600 text-white'
-                    : (isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-600')
-                }`}
-              >
-                <Clock className="w-5 h-5 mx-auto mb-1" />
-                เวลาเรียน
-              </button>
-            </div>
+            <div className="space-y-3">
+              {/* View Mode Toggle */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setViewMode('grades')}
+                  className={`flex-1 p-3 rounded-2xl font-bold transition-all flex justify-center items-center ${
+                    viewMode === 'grades'
+                      ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
+                      : (isDarkMode ? 'bg-slate-800 text-slate-400 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')
+                  }`}
+                >
+                  <Trophy className="w-6 h-6" />
+                </button>
+                <button
+                  onClick={() => setViewMode('attendance')}
+                  className={`flex-1 p-3 rounded-2xl font-bold transition-all flex justify-center items-center ${
+                    viewMode === 'attendance'
+                      ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
+                      : (isDarkMode ? 'bg-slate-800 text-slate-400 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')
+                  }`}
+                >
+                  <Clock className="w-6 h-6" />
+                </button>
+              </div>
 
-            {/* Grades View */}
-            {viewMode === 'grades' && selectedGrade && (
+              {/* Grades View */}
+              {viewMode === 'grades' && selectedGrade && (
               <div className="space-y-6">
                 <div className={`animate-water ${mainCardGradient} rounded-[3.5rem] p-10 text-white relative overflow-hidden shadow-[0_30px_60px_-10px_rgba(0,0,0,0.4)] border border-white/5`}>
                   <div className="relative z-10 flex flex-col items-center text-center py-2">
@@ -558,12 +605,14 @@ export default function StudentSubjectsPage() {
               </div>
             )}
 
-            {!selectedAttendance && viewMode === 'attendance' && (
-              <div className={`${isDarkMode ? 'bg-[#1E293B] border-[#334155]' : 'bg-white border-slate-100'} border rounded-[2rem] p-10 text-center`}>
-                <Clock className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <p className={`text-lg font-bold ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>ไม่มีข้อมูลเวลาเรียน</p>
-              </div>
-            )}
+              {/* Empty Attendance */}
+              {!selectedAttendance && viewMode === 'attendance' && (
+                <div className={`${isDarkMode ? 'bg-[#1E293B] border-[#334155]' : 'bg-white border-slate-100'} border rounded-[2rem] p-10 text-center`}>
+                  <Clock className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <p className={`text-lg font-bold ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>ไม่มีข้อมูลเวลาเรียน</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </main>
