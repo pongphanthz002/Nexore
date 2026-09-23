@@ -13,6 +13,7 @@ import {
   FileDown, Download, X, Calendar 
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import GoogleSheetsIcon from '@/components/GoogleSheetsIcon';
 
 // Parse "08:30-09:30" → { startMinutes, endMinutes }
 function parseTimeRange(time: string): { startMinutes: number; endMinutes: number } | null {
@@ -772,21 +773,21 @@ function SchedulesContent() {
                 </div>
                 <div className="flex items-center gap-2">
                   <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
+                    whileHover={{ scale: 1.08 }}
+                    whileTap={{ scale: 0.92 }}
                     onClick={() => {
                       setSelectedSubjectsForDownload(allUniqueSubjects.map(s => `${s.subjectName}|||${s.classroom}`));
                       setShowDownloadModal(true);
                     }}
                     disabled={allUniqueSubjects.length === 0}
-                    className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-sm font-bold shadow-xl transition-all ${
+                    title="ดาวน์โหลด Excel (Google Sheets)"
+                    className={`p-3 rounded-2xl border transition-all flex items-center justify-center shadow-sm hover:shadow-md ${
                       isDark 
-                        ? 'bg-emerald-600 text-white shadow-emerald-900/20 hover:bg-emerald-500' 
-                        : 'bg-emerald-500 text-white shadow-emerald-500/20 hover:bg-emerald-600'
-                    } disabled:opacity-50`}
+                        ? 'bg-gray-800 border-gray-700 hover:bg-gray-700/80 hover:border-emerald-500/50 text-white' 
+                        : 'bg-white border-gray-200 hover:bg-gray-50 hover:border-emerald-400 text-gray-800'
+                    } disabled:opacity-40 disabled:cursor-not-allowed`}
                   >
-                    <FileDown size={18} />
-                    ดาวน์โหลด
+                    <GoogleSheetsIcon size={24} />
                   </motion.button>
                 </div>
               </div>
@@ -800,7 +801,11 @@ function SchedulesContent() {
                         whileHover={{ scale: 1.01, y: -2 }}
                         whileTap={{ scale: 0.99 }}
                         onClick={() => handleSelectSubject(subject, 'all')}
-                        className={`p-4 rounded-xl cursor-pointer ${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'} transition-colors`}
+                        className={`p-4 rounded-xl cursor-pointer transition-all border-2 ${
+                          isDark 
+                            ? 'bg-gray-800 border-gray-700 hover:border-red-500/50 hover:bg-gray-750' 
+                            : 'bg-gray-50 border-gray-100 hover:border-red-200 hover:bg-white hover:shadow-lg hover:shadow-red-500/5'
+                        }`}
                       >
                         <div className="flex items-center justify-between">
                           <div>
@@ -820,7 +825,7 @@ function SchedulesContent() {
                                 handleSelectSubject(subject, 'all');
                                 handleOpenAttendance(subject);
                               }}
-                              className={`p-2 rounded-xl ${isDark ? 'bg-green-600/20 text-green-400' : 'bg-green-100 text-green-700'}`}
+                              className={`p-2 rounded-xl ${isDark ? 'bg-red-950/30 text-red-400' : 'bg-red-50 text-red-600'}`}
                             >
                               <ClipboardList size={20} />
                             </motion.button>
@@ -854,8 +859,8 @@ function SchedulesContent() {
                     >
                       <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-2">
-                          <div className={`p-2 rounded-xl ${isDark ? 'bg-blue-900/30' : 'bg-blue-50'}`}>
-                            <Download className="text-blue-500" size={24} />
+                          <div className={`p-2 rounded-xl ${isDark ? 'bg-emerald-950/40' : 'bg-emerald-50'}`}>
+                            <GoogleSheetsIcon size={24} />
                           </div>
                           <h3 className="text-xl font-bold">ดาวน์โหลดรายงานเช็คชื่อ</h3>
                         </div>
@@ -880,7 +885,7 @@ function SchedulesContent() {
                                   key={key}
                                   className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
                                     isSelected 
-                                      ? (isDark ? 'bg-blue-600/20 text-blue-400' : 'bg-blue-50 text-blue-600') 
+                                      ? (isDark ? 'bg-red-950/30 text-red-400' : 'bg-red-50 text-red-600') 
                                       : (isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-100')
                                   }`}
                                 >
@@ -894,7 +899,7 @@ function SchedulesContent() {
                                         setSelectedSubjectsForDownload(prev => prev.filter(k => k !== key));
                                       }
                                     }}
-                                    className="w-5 h-5 rounded-lg border-2 border-gray-400 text-blue-600 focus:ring-blue-500"
+                                    className="w-5 h-5 rounded-lg border-2 border-gray-400 text-red-600 focus:ring-red-500"
                                   />
                                   <div className="flex-1">
                                     <div className="font-bold">{subject.subjectName}</div>
@@ -914,7 +919,7 @@ function SchedulesContent() {
                               onClick={() => setDownloadRange('term')}
                               className={`p-3 rounded-2xl border-2 font-bold transition-all ${
                                 downloadRange === 'term'
-                                  ? 'border-blue-500 bg-blue-500/10 text-blue-500'
+                                  ? 'border-red-500 bg-red-500/10 text-red-500'
                                   : (isDark ? 'border-gray-700 bg-gray-900/30' : 'border-gray-200 bg-gray-50')
                               }`}
                             >
@@ -924,7 +929,7 @@ function SchedulesContent() {
                               onClick={() => setDownloadRange('month')}
                               className={`p-3 rounded-2xl border-2 font-bold transition-all ${
                                 downloadRange === 'month'
-                                  ? 'border-blue-500 bg-blue-500/10 text-blue-500'
+                                  ? 'border-red-500 bg-red-500/10 text-red-500'
                                   : (isDark ? 'border-gray-700 bg-gray-900/30' : 'border-gray-200 bg-gray-50')
                               }`}
                             >
@@ -972,13 +977,13 @@ function SchedulesContent() {
                             className={`w-full py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg ${
                               isDownloading || selectedSubjectsForDownload.length === 0
                                 ? 'bg-gray-500 cursor-not-allowed'
-                                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200'
+                                : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-900/20'
                             }`}
                           >
                             {isDownloading ? (
                               <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin" />
                             ) : (
-                              <FileDown size={22} />
+                              <GoogleSheetsIcon size={22} />
                             )}
                             {isDownloading ? 'กำลังสร้างไฟล์...' : 'ดาวน์โหลด Excel'}
                           </button>
@@ -1061,7 +1066,7 @@ function SchedulesContent() {
                     whileTap={{ scale: 0.95 }}
                     onClick={handleSaveAttendance}
                     disabled={loadingAttendance}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium ${loadingAttendance ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${isDark ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white'}`}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium shadow-md ${loadingAttendance ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${isDark ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-900/20' : 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/20'}`}
                   >
                     <Save size={18} />
                     บันทึก
@@ -1162,7 +1167,7 @@ function SchedulesContent() {
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.9 }}
                     onClick={() => handleOpenAttendance()}
-                    className={`p-2 rounded-xl ${isDark ? 'bg-blue-600 text-white' : 'bg-blue-500 text-white'}`}
+                    className={`p-2 rounded-xl shadow-md ${isDark ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-900/20' : 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/20'}`}
                   >
                     <ClipboardList size={24} />
                   </motion.button>

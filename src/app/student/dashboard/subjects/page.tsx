@@ -85,6 +85,12 @@ const DetailModal = ({ item, onClose, isDark }: { item: any, onClose: () => void
           <div className={`p-6 rounded-2xl ${isDark ? 'bg-slate-800/50' : 'bg-slate-50'} border ${isDark ? 'border-slate-700' : 'border-slate-200'} mb-6`}>
             <p className={`text-lg font-medium leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{item.description || 'ไม่มีข้อมูลรายละเอียดเพิ่มเติม'}</p>
           </div>
+          {item.deadline && (
+            <div className={`flex items-center gap-2 mb-6 px-1`}>
+              <Clock className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+              <p className={`text-sm font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>กำหนดส่ง: {item.deadline}</p>
+            </div>
+          )}
           <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
             <div>
               <p className="text-xs font-bold text-slate-400 uppercase mb-1">Score</p>
@@ -116,7 +122,7 @@ export default function StudentSubjectsPage() {
   const [error, setError] = useState<string | null>(null);
   const [expandedChapters, setExpandedChapters] = useState<Record<string, boolean>>({});
   const [detailModalItem, setDetailModalItem] = useState<any>(null);
-  const [viewMode, setViewMode] = useState<'list' | 'grades' | 'attendance'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'grades' | 'attendance'>('grades');
 
   const toggleTheme = () => {
     setIsDarkMode(!isDarkMode);
@@ -194,6 +200,7 @@ export default function StudentSubjectsPage() {
         const matchingAttendance = attendanceData.find(a => a.subjectId === subjectsData[0].subjectId);
         setSelectedGrade(matchingGrade || null);
         setSelectedAttendance(matchingAttendance || null);
+        setViewMode('grades');
       }
 
       setError(null);
@@ -218,6 +225,7 @@ export default function StudentSubjectsPage() {
     const matchingAttendance = attendance.find(a => a.subjectId === subject.subjectId);
     setSelectedGrade(matchingGrade || null);
     setSelectedAttendance(matchingAttendance || null);
+    setViewMode('grades');
   };
 
   const getRiskInfo = (percStr: string) => {
@@ -332,16 +340,13 @@ export default function StudentSubjectsPage() {
                   } rounded-2xl p-4 shadow-sm border flex items-center justify-between cursor-pointer transition-all hover:shadow-md group`}
                 >
                   <div className="flex items-center gap-4 min-w-0">
-                    <div className={`w-12 h-12 ${isDarkMode ? 'bg-red-950/40 text-red-400 group-hover:bg-red-900/50' : 'bg-red-50 text-red-500 group-hover:bg-red-100'} rounded-2xl flex items-center justify-center shrink-0 transition-colors`}>
-                      <BookOpen className="w-6 h-6" />
+                    <div className={`w-14 h-14 ${isDarkMode ? 'bg-red-950/40 text-red-400 group-hover:bg-red-900/50' : 'bg-red-50 text-red-500 group-hover:bg-red-100'} rounded-2xl flex items-center justify-center shrink-0 transition-colors`}>
+                      <BookOpen className="w-7 h-7" />
                     </div>
                     <div className="min-w-0">
-                      <h4 className={`font-bold text-base leading-snug truncate ${isDarkMode ? 'text-slate-100' : 'text-slate-800'} group-hover:text-red-500 transition-colors`}>
+                      <h4 className={`font-bold text-lg md:text-xl leading-snug truncate ${isDarkMode ? 'text-slate-100' : 'text-slate-800'} group-hover:text-red-500 transition-colors`}>
                         {subject.subjectName}
                       </h4>
-                      <p className={`text-xs font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-500'} mt-0.5`}>
-                        ห้อง {subject.classroom} • ครู {subject.teacherName || '-'}
-                      </p>
                     </div>
                   </div>
                   <div className={`p-2 rounded-xl ${isDarkMode ? 'bg-slate-800 text-slate-400 group-hover:text-red-400' : 'bg-slate-50 text-slate-400 group-hover:text-red-500'} transition-colors shrink-0 ml-3`}>
@@ -378,7 +383,6 @@ export default function StudentSubjectsPage() {
                 <h2 className="text-3xl font-bold mb-4 leading-tight">{selectedSubject.subjectName}</h2>
                 <div className="w-full overflow-x-auto no-scrollbar pause-marquee relative">
                   <div className="animate-marquee gap-3 whitespace-nowrap min-w-min flex pr-8">
-                    <span className="bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl text-sm font-bold border border-white/10 shrink-0">รหัส {selectedSubject.subjectId}</span>
                     <span className="bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl text-sm font-bold border border-white/10 shrink-0">ห้อง {selectedSubject.classroom}</span>
                     <span className="bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl text-sm font-bold border border-white/10 shrink-0">ครู {selectedSubject.teacherName}</span>
                     {selectedSubject.schedules && selectedSubject.schedules.length > 0 ? (
@@ -448,17 +452,19 @@ export default function StudentSubjectsPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {[
-                    { label: 'คะแนนเก็บ', val: selectedGrade.collectedScore, icon: Layers, bg: isDarkMode ? 'bg-blue-500/10' : 'bg-blue-50/70', text: 'text-blue-500', border: isDarkMode ? 'border-blue-500/20' : 'border-blue-100' },
-                    { label: 'กลางภาค', val: selectedGrade.midtermScore, icon: Target, bg: isDarkMode ? 'bg-indigo-500/10' : 'bg-indigo-50/70', text: 'text-indigo-500', border: isDarkMode ? 'border-indigo-500/20' : 'border-indigo-100' },
-                    { label: 'ปลายภาค', val: selectedGrade.finalScore, icon: GraduationCap, bg: isDarkMode ? 'bg-violet-500/10' : 'bg-violet-50/70', text: 'text-violet-500', border: isDarkMode ? 'border-indigo-500/20' : 'border-indigo-100' }
-                  ].map((item, i) => (
-                    <div key={i} className={`${item.bg} p-6 rounded-[2rem] border ${item.border} text-center shadow-sm`}>
-                      <p className={`text-3xl font-black ${item.text}`}><CountUp value={item.val} duration={1} /></p>
-                      <p className={`text-[10px] font-bold ${item.text} uppercase mt-2 opacity-70 leading-tight`}>{item.label}</p>
-                    </div>
-                  ))}
+                <div className={`${isDarkMode ? 'bg-[#1E293B] border-[#334155]' : 'bg-white border-slate-100'} border rounded-[2rem] p-6 shadow-sm`}>
+                  <div className="grid grid-cols-3 gap-4">
+                    {[
+                      { label: 'คะแนนเก็บ', val: selectedGrade.collectedScore, icon: Layers, text: 'text-blue-500' },
+                      { label: 'กลางภาค', val: selectedGrade.midtermScore, icon: Target, text: 'text-indigo-500' },
+                      { label: 'ปลายภาค', val: selectedGrade.finalScore, icon: GraduationCap, text: 'text-violet-500' }
+                    ].map((item, i) => (
+                      <div key={i} className="text-center">
+                        <p className={`text-3xl font-black ${item.text}`}><CountUp value={item.val} duration={1} /></p>
+                        <p className={`text-[10px] font-bold ${item.text} uppercase mt-2 opacity-70 leading-tight`}>{item.label}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="pt-2 space-y-3">
@@ -477,9 +483,12 @@ export default function StudentSubjectsPage() {
                       }`}
                     >
                       <div className="flex-1 pr-4 min-w-0">
-                        <p className={`font-bold text-xl leading-tight truncate ${item.score === "" ? 'text-red-600 mb-2' : (isDarkMode ? 'text-slate-200' : 'text-slate-700')}`}>{item.label}</p>
+                        <p className={`font-bold text-xl leading-tight truncate ${item.score === "" ? 'text-red-600' : (isDarkMode ? 'text-slate-200' : 'text-slate-700')}`}>{item.label}</p>
                         {item.score === "" && item.description && (
-                          <p className="text-sm font-bold leading-relaxed italic text-red-500/80">{item.description}</p>
+                          <p className="text-sm font-bold leading-relaxed italic text-red-500/80 mt-1">{item.description}</p>
+                        )}
+                        {item.deadline && (
+                          <p className={`text-xs font-semibold mt-1.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>กำหนดส่ง: {item.deadline}</p>
                         )}
                       </div>
                       <div className="shrink-0 flex items-center gap-1">

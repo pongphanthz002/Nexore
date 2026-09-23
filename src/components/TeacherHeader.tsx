@@ -125,7 +125,7 @@ const TeacherHeader = ({ isDark, toggleTheme }: TeacherHeaderProps) => {
                 whileTap={{ scale: 0.98 }}
                 transition={{ type: "spring", stiffness: 400, damping: 25 }}
                 onClick={confirmSwitchRole}
-                className="flex-1 bg-blue-500 text-white py-3 rounded-xl"
+                className="flex-1 bg-red-500 text-white py-3 rounded-xl shadow-md shadow-red-500/20"
               >
                 ยืนยัน
               </motion.button>

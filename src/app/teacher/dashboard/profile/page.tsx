@@ -322,7 +322,7 @@ export default function ProfilePage() {
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={handleLinkTeacher}
-                      className="w-full mt-2 p-2 rounded-lg bg-blue-500 text-white text-sm"
+                      className="w-full mt-2 p-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm shadow-md shadow-red-500/20 transition-all"
                     >
                       ยืนยันการผูกข้อมูล
                     </motion.button>
@@ -347,7 +347,7 @@ export default function ProfilePage() {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={handleSave}
-                  className="flex-1 p-3 rounded-xl bg-blue-500 text-white flex items-center justify-center gap-2"
+                  className="flex-1 p-3 rounded-xl bg-red-500 hover:bg-red-600 text-white flex items-center justify-center gap-2 shadow-md shadow-red-500/20 transition-all"
                 >
                   <Save size={20} />
                   บันทึก
@@ -379,7 +379,7 @@ export default function ProfilePage() {
               <div className="flex items-center justify-between">
                 <p className="text-gray-800 dark:text-white">
                   <span className="text-purple-600 dark:text-purple-400">School ID: </span>
-                  <span className="text-blue-600 dark:text-blue-400">{userAccount.schoolId}</span>
+                  <span className="text-red-500 dark:text-red-400">{userAccount.schoolId}</span>
                 </p>
                 <motion.button
                   whileHover={{ scale: 1.1 }}
@@ -462,7 +462,7 @@ export default function ProfilePage() {
                   whileTap={{ scale: 0.98 }}
                   onClick={confirmLinkTeacher}
                   disabled={linkLoading}
-                  className="flex-1 bg-blue-500 text-white py-3 rounded-xl flex items-center justify-center gap-2"
+                  className="flex-1 bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 shadow-md shadow-red-500/20 transition-all"
                 >
                   {linkLoading && <Loader2 size={16} className="animate-spin" />}
                   ยืนยัน

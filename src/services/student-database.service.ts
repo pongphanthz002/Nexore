@@ -416,6 +416,7 @@ class StudentDatabaseService {
       score: scoreData.assignmentScores[assignment.id]?.toString() || '',
       max: assignment.maxScore.toString(),
       description: assignment.description,
+      deadline: assignment.deadline || null,
     }));
   }
 
@@ -520,6 +521,95 @@ class StudentDatabaseService {
       maxStreak: 0, // TODO: Calculate max streak
       absentByDay,
     };
+  }
+  /**
+   * Get student's pending (unsent) assignments from all teacher databases
+   * Returns assignments that the student hasn't submitted yet, sorted by deadline
+   */
+  async getStudentPendingAssignments(
+    schoolFirebaseConfig: any,
+    studentData: StudentData
+  ): Promise<{
+    subjectId: string;
+    subjectName: string;
+    assignmentTitle: string;
+    deadline: string;
+    maxScore: number;
+    teacherName: string;
+  }[]> {
+    const pending: {
+      subjectId: string;
+      subjectName: string;
+      assignmentTitle: string;
+      deadline: string;
+      maxScore: number;
+      teacherName: string;
+    }[] = [];
+
+    try {
+      const subjects = await this.getStudentSubjects(schoolFirebaseConfig, studentData);
+      const teacherIds = Array.from(new Set(subjects.map(s => s.teacherId)));
+      const teachers = await schoolDatabaseService.getAllTeachersOptimized(schoolFirebaseConfig);
+      const studentTeachers = teachers.filter(t => teacherIds.includes(t.teacherId));
+
+      for (const teacher of studentTeachers) {
+        try {
+          const firebaseConfig = teacher.firebaseConfig || schoolFirebaseConfig;
+          if (!firebaseConfig) continue;
+
+          const teacherDB = this.getTeacherDB(firebaseConfig);
+          const teacherSubjects = subjects.filter(s => s.teacherId === teacher.teacherId);
+
+          for (const subject of teacherSubjects) {
+            // Get assignments for this subject
+            const assignmentsQuery = query(
+              collection(teacherDB, 'assignments'),
+              where('isVisible', '==', true),
+              where('subjectId', '==', subject.subjectId)
+            );
+            const assignmentsSnap = await getDocs(assignmentsQuery);
+            const assignments = assignmentsSnap.docs.map(d => d.data() as import('./teacher-database.service').Assignment);
+
+            // Get student's scores for this subject
+            const scoresQuery = query(
+              collection(teacherDB, 'studentScores'),
+              where('studentId', '==', studentData.studentId),
+              where('subjectId', '==', subject.subjectId)
+            );
+            const scoresSnap = await getDocs(scoresQuery);
+            const scoreData = scoresSnap.docs.length > 0 ? scoresSnap.docs[0].data() as import('./teacher-database.service').StudentScore : null;
+
+            for (const assignment of assignments) {
+              const hasScore = scoreData?.assignmentScores?.[assignment.id];
+              if (!hasScore && hasScore !== 0) {
+                pending.push({
+                  subjectId: subject.subjectId,
+                  subjectName: subject.subjectName,
+                  assignmentTitle: assignment.title,
+                  deadline: assignment.deadline || '',
+                  maxScore: assignment.maxScore,
+                  teacherName: subject.teacherName,
+                });
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`Error fetching pending assignments from teacher ${teacher.teacherId}:`, error);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching pending assignments:', error);
+    }
+
+    // Sort by deadline (closest first), items without deadline go to the end
+    pending.sort((a, b) => {
+      if (!a.deadline && !b.deadline) return 0;
+      if (!a.deadline) return 1;
+      if (!b.deadline) return -1;
+      return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+    });
+
+    return pending;
   }
 }
 

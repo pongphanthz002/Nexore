@@ -17,6 +17,7 @@ import {
   Eye, EyeOff, MoreVertical, GraduationCap, Target, Layers, Sparkles
 } from 'lucide-react';
 import { animate } from 'framer-motion';
+import GoogleSheetsIcon from '@/components/GoogleSheetsIcon';
 
 // --- CountUp Component ---
 const CountUp = ({ value, duration = 1.0 }: { value: string | number, duration?: number }) => {
@@ -820,18 +821,18 @@ export default function GradesPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
+                    whileHover={{ scale: 1.08 }}
+                    whileTap={{ scale: 0.92 }}
                     onClick={() => setShowDownloadModal(true)}
                     disabled={subjects.length === 0}
-                    className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-sm font-bold shadow-xl transition-all ${
+                    title="ดาวน์โหลด Excel (Google Sheets)"
+                    className={`p-3 rounded-2xl border transition-all flex items-center justify-center shadow-sm hover:shadow-md ${
                       isDark 
-                        ? 'bg-emerald-600 text-white shadow-emerald-900/20 hover:bg-emerald-500' 
-                        : 'bg-emerald-500 text-white shadow-emerald-500/20 hover:bg-emerald-600'
-                    } disabled:opacity-50`}
+                        ? 'bg-gray-800 border-gray-700 hover:bg-gray-700/80 hover:border-emerald-500/50 text-white' 
+                        : 'bg-white border-gray-200 hover:bg-gray-50 hover:border-emerald-400 text-gray-800'
+                    } disabled:opacity-40 disabled:cursor-not-allowed`}
                   >
-                    <FileDown size={18} />
-                    ดาวน์โหลด
+                    <GoogleSheetsIcon size={24} />
                   </motion.button>
                 </div>
               </div>
@@ -847,14 +848,14 @@ export default function GradesPage() {
                         onClick={() => handleSelectSubject(subject)}
                         className={`p-4 rounded-xl cursor-pointer transition-all border-2 ${
                           isDark 
-                            ? 'bg-gray-800 border-gray-700 hover:border-blue-500/50 hover:bg-gray-750' 
-                            : 'bg-gray-50 border-gray-100 hover:border-blue-200 hover:bg-white hover:shadow-lg hover:shadow-blue-500/5'
+                            ? 'bg-gray-800 border-gray-700 hover:border-red-500/50 hover:bg-gray-750' 
+                            : 'bg-gray-50 border-gray-100 hover:border-red-200 hover:bg-white hover:shadow-lg hover:shadow-red-500/5'
                         }`}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4">
                             <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                              isDark ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-50 text-blue-600'
+                              isDark ? 'bg-red-950/30 text-red-400' : 'bg-red-50 text-red-600'
                             }`}>
                               <ClipboardList size={24} />
                             </div>
@@ -992,7 +993,7 @@ export default function GradesPage() {
                           setEditingAssignment(null);
                           setShowAssignmentModal(true);
                         }}
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-500/20"
+                        className="flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-red-500/20 transition-all"
                       >
                         <Plus size={18} />
                         เพิ่มชิ้นงาน
@@ -1436,7 +1437,7 @@ export default function GradesPage() {
                     {editingAssignment && (
                       <button type="button" onClick={() => handleDeleteAssignment(editingAssignment.id)} className="h-14 flex-1 rounded-2xl bg-red-500/10 text-red-500 font-bold hover:bg-red-500/20 transition-all">ลบชิ้นงาน</button>
                     )}
-                    <button type="submit" className="h-14 flex-[2] rounded-2xl bg-blue-600 text-white font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20">บันทึกข้อมูล</button>
+                    <button type="submit" className="h-14 flex-[2] rounded-2xl bg-red-500 text-white font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-500/20">บันทึกข้อมูล</button>
                   </div>
                 </form>
               </motion.div>
@@ -1690,7 +1691,7 @@ export default function GradesPage() {
                     onClick={() => handleSaveGradeConfig(gradeConfig)}
                     className={`w-full h-16 rounded-2xl font-black text-lg transition-all shadow-lg flex items-center justify-center gap-2 ${
                       (gradeConfig.proportions.collected + gradeConfig.proportions.midterm + gradeConfig.proportions.final) === 100
-                        ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/20'
+                        ? 'bg-red-500 text-white hover:bg-red-600 shadow-red-500/20'
                         : 'bg-gray-500 text-white cursor-not-allowed opacity-50'
                     }`}
                   >

@@ -8,38 +8,24 @@ import { studentDatabaseService } from '@/services/student-database.service';
 import StudentHeader from '@/components/StudentHeader';
 import StudentFooter from '@/components/StudentFooter';
 import {
-  BookOpen, Sparkles, User, GraduationCap, Mail, Award
+  BookOpen, Sparkles, User, GraduationCap, Mail, 
+  Award, ShieldCheck, Hash, Layers, CheckCircle2
 } from 'lucide-react';
 
-// Collage Art loading
-function CollageSkeleton({ isDark }: { isDark: boolean }) {
-  const colors = [
-    'bg-red-500/20', 'bg-rose-500/20', 'bg-red-400/20',
-    'bg-rose-600/20', 'bg-red-600/20',
-  ];
+// Loading skeleton
+function ProfileSkeleton({ isDark }: { isDark: boolean }) {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 gap-6">
-      <div className="relative w-40 h-40">
-        {[...Array(5)].map((_, i) => (
+      <div className="relative w-36 h-36">
+        {[0, 1, 2].map((i) => (
           <motion.div
             key={i}
-            className={`absolute ${colors[i]} rounded-[30%] backdrop-blur-sm border border-white/10`}
-            style={{
-              width: 60 + i * 14,
-              height: 60 + i * 14,
-              top: '50%',
-              left: '50%',
-            }}
-            animate={{
-              rotate: [0, 360],
-              x: '-50%',
-              y: '-50%',
-            }}
-            transition={{
-              rotate: { duration: 3 + i, repeat: Infinity, ease: 'linear' },
-              x: { duration: 0 },
-              y: { duration: 0 },
-            }}
+            className={`absolute inset-0 rounded-full border-2 ${
+              i === 0 ? 'border-red-500/60' : i === 1 ? 'border-rose-400/40' : 'border-red-300/30'
+            }`}
+            style={{ margin: i * 12 }}
+            animate={{ rotate: i % 2 === 0 ? 360 : -360 }}
+            transition={{ duration: 2.5 + i, repeat: Infinity, ease: 'linear' }}
           />
         ))}
         <div className="absolute inset-0 flex items-center justify-center">
@@ -52,10 +38,10 @@ function CollageSkeleton({ isDark }: { isDark: boolean }) {
           animate={{ opacity: [0.5, 1, 0.5] }}
           transition={{ duration: 2, repeat: Infinity }}
         >
-          Loading Profile
+          กำลังโหลดโปรไฟล์
         </motion.p>
-        <div className="flex gap-1 justify-center">
-          {[0,1,2].map(i => (
+        <div className="flex gap-1.5 justify-center">
+          {[0, 1, 2].map((i) => (
             <motion.div
               key={i}
               className="w-2 h-2 rounded-full bg-red-500"
@@ -131,7 +117,7 @@ export default function StudentProfilePage() {
     return (
       <div className={`min-h-screen ${isDarkMode ? 'bg-[#0F172A]' : 'bg-[#F8FAFC]'} font-sans`}>
         <StudentHeader isDark={isDarkMode} toggleTheme={toggleTheme} />
-        <CollageSkeleton isDark={isDarkMode} />
+        <ProfileSkeleton isDark={isDarkMode} />
         <StudentFooter isDark={isDarkMode} />
       </div>
     );
@@ -139,133 +125,166 @@ export default function StudentProfilePage() {
 
   const darkClass = isDarkMode ? 'dark bg-[#0F172A] text-slate-100' : 'bg-[#F8FAFC] text-slate-900';
 
-  // Collage art colours - Red White minimal theme
-  const swatches = [
-    { label: 'Classroom', value: `ห้อง ${studentInfo?.class || '-'}`, sub: `เลขที่ ${studentInfo?.number || '-'}`, icon: GraduationCap, rotate: '-rotate-2', bg: isDarkMode ? 'bg-red-950/60 border-red-800' : 'bg-red-50 border-red-200', accent: isDarkMode ? 'text-red-300' : 'text-red-700' },
-    { label: 'Student ID', value: studentInfo?.studentId || '-', sub: null, icon: User, rotate: 'rotate-1', bg: isDarkMode ? 'bg-rose-950/60 border-rose-800' : 'bg-rose-50 border-rose-200', accent: isDarkMode ? 'text-rose-300' : 'text-rose-700' },
-    { label: 'Email', value: userAccount?.email || '-', sub: null, icon: Mail, rotate: '-rotate-1', bg: isDarkMode ? 'bg-slate-800/90 border-slate-700' : 'bg-white border-slate-200', accent: isDarkMode ? 'text-red-400' : 'text-red-600', truncate: true },
-    { label: 'Enrolled', value: `${subjectCount} วิชา`, sub: 'All Subjects', icon: BookOpen, rotate: 'rotate-2', bg: isDarkMode ? 'bg-red-900/50 border-red-700' : 'bg-red-100/70 border-red-300', accent: isDarkMode ? 'text-red-300' : 'text-red-800' },
-  ];
-
-  const mainGradient = isDarkMode
-    ? 'bg-gradient-to-br from-red-950 via-slate-900 to-red-950 border border-red-900/40'
+  const heroGradient = isDarkMode
+    ? 'bg-gradient-to-br from-red-950 via-slate-900 to-red-950 border border-red-900/30'
     : 'bg-gradient-to-br from-red-600 via-rose-600 to-red-700';
-
-  const container = {
-    hidden: {},
-    show: { transition: { staggerChildren: 0.08 } },
-  };
-  const cardAnim = {
-    hidden: { opacity: 0, y: 30, rotate: 0 },
-    show: { opacity: 1, y: 0 },
-  };
 
   return (
     <div className={`min-h-screen ${darkClass} font-sans transition-colors duration-300 overflow-x-hidden`}>
-      <style>{`
-        @keyframes water-flow { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
-        .animate-water { background-size: 200% 200%; animation: water-flow 8s ease infinite; }
-        @keyframes float-up { 0%,100% { transform: translateY(0px); } 50% { transform: translateY(-10px); } }
-        .animate-float { animation: float-up 4s ease-in-out infinite; }
-      `}</style>
-
       <StudentHeader isDark={isDarkMode} toggleTheme={toggleTheme} />
 
-      <main className="w-full px-4 pt-24 pb-28 max-w-lg mx-auto space-y-5">
+      <main className="w-full px-5 pt-28 pb-28 max-w-lg mx-auto space-y-6">
 
-        {/* Hero Collage Card */}
+        {/* --- 1. FIGMA-GRADE STUDENT ID CARD --- */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className={`animate-water ${mainGradient} rounded-[2.5rem] p-7 text-white shadow-2xl relative overflow-hidden`}
+          transition={{ duration: 0.4 }}
+          className={`${heroGradient} rounded-[2.5rem] p-7 text-white shadow-xl relative overflow-hidden`}
         >
-          {/* Decorative blobs */}
-          <div className="absolute top-0 right-0 w-48 h-48 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-          <div className="absolute bottom-0 left-0 w-32 h-32 bg-rose-400/10 rounded-full blur-2xl translate-y-1/2 -translate-x-1/2 pointer-events-none" />
-          
-          {/* Tape strip top */}
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 w-20 h-4 bg-white/15 backdrop-blur-sm rounded-full border border-white/20 shadow" />
+          {/* Subtle Ambient Glows */}
+          <div className="absolute top-0 right-0 w-44 h-44 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+          <div className="absolute bottom-0 left-0 w-36 h-36 bg-rose-400/20 rounded-full blur-2xl translate-y-1/2 -translate-x-1/2 pointer-events-none" />
 
-          <div className="relative z-10 pt-3">
-            {/* Avatar + badge */}
-            <div className="flex items-end gap-4 mb-6">
-              <motion.div
-                animate={{ y: [0, -6, 0] }}
-                transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-                className="w-24 h-24 bg-white/10 backdrop-blur-xl rounded-[1.8rem] border-2 border-white/20 flex items-center justify-center shadow-inner shrink-0"
-              >
-                <User className="w-12 h-12 text-white/80" />
-              </motion.div>
-              <div className="min-w-0 flex-1 pb-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <p className="text-[10px] font-black uppercase tracking-[0.25em] text-red-100">Active</p>
-                </div>
-                <h2 className="text-2xl font-black leading-tight break-words text-white drop-shadow">{studentInfo?.name || '-'}</h2>
-                <p className="text-xs font-bold text-white/50 mt-1 uppercase tracking-wider">Student Profile</p>
+          <div className="relative z-10">
+            {/* Header Badge & Chip */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="inline-flex items-center gap-2 bg-white/15 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/20">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-[11px] font-black uppercase tracking-widest text-white">STUDENT PASS</span>
               </div>
+              <Sparkles className="w-5 h-5 text-white/60" />
             </div>
 
-            {/* Stamp / sticker row */}
-            <div className="flex gap-2 flex-wrap">
-              <span className="bg-white/15 border border-white/20 px-3 py-1 rounded-full text-xs font-black backdrop-blur-sm">
-                <Award className="w-3 h-3 inline-block mr-1 mb-0.5" />
-                ห้อง {studentInfo?.class || '-'}
-              </span>
-              <span className="bg-white/15 border border-white/20 px-3 py-1 rounded-full text-xs font-black backdrop-blur-sm">
-                # {studentInfo?.number || '-'}
-              </span>
-              <span className="bg-white/15 border border-white/20 px-3 py-1 rounded-full text-xs font-black text-white backdrop-blur-sm">
-                {subjectCount} วิชา
-              </span>
+            {/* Profile Avatar + Name */}
+            <div className="flex items-center gap-4 mb-5">
+              <div className="w-20 h-20 bg-white/15 backdrop-blur-xl rounded-[1.8rem] border-2 border-white/30 flex items-center justify-center shadow-lg shrink-0">
+                <User className="w-10 h-10 text-white" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-2xl font-black leading-tight truncate text-white drop-shadow-sm">
+                  {studentInfo?.name || '-'}
+                </h2>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs font-bold text-white/70">รหัสประจำตัว:</span>
+                  <span className="text-xs font-extrabold bg-white/20 px-2.5 py-0.5 rounded-lg text-white">
+                    {studentInfo?.studentId || '-'}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         </motion.div>
 
-        {/* Collage Info Cards */}
+        {/* --- 2. QUICK STATS BAR (NO DUPLICATES) --- */}
         <motion.div
-          variants={container}
-          initial="hidden"
-          animate="show"
-          className="grid grid-cols-2 gap-3"
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1, duration: 0.4 }}
+          className={`${
+            isDarkMode ? 'bg-[#1E293B] border-[#334155]' : 'bg-white border-slate-100'
+          } border rounded-[2rem] p-4 shadow-sm grid grid-cols-3 divide-x ${
+            isDarkMode ? 'divide-slate-800' : 'divide-slate-100'
+          }`}
         >
-          {swatches.map((s, i) => {
-            const Icon = s.icon;
-            return (
-              <motion.div
-                key={s.label}
-                variants={cardAnim}
-                transition={{ type: 'spring', stiffness: 260, damping: 20 }}
-                className={`${s.bg} border-2 ${s.rotate} rounded-[1.8rem] p-5 shadow-lg relative overflow-hidden`}
-                style={{ transformOrigin: i % 2 === 0 ? 'top left' : 'top right' }}
-              >
-                {/* Corner tear effect */}
-                <div className="absolute bottom-0 right-0 w-8 h-8 bg-black/5 rounded-tl-2xl pointer-events-none" />
-                <div className="mb-3">
-                  <div className={`inline-flex p-2 rounded-xl ${isDarkMode ? 'bg-white/10' : 'bg-white/60'} mb-2`}>
-                    <Icon className={`w-5 h-5 ${s.accent}`} />
-                  </div>
-                  <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${s.accent} opacity-70`}>{s.label}</p>
-                </div>
-                {s.truncate ? (
-                  <p className={`text-sm font-bold leading-snug truncate ${isDarkMode ? 'text-white' : 'text-gray-900'}`} title={s.value}>{s.value}</p>
-                ) : (
-                  <p className={`text-lg font-black leading-snug ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{s.value}</p>
-                )}
-                {s.sub && (
-                  <p className={`text-xs font-bold mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{s.sub}</p>
-                )}
-              </motion.div>
-            );
-          })}
+          {/* Class */}
+          <div className="flex flex-col items-center text-center px-2 py-1">
+            <div className="w-8 h-8 rounded-xl bg-red-500/10 text-red-500 flex items-center justify-center mb-1.5">
+              <GraduationCap className="w-4 h-4" />
+            </div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ห้องเรียน</p>
+            <p className={`text-base font-black ${isDarkMode ? 'text-white' : 'text-slate-900'} mt-0.5`}>
+              {studentInfo?.class || '-'}
+            </p>
+          </div>
+
+          {/* Seat Number */}
+          <div className="flex flex-col items-center text-center px-2 py-1">
+            <div className="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center mb-1.5">
+              <Hash className="w-4 h-4" />
+            </div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">เลขที่</p>
+            <p className={`text-base font-black ${isDarkMode ? 'text-white' : 'text-slate-900'} mt-0.5`}>
+              {studentInfo?.number || '-'}
+            </p>
+          </div>
+
+          {/* Enrolled Subjects */}
+          <div className="flex flex-col items-center text-center px-2 py-1">
+            <div className="w-8 h-8 rounded-xl bg-red-600/10 text-red-600 flex items-center justify-center mb-1.5">
+              <BookOpen className="w-4 h-4" />
+            </div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">วิชาเรียน</p>
+            <p className={`text-base font-black ${isDarkMode ? 'text-white' : 'text-slate-900'} mt-0.5`}>
+              {subjectCount} วิชา
+            </p>
+          </div>
         </motion.div>
 
-        {/* Decorative tape strip at bottom */}
-        <div className="flex justify-center gap-3 pt-2">
-          {['bg-red-400/30','bg-rose-400/30','bg-red-500/20'].map((c,i) => (
-            <div key={i} className={`w-12 h-3 ${c} rounded-full`} style={{ transform: `rotate(${(i-1)*3}deg)` }} />
-          ))}
-        </div>
+        {/* --- 3. ACCOUNT & SYSTEM DETAILS TILES --- */}
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.18, duration: 0.4 }}
+          className="space-y-3"
+        >
+          <div className="px-2">
+            <h3 className={`text-xs font-black uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+              ข้อมูลบัญชีผู้ใช้งาน
+            </h3>
+          </div>
+
+          {/* Email Tile */}
+          <div
+            className={`${
+              isDarkMode ? 'bg-[#1E293B] border-[#334155]' : 'bg-white border-slate-100'
+            } border rounded-2xl p-4 shadow-sm flex items-center gap-4 transition-all hover:border-red-300`}
+          >
+            <div className={`w-12 h-12 rounded-2xl ${isDarkMode ? 'bg-red-950/40 text-red-400' : 'bg-red-50 text-red-500'} flex items-center justify-center shrink-0`}>
+              <Mail className="w-6 h-6" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">อีเมลของระบบ</p>
+              <p className={`font-bold text-sm sm:text-base leading-tight truncate ${isDarkMode ? 'text-slate-100' : 'text-slate-800'} mt-0.5`}>
+                {userAccount?.email || '-'}
+              </p>
+            </div>
+          </div>
+
+          {/* Student ID Tile */}
+          <div
+            className={`${
+              isDarkMode ? 'bg-[#1E293B] border-[#334155]' : 'bg-white border-slate-100'
+            } border rounded-2xl p-4 shadow-sm flex items-center gap-4 transition-all hover:border-red-300`}
+          >
+            <div className={`w-12 h-12 rounded-2xl ${isDarkMode ? 'bg-rose-950/40 text-rose-400' : 'bg-rose-50 text-rose-500'} flex items-center justify-center shrink-0`}>
+              <Award className="w-6 h-6" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">รหัสประจำตัวนักเรียน</p>
+              <p className={`font-black text-lg leading-tight ${isDarkMode ? 'text-slate-100' : 'text-slate-800'} mt-0.5`}>
+                {studentInfo?.studentId || '-'}
+              </p>
+            </div>
+          </div>
+
+          {/* Academic Status Tile */}
+          <div
+            className={`${
+              isDarkMode ? 'bg-[#1E293B] border-[#334155]' : 'bg-white border-slate-100'
+            } border rounded-2xl p-4 shadow-sm flex items-center gap-4 transition-all hover:border-red-300`}
+          >
+            <div className={`w-12 h-12 rounded-2xl ${isDarkMode ? 'bg-emerald-950/40 text-emerald-400' : 'bg-emerald-50 text-emerald-600'} flex items-center justify-center shrink-0`}>
+              <ShieldCheck className="w-6 h-6" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">สถานะการศึกษา</p>
+              <p className={`font-bold text-sm sm:text-base leading-tight ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'} mt-0.5 flex items-center gap-1.5`}>
+                <CheckCircle2 className="w-4 h-4" /> กำลังศึกษา (Active)
+              </p>
+            </div>
+          </div>
+        </motion.div>
 
       </main>
 

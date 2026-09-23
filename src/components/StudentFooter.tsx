@@ -13,9 +13,9 @@ const StudentFooter = ({ isDark }: StudentFooterProps) => {
   const pathname = usePathname();
 
   const menuItems = [
+    { icon: Home,      path: '/student/dashboard' },
     { icon: BookOpen,  path: '/student/dashboard/subjects' },
     { icon: Lightbulb, path: '/student/dashboard/learning' },
-    { icon: Home,      path: '/student/dashboard' },          // center
     { icon: User,      path: '/student/dashboard/profile' },
   ];
 
@@ -31,15 +31,14 @@ const StudentFooter = ({ isDark }: StudentFooterProps) => {
       initial={{ y: 100 }}
       animate={{ y: 0 }}
       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-      className={`fixed bottom-0 left-0 right-0 z-50 border-t px-6 py-4 ${
-        isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'
-      } shadow-md`}
+      className={`fixed bottom-0 left-0 right-0 z-50 border-t px-6 py-3.5 ${
+        isDark ? 'bg-gray-800/95 border-gray-700/80' : 'bg-white/95 border-gray-100'
+      } backdrop-blur-lg shadow-lg`}
     >
-      <div className="flex items-center justify-around max-w-7xl mx-auto">
+      <div className="flex items-center justify-around max-w-md mx-auto">
         {menuItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.path);
-          const isHome = item.path === '/student/dashboard';
 
           return (
             <motion.button
@@ -48,13 +47,15 @@ const StudentFooter = ({ isDark }: StudentFooterProps) => {
               whileTap={{ scale: 0.9 }}
               transition={{ type: 'spring', stiffness: 400, damping: 25 }}
               onClick={() => router.push(item.path)}
-              className={`flex flex-col items-center gap-1 rounded-xl transition-colors ${
-                isHome
-                  ? `p-3 ${active ? 'bg-red-500 text-white shadow-lg shadow-red-500/30' : isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`
-                  : `p-2 ${active ? 'text-red-500 font-bold' : isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-900'}`
+              className={`p-3 rounded-2xl transition-all flex items-center justify-center ${
+                active
+                  ? 'bg-red-500 text-white shadow-md shadow-red-500/30'
+                  : isDark
+                  ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700/50'
+                  : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/80'
               }`}
             >
-              <Icon size={active ? (isHome ? 26 : 28) : (isHome ? 24 : 22)} />
+              <Icon size={24} />
             </motion.button>
           );
         })}

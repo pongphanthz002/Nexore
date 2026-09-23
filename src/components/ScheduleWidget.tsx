@@ -372,7 +372,7 @@ const ScheduleWidget = ({ isDark }: ScheduleWidgetProps) => {
                     onClick={() => setPopupDay(day)}
                     className={`px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
                       day === popupDay
-                        ? 'bg-blue-500 text-white'
+                        ? 'bg-red-500 text-white shadow-md shadow-red-500/20'
                         : isDark ? 'bg-gray-700 text-gray-400' : 'bg-gray-100 text-gray-600'
                     }`}
                   >

@@ -32,10 +32,12 @@ const TeacherDock = ({ isDark }: TeacherDockProps) => {
       initial={{ y: 100 }}
       animate={{ y: 0 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
-      className={`fixed bottom-0 left-0 right-0 z-50 border-t px-6 py-4 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-md`}
+      className={`fixed bottom-0 left-0 right-0 z-50 border-t px-6 py-3.5 ${
+        isDark ? 'bg-gray-800/95 border-gray-700/80' : 'bg-white/95 border-gray-100'
+      } backdrop-blur-lg shadow-lg`}
     >
-      <div className="flex items-center justify-around max-w-7xl mx-auto">
-        {menuItems.map((item, index) => {
+      <div className="flex items-center justify-around max-w-md mx-auto">
+        {menuItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.path);
           
@@ -46,13 +48,15 @@ const TeacherDock = ({ isDark }: TeacherDockProps) => {
               whileTap={{ scale: 0.9 }}
               transition={{ type: "spring", stiffness: 400, damping: 25 }}
               onClick={() => router.push(item.path)}
-              className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-colors ${
+              className={`p-3 rounded-2xl transition-all flex items-center justify-center ${
                 active 
-                  ? 'text-blue-500' 
-                  : isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'
+                  ? 'bg-red-500 text-white shadow-md shadow-red-500/30' 
+                  : isDark 
+                  ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700/50' 
+                  : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/80'
               }`}
             >
-              <Icon size={active ? 32 : 24} />
+              <Icon size={24} />
             </motion.button>
           );
         })}

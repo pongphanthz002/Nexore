@@ -148,11 +148,18 @@ export default function TeacherDashboard() {
 
         {/* Quick Attendance Section */}
         <div className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}>
-          <div className="flex items-center gap-2 mb-4">
-            <CheckCircle size={22} className={isDark ? 'text-green-400' : 'text-green-600'} />
-            <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              เช็คชื่อแบบด่วน
-            </h2>
+          <div className="flex items-center gap-3 mb-4">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-emerald-950/50' : 'bg-emerald-50'}`}>
+              <CheckCircle size={20} className="text-emerald-500" />
+            </div>
+            <div>
+              <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                เช็คชื่อแบบด่วน
+              </h2>
+              <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                วิชาที่กำลังสอนอยู่ขณะนี้
+              </p>
+            </div>
           </div>
           
           {currentSubjects.length > 0 ? (
@@ -163,11 +170,15 @@ export default function TeacherDashboard() {
                   whileHover={{ scale: 1.01, y: -2 }}
                   whileTap={{ scale: 0.99 }}
                   onClick={() => handleSelectSubject(subject)}
-                  className={`p-4 rounded-xl cursor-pointer border-2 ${isDark ? 'bg-green-900/30 border-green-700 hover:bg-green-900/50' : 'bg-green-50 border-green-300 hover:bg-green-100'} transition-colors`}
+                  className={`p-4 rounded-xl cursor-pointer border transition-all ${
+                    isDark 
+                      ? 'bg-slate-800/50 border-slate-700 hover:border-emerald-500/50 hover:bg-slate-800' 
+                      : 'bg-emerald-50/60 border-emerald-200/60 hover:bg-emerald-50 hover:shadow-sm'
+                  }`}
                 >
                   <div className="flex items-center gap-4">
-                    <div className={`text-center min-w-[80px] p-2 rounded-lg ${isDark ? 'bg-green-800/50' : 'bg-green-200'}`}>
-                      <div className={`text-sm font-bold ${isDark ? 'text-green-300' : 'text-green-800'}`}>
+                    <div className={`text-center min-w-[80px] p-2 rounded-lg ${isDark ? 'bg-emerald-900/50' : 'bg-emerald-100'}`}>
+                      <div className={`text-sm font-bold ${isDark ? 'text-emerald-300' : 'text-emerald-800'}`}>
                         {subject.time}
                       </div>
                     </div>
