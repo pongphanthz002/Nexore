@@ -63,7 +63,7 @@ export default function StudentSetup() {
       }
 
       console.log('Fetching student data from school database...');
-      const studentData = await schoolDatabaseService.getStudentData(schoolHub.schoolFirebaseConfig, studentId);
+      const studentData = await schoolDatabaseService.getStudentData(schoolHub.schoolFirebaseConfig, studentId, true);
       console.log('Student data fetched:', studentData);
       
       if (!studentData) {
@@ -99,28 +99,18 @@ export default function StudentSetup() {
 
       await storageService.setUserIdentity(identity);
 
-      // Save email → schoolId mapping to Master Registry
-      console.log('Saving user account to Master Registry:', user.email, schoolId);
-      console.log('User UID:', user.uid);
-      await firestoreService.saveUserAccount(user.email, schoolId, user.uid, 'student');
-      console.log('User account saved successfully');
-      
-      // Update student data with email, uid, and role in School Database
-      const updatedStudentData = {
-        ...studentData,
+      // Link the student record first: if this fails the student must not end up half-registered
+      await schoolDatabaseService.saveStudentData(schoolHub.schoolFirebaseConfig, {
+        studentId,
         email: user.email,
         uid: user.uid,
         role: 'student',
         updatedAt: new Date(),
-      };
+      });
 
-      try {
-        await schoolDatabaseService.saveStudentData(schoolHub.schoolFirebaseConfig, updatedStudentData);
-        console.log('Student data saved to school database successfully');
-      } catch (error) {
-        console.error('Error saving student data to school database:', error);
-      }
-      
+      // Save uid → schoolId mapping to Master Registry
+      await firestoreService.saveUserAccount(user.email, schoolId, user.uid, 'student', studentId);
+
       // Set up user account for navigation
       console.log('=== Setting up user account for navigation ===');
       console.log('User email:', user.email);

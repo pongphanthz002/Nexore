@@ -1,4 +1,7 @@
-export type UserRole = 'student' | 'teacher' | 'admin';
+export type { FirebaseConfig, UserMapping } from './firebase.types';
+
+import type { UserRole } from './firebase.types';
+export type { UserRole };
 
 export interface UserIdentity {
   role: UserRole;
@@ -20,24 +23,6 @@ export interface MasterRegistryConfig {
   schoolStorageBucket: string;
   schoolMessagingSenderId: string;
   schoolAppId: string;
-}
-
-export interface TeacherNode {
-  teacherId: string;
-  name: string;
-  email: string;
-  firebaseConfig: MasterRegistryConfig;
-  qrCode: string;
-  schoolId: string;
-}
-
-export interface StudentData {
-  studentId: string;
-  name: string;
-  class: string;
-  number: string;
-  schoolId: string;
-  teacherNodes: string[]; // Array of teacher IDs
 }
 
 export interface WhitelistEntry {

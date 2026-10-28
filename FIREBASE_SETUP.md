@@ -22,29 +22,17 @@
 4. Register app (name it "Nexore")
 5. Copy the firebaseConfig object
 
-## Step 4: Create .env.local File
+## Step 4: Enable Firestore
 
-Create a file named `.env.local` in the project root with the following content:
+1. In Firebase Console, go to "Build" → "Firestore Database"
+2. Click "Create database"
 
-```env
-NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key_here
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project_id.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id_here
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project_id.appspot.com
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id_here
-NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id_here
-```
+## Step 5: Enter the Config in Nexore
 
-Replace the values with your actual Firebase configuration.
+- **School Database**: the school admin pastes the config in `/setup/admin`.
+- **Teacher Database**: a teacher pastes the config in `/setup/teacher`, or later in the teacher profile → "Firebase Config".
+  Nexore checks the config before saving it: the format is validated, then a test document is written, read back and deleted. Firestore Rules must allow this read/write.
 
-## Step 5: Restart Development Server
+No `.env.local` is needed; configs are stored in Firestore and loaded at runtime.
 
-After creating `.env.local`, restart the dev server:
-
-```bash
-npm run dev
-```
-
-## Note
-
-The `.env.local` file is already in `.gitignore` to protect your credentials. Never commit this file to version control.
+> Changing a teacher's database does not move existing grades or attendance to the new project.

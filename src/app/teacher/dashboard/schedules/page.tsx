@@ -1,6 +1,7 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
+import { STORAGE_KEYS } from '@/config/storage.keys';
 import { useState, useEffect, Suspense } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -14,6 +15,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import GoogleSheetsIcon from '@/components/GoogleSheetsIcon';
+import { useTheme } from '@/contexts/ThemeContext';
 
 // Parse "08:30-09:30" → { startMinutes, endMinutes }
 function parseTimeRange(time: string): { startMinutes: number; endMinutes: number } | null {
@@ -145,7 +147,7 @@ function SchedulesContent() {
   const { userAccount } = useAuth();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [isDark, setIsDark] = useState(false);
+  const { isDark } = useTheme();
   const [subjects, setSubjects] = useState<SubjectData[]>([]);
   const [students, setStudents] = useState<StudentData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -167,7 +169,7 @@ function SchedulesContent() {
   
   // Load todayAttendance from localStorage on mount
   useEffect(() => {
-    const stored = localStorage.getItem('NEXORE_TODAY_ATTENDANCE');
+    const stored = localStorage.getItem(STORAGE_KEYS.TODAY_ATTENDANCE);
     if (stored) {
       const parsed = JSON.parse(stored);
       const storedDate = parsed.date;
@@ -183,7 +185,7 @@ function SchedulesContent() {
   useEffect(() => {
     if (todayAttendance.length > 0) {
       const todayFormatted = formatDate(new Date());
-      localStorage.setItem('NEXORE_TODAY_ATTENDANCE', JSON.stringify({
+      localStorage.setItem(STORAGE_KEYS.TODAY_ATTENDANCE, JSON.stringify({
         date: todayFormatted,
         data: todayAttendance
       }));
@@ -198,15 +200,6 @@ function SchedulesContent() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [isDownloading, setIsDownloading] = useState(false);
 
-  useEffect(() => {
-    setIsDark(document.documentElement.classList.contains('dark'));
-    const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains('dark'));
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
-
   // Update current time every 30 seconds
   useEffect(() => {
     const interval = setInterval(() => setNowMinutes(getNowMinutes()), 30000);
@@ -217,14 +210,14 @@ function SchedulesContent() {
     async function loadData() {
       if (userAccount?.schoolFirebaseConfig && userAccount?.userId) {
         try {
-          const [allSubjects, allStudents, teacherData] = await Promise.all([
-            schoolDatabaseService.getAllSubjects(userAccount.schoolFirebaseConfig),
-            schoolDatabaseService.getAllStudents(userAccount.schoolFirebaseConfig),
+          // Only this teacher's subjects and the students enrolled in them
+          const [teacherSubjects, teacherData] = await Promise.all([
+            schoolDatabaseService.getSubjectsForTeacher(userAccount.schoolFirebaseConfig, userAccount.userId),
             schoolDatabaseService.getTeacherConfig(userAccount.schoolFirebaseConfig, userAccount.userId),
           ]);
-          const teacherSubjects = allSubjects.filter(s => s.teacherId === userAccount.userId);
+          const subjectStudents = await schoolDatabaseService.getStudentsForSubjects(userAccount.schoolFirebaseConfig, teacherSubjects);
           setSubjects(teacherSubjects);
-          setStudents(allStudents);
+          setStudents(subjectStudents);
           setTeacherConfig(teacherData);
 
           // Fetch today's attendance to filter currently teaching subjects
@@ -249,23 +242,35 @@ function SchedulesContent() {
   // Current subjects: show 15 min before start, hide 180 min after start
   // Also filter out subjects that have already been checked today
   const todayThai = getCurrentDayThai();
-  const currentSubjects = subjects.filter(s => {
-    if (s.day !== todayThai) return false;
-    const range = parseTimeRange(s.time);
-    if (!range) return false;
-    
+  const currentSubjects: SubjectData[] = [];
+  subjects.forEach(s => {
+    const activeSchedule = s.schedules && s.schedules.length > 0
+      ? s.schedules.find(sch => sch.day === todayThai)
+      : (s.day === todayThai ? s : null);
+    if (!activeSchedule) return;
+
+    const range = parseTimeRange(activeSchedule.time);
+    if (!range) return;
+
     // 1. Check time range (show from 15 mins before start up to 180 mins after start)
     const isInTime = nowMinutes >= range.startMinutes - 15 && nowMinutes <= range.startMinutes + 180;
-    if (!isInTime) return false;
+    if (!isInTime) return;
 
     // 2. Check if already checked today
     const alreadyChecked = todayAttendance.some(att => 
       att.subjectId === s.subjectId && 
       att.classroom === s.classroom
     );
+    if (alreadyChecked) return;
 
-    return !alreadyChecked;
-  }).sort((a, b) => a.time.localeCompare(b.time));
+    currentSubjects.push({
+      ...s,
+      day: activeSchedule.day,
+      time: activeSchedule.time,
+      duration: activeSchedule.duration || s.duration
+    });
+  });
+  currentSubjects.sort((a, b) => a.time.localeCompare(b.time));
 
   // Handle mode=attendance and subjectId query parameters
   useEffect(() => {
@@ -569,7 +574,12 @@ function SchedulesContent() {
     setSelectedSubject(subject);
     setFromSection(section);
     const matched = students
-      .filter(s => s.class === subject.classroom)
+      .filter(s => {
+        if (subject.subjectType === 'elective' && Array.isArray(subject.studentIds) && subject.studentIds.length > 0) {
+          return subject.studentIds.includes(s.studentId);
+        }
+        return s.class === subject.classroom;
+      })
       .sort((a, b) => {
         const numA = parseInt(a.number) || 0;
         const numB = parseInt(b.number) || 0;

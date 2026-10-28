@@ -3,111 +3,60 @@
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { firestoreService } from '@/services/firestore.service';
-import { UserAccount } from '@/contexts/AuthContext';
 import { useState, useEffect, useRef } from 'react';
 
 export default function LoginSignup() {
   const router = useRouter();
-  const { signInWithGoogle, user, setUserAccount, loading: authLoading, signOut, setSignupValidation } = useAuth();
+  const { signInWithGoogle, user, userAccount, authStatus, signOut, setSignupValidation, invalidateCache, refreshAccount } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [checkingAccount, setCheckingAccount] = useState(false);
   const [isSignup, setIsSignup] = useState(false);
   const signupErrorRef = useRef(false);
 
+  // React to the account AuthContext resolved for the signed-in user (no extra reads here)
   useEffect(() => {
-    async function checkUserAccount() {
-      if (user?.email && !checkingAccount && !signupErrorRef.current) {
-        setCheckingAccount(true);
-        try {
-          // Get schoolId from Master Registry
-          console.log('Checking user account for email:', user.email);
-          const userMapping = await firestoreService.getUserAccount(user.email);
-          
-          console.log('User mapping found:', userMapping);
-          
-          if (userMapping) {
-            // Clear cache to ensure fresh data
-            localStorage.removeItem('NEXORE_USER_ACCOUNT');
-            localStorage.removeItem('NEXORE_USER_ACCOUNT_TIMESTAMP');
-            
-            // User exists in Master Registry
-            if (isSignup) {
-              // User tried to sign up but already has an account
-              console.log('User already exists, signing out and showing error');
-              // Set flag to prevent AuthContext from loading user account after sign out
-              setSignupValidation(true);
-              await signOut();
-              alert('บัญชีนี้เคยลงทะเบียนแล้ว');
-              setIsSignup(false);
-              setLoading(false);
-              setCheckingAccount(false);
-              signupErrorRef.current = true;
-              // Reset signupError after a delay
-              setTimeout(() => { 
-                signupErrorRef.current = false;
-              }, 5000);
-              return;
-            }
-            
-            // User exists, get school Firebase config from hubs
-            const schoolHub = await firestoreService.getHub(userMapping.schoolId);
-            console.log('School hub found:', schoolHub);
-            
-            if (schoolHub && schoolHub.schoolFirebaseConfig) {
-              // Let AuthContext handle user account loading from Master Registry and School Database
-              // Just redirect based on role from Master Registry
-              const role = userMapping.role || 'student';
-              
-              console.log('Redirecting to dashboard for role:', role);
-              // Don't redirect if there was a signup error
-              if (signupErrorRef.current) {
-                console.log('Skipping redirect due to signup error');
-                return;
-              }
-              if (role === 'admin') {
-                router.push('/admin/dashboard');
-              } else if (role === 'teacher') {
-                router.push('/teacher/dashboard');
-              } else if (role === 'student') {
-                router.push('/student/dashboard');
-              }
-            } else {
-              console.log('School hub not found or no Firebase config, redirecting to signup');
-              router.push('/signup');
-            }
-          } else {
-            // User doesn't exist - redirect to signup (keep signed in)
-            // User will complete setup while signed in
-            console.log('User account not found, redirecting to signup');
-            router.push('/signup');
-          }
-        } catch (error) {
-          console.error('Error checking user account:', error);
-          console.error('Error details:', JSON.stringify(error, null, 2));
-        } finally {
-          setCheckingAccount(false);
-        }
-      }
+    if (!user?.email || signupErrorRef.current || authStatus === 'loading') return;
+
+    const alreadyRegistered = authStatus === 'ready' && !!userAccount;
+    const hasMapping = alreadyRegistered || authStatus === 'not-in-whitelist';
+
+    if (isSignup && hasMapping) {
+      // User tried to sign up but already has an account
+      signupErrorRef.current = true;
+      setSignupValidation(true);
+      signOut().finally(() => {
+        alert('บัญชีนี้เคยลงทะเบียนแล้ว');
+        setIsSignup(false);
+        setLoading(false);
+        setTimeout(() => { signupErrorRef.current = false; }, 5000);
+      });
+      return;
     }
-    
-    checkUserAccount();
-  }, [user, isSignup, router]);
+
+    if (alreadyRegistered && userAccount) {
+      if (userAccount.role === 'admin') {
+        router.push('/admin/dashboard');
+      } else if (userAccount.role === 'teacher') {
+        router.push('/teacher/dashboard');
+      } else {
+        router.push('/student/dashboard');
+      }
+    } else if (authStatus === 'not-registered') {
+      // Keep signed in; user completes setup on the signup page
+      router.push('/signup');
+    } else {
+      // not-in-whitelist / offline-error / error: show the banner below
+      setLoading(false);
+    }
+  }, [user, userAccount, authStatus, isSignup, router, signOut, setSignupValidation]);
 
   const handleSignIn = async () => {
     setIsSignup(false);
     setLoading(true);
     try {
-      // Clear cached user account so AuthContext re-fetches fresh data from Firestore
-      localStorage.removeItem('NEXORE_USER_ACCOUNT');
-      localStorage.removeItem('NEXORE_USER_ACCOUNT_TIMESTAMP');
-      console.log('Starting Google Sign in...');
+      // Force a fresh account lookup for an explicit sign-in
+      invalidateCache();
       await signInWithGoogle();
-      console.log('Google Sign in completed, waiting for auth state...');
-      // Wait a bit for auth state to update
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      console.log('Auth state should be updated now');
-      // useEffect will handle the redirect
+      // The effect above redirects once AuthContext has resolved the account
     } catch (error) {
       console.error('Error signing in:', error);
       alert('เข้าสู่ระบบไม่สำเร็จ: ' + (error as Error).message);
@@ -119,13 +68,8 @@ export default function LoginSignup() {
     setIsSignup(true);
     setLoading(true);
     try {
-      console.log('Starting Google Sign up...');
       await signInWithGoogle();
-      console.log('Google Sign up completed, waiting for auth state...');
-      // Wait a bit for auth state to update
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      console.log('Auth state should be updated now');
-      // The useEffect will handle the check and redirect
+      // The effect above checks for an existing account and redirects
     } catch (error) {
       console.error('Error signing up:', error);
       alert('เข้าสู่ระบบไม่สำเร็จ: ' + (error as Error).message);
@@ -133,6 +77,15 @@ export default function LoginSignup() {
       setLoading(false);
     }
   };
+
+  const statusMessage =
+    authStatus === 'not-in-whitelist'
+      ? 'ไม่พบรายชื่อของคุณในโรงเรียน กรุณาติดต่อผู้ดูแลระบบ'
+      : authStatus === 'offline-error'
+        ? 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ต'
+        : authStatus === 'error'
+          ? 'เกิดข้อผิดพลาดในการโหลดบัญชี'
+          : null;
 
   return (
     <div className="no-scroll bg-white flex items-center justify-center relative">
@@ -157,6 +110,23 @@ export default function LoginSignup() {
             WELCOME
           </p>
         </motion.div>
+
+        {/* Account status (e.g. not in whitelist, offline) */}
+        {user && statusMessage && (
+          <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            <p className="mb-3">{statusMessage}</p>
+            <div className="flex gap-2">
+              {(authStatus === 'offline-error' || authStatus === 'error') && (
+                <button onClick={() => refreshAccount()} className="rounded-md bg-red-600 px-3 py-1.5 font-semibold text-white hover:bg-red-700">
+                  ลองใหม่
+                </button>
+              )}
+              <button onClick={() => signOut()} className="rounded-md border border-red-300 px-3 py-1.5 font-semibold text-red-700 hover:bg-red-100">
+                ออกจากระบบ
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Button Card */}
         <div className="bg-white rounded-2xl p-6 shadow-lg">

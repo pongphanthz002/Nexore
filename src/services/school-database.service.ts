@@ -1,7 +1,9 @@
 import { firebaseManager } from '@/lib/firebase';
-import { collection, doc, setDoc, getDoc, getDocs, query, where, updateDoc, deleteDoc, Firestore } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, query, where, deleteDoc, writeBatch, WriteBatch, documentId, Firestore, DocumentReference } from 'firebase/firestore';
 import { teacherDatabaseService, GradeConfig, Assignment, AssignmentGroup, StudentScore } from '@/services/teacher-database.service';
 import { firestoreService } from '@/services/firestore.service';
+import { TtlCache, withRetry, chunkArray, runPool, ProgressCallback } from '@/lib/firestore-helpers';
+import type { FirebaseConfig } from '@/types/firebase.types';
 
 export interface TeacherFirebaseConfig {
   teacherId: string;
@@ -9,14 +11,7 @@ export interface TeacherFirebaseConfig {
   email: string;
   uid?: string;
   role?: 'teacher' | 'admin';
-  firebaseConfig?: {
-    apiKey: string;
-    authDomain: string;
-    projectId: string;
-    storageBucket: string;
-    messagingSenderId: string;
-    appId: string;
-  };
+  firebaseConfig?: FirebaseConfig | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -35,6 +30,12 @@ export interface StudentData {
   updatedAt: Date;
 }
 
+export interface ScheduleSlot {
+  day: string;
+  time: string;
+  duration?: string;
+}
+
 export interface SubjectData {
   subjectId: string;
   teacherId: string;
@@ -43,9 +44,73 @@ export interface SubjectData {
   day: string;
   time: string;
   duration?: string; // e.g. "1", "2", "3"
+  subjectType?: 'basic' | 'elective'; // 'basic' = วิชาพื้นฐาน, 'elective' = วิชาเพิ่มเติม
+  studentIds?: string[]; // IDs of enrolled students for elective subjects
+  schedules?: ScheduleSlot[]; // Multiple teaching schedules (up to 3 days)
   createdAt: Date;
   updatedAt: Date;
 }
+
+/** Row from the teacher whitelist Excel upload. */
+export interface WhitelistTeacherRow {
+  teacherId: string;
+  name: string;
+  email?: string;
+}
+
+/** Row from the student whitelist Excel upload. */
+export interface WhitelistStudentRow {
+  studentId: string;
+  name: string;
+  class?: string;
+  number?: string;
+  schoolId?: string;
+  email?: string;
+  /** Only written when provided; omit to keep the student's existing teacherNodes. */
+  teacherNodes?: string[];
+}
+
+export interface SubjectWhitelistRow {
+  subjectId: string;
+  teacherId: string;
+  subjectName: string;
+  classroom: string;
+  day: string;
+  time: string;
+  duration?: string;
+  /** Only written when provided; omit to keep the subject's existing type. */
+  subjectType?: 'basic' | 'elective';
+  /** Only written when provided; omit to keep the subject's existing schedules. */
+  schedules?: ScheduleSlot[];
+}
+
+/** Whitelist uploads commit this many writes per batch, several batches at a time. */
+const UPLOAD_BATCH_SIZE = 200;
+const UPLOAD_CONCURRENCY = 4;
+
+export interface AdminWhitelistRow {
+  email: string;
+  uid?: string;
+  role?: string;
+  name?: string;
+  schoolId?: string;
+}
+
+export interface MemberLookup {
+  /** teacherId / studentId (document ID) if known */
+  userId?: string;
+  uid?: string;
+  email?: string | null;
+}
+
+export interface MemberResult<T> {
+  id: string;
+  data: T;
+  ref: DocumentReference;
+}
+
+/** School data (subjects, rosters) changes rarely; writes through this service invalidate it. */
+const CACHE_TTL = 5 * 60 * 1000;
 
 class SchoolDatabaseService {
   private teachersCollection = 'teachers';
@@ -53,581 +118,693 @@ class SchoolDatabaseService {
   private adminsCollection = 'admins';
   private subjectsCollection = 'subjects';
 
-  /**
-   * Get school database instance using school's Firebase config
-   */
-  private getSchoolDB(schoolFirebaseConfig: any): Firestore {
-    const instance = firebaseManager.getInstance(schoolFirebaseConfig, `school-${schoolFirebaseConfig.projectId}`);
-    return instance.db;
+  private subjectsCache = new TtlCache<SubjectData[]>(CACHE_TTL);
+  private studentsCache = new TtlCache<StudentData[]>(CACHE_TTL);
+  private teachersCache = new TtlCache<TeacherFirebaseConfig[]>(CACHE_TTL);
+  private studentCache = new TtlCache<StudentData | null>(CACHE_TTL);
+  private studentSubjectsCache = new TtlCache<SubjectData[]>(CACHE_TTL);
+  private teachersByIdCache = new TtlCache<TeacherFirebaseConfig | null>(CACHE_TTL);
+  private teacherSubjectsCache = new TtlCache<SubjectData[]>(CACHE_TTL);
+  private subjectStudentsCache = new TtlCache<StudentData[]>(CACHE_TTL);
+
+  clearCache(): void {
+    this.subjectsCache.invalidate();
+    this.studentsCache.invalidate();
+    this.teachersCache.invalidate();
+    this.studentCache.invalidate();
+    this.studentSubjectsCache.invalidate();
+    this.teachersByIdCache.invalidate();
+    this.teacherSubjectsCache.invalidate();
+    this.subjectStudentsCache.invalidate();
   }
 
+  private invalidateTeachers(): void {
+    this.teachersCache.invalidate();
+    this.teachersByIdCache.invalidate();
+  }
+
+  private invalidateStudents(): void {
+    this.studentsCache.invalidate();
+    this.studentCache.invalidate();
+    this.studentSubjectsCache.invalidate();
+    this.subjectStudentsCache.invalidate();
+  }
+
+  private invalidateSubjects(): void {
+    this.subjectsCache.invalidate();
+    this.studentSubjectsCache.invalidate();
+    this.teacherSubjectsCache.invalidate();
+  }
+
+  private getSchoolDB(schoolFirebaseConfig: FirebaseConfig): Firestore {
+    return firebaseManager.getSchoolDb(schoolFirebaseConfig);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Identity lookup
+  // ---------------------------------------------------------------------------
+
   /**
-   * Save teacher Firebase config to school database
+   * Find a teacher/admin (teachers collection) or student by identity.
+   * Order: direct doc read by userId (verifying uid/email), then query by uid, then by email.
+   * Fills in a missing uid on the found document.
    */
-  async saveTeacherConfig(schoolFirebaseConfig: any, teacherConfig: TeacherFirebaseConfig): Promise<void> {
+  async findMember<T extends { uid?: string; email?: string }>(
+    schoolFirebaseConfig: FirebaseConfig,
+    kind: 'teacher' | 'student',
+    lookup: MemberLookup
+  ): Promise<MemberResult<T> | null> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    const collectionName = kind === 'teacher' ? this.teachersCollection : this.studentsCollection;
+    const colRef = collection(database, collectionName);
+
+    let found: MemberResult<T> | null = null;
+
+    if (lookup.userId) {
+      const snap = await withRetry(() => getDoc(doc(colRef, lookup.userId!)));
+      if (snap.exists()) {
+        const data = snap.data() as T;
+        const matches = (!!lookup.uid && data.uid === lookup.uid) || (!!lookup.email && data.email === lookup.email);
+        if (matches) found = { id: snap.id, data, ref: snap.ref };
+      }
+    }
+
+    if (!found && lookup.uid) {
+      const snap = await withRetry(() => getDocs(query(colRef, where('uid', '==', lookup.uid))));
+      if (!snap.empty) found = { id: snap.docs[0].id, data: snap.docs[0].data() as T, ref: snap.docs[0].ref };
+    }
+
+    if (!found && lookup.email) {
+      const snap = await withRetry(() => getDocs(query(colRef, where('email', '==', lookup.email))));
+      if (!snap.empty) found = { id: snap.docs[0].id, data: snap.docs[0].data() as T, ref: snap.docs[0].ref };
+    }
+
+    if (found && !found.data.uid && lookup.uid) {
+      setDoc(found.ref, { uid: lookup.uid }, { merge: true })
+        .catch(err => console.error(`Error updating ${kind} uid:`, err));
+    }
+
+    return found;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Teachers
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Save teacher record. Merges so fields not passed (e.g. firebaseConfig) are kept.
+   */
+  async saveTeacherConfig(schoolFirebaseConfig: FirebaseConfig, teacherConfig: TeacherFirebaseConfig): Promise<void> {
+    this.invalidateTeachers();
     const database = this.getSchoolDB(schoolFirebaseConfig);
     const teacherRef = doc(database, this.teachersCollection, teacherConfig.teacherId);
     await setDoc(teacherRef, {
       ...teacherConfig,
       updatedAt: new Date(),
-    });
+    }, { merge: true });
+  }
+
+  /**
+   * Point a teacher at a (new) Teacher DB. Only updates firebaseConfig; validate the
+   * config with teacherDatabaseService.validateConfigShape/verifyConnection first.
+   */
+  async updateTeacherFirebaseConfig(schoolFirebaseConfig: FirebaseConfig, teacherId: string, firebaseConfig: FirebaseConfig): Promise<void> {
+    this.invalidateTeachers();
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    await setDoc(doc(database, this.teachersCollection, teacherId), {
+      firebaseConfig,
+      updatedAt: new Date(),
+    }, { merge: true });
   }
 
   /**
    * Get teacher config from school database
    */
-  async getTeacherConfig(schoolFirebaseConfig: any, teacherId: string): Promise<TeacherFirebaseConfig | null> {
+  async getTeacherConfig(schoolFirebaseConfig: FirebaseConfig, teacherId: string): Promise<TeacherFirebaseConfig | null> {
     const database = this.getSchoolDB(schoolFirebaseConfig);
-    const teacherRef = doc(database, this.teachersCollection, teacherId);
-    const teacherSnap = await getDoc(teacherRef);
-    
-    if (teacherSnap.exists()) {
-      return teacherSnap.data() as TeacherFirebaseConfig;
+    const teacherSnap = await withRetry(() => getDoc(doc(database, this.teachersCollection, teacherId)));
+    return teacherSnap.exists() ? (teacherSnap.data() as TeacherFirebaseConfig) : null;
+  }
+
+  /**
+   * Get teacher data from school database (alias of getTeacherConfig)
+   */
+  async getTeacherData(schoolFirebaseConfig: FirebaseConfig, teacherId: string): Promise<TeacherFirebaseConfig | null> {
+    return this.getTeacherConfig(schoolFirebaseConfig, teacherId);
+  }
+
+  /**
+   * Get all teachers from school database (cached for 5 minutes)
+   */
+  async getAllTeachers(schoolFirebaseConfig: FirebaseConfig, forceRefresh = false): Promise<TeacherFirebaseConfig[]> {
+    return this.teachersCache.getOrLoad(`${schoolFirebaseConfig.projectId}:all`, async () => {
+      const database = this.getSchoolDB(schoolFirebaseConfig);
+      const querySnapshot = await withRetry(() => getDocs(collection(database, this.teachersCollection)));
+      return querySnapshot.docs.map(d => d.data() as TeacherFirebaseConfig);
+    }, forceRefresh);
+  }
+
+  /**
+   * Same data as getAllTeachers (shares its cache). Kept for existing callers.
+   */
+  async getAllTeachersOptimized(schoolFirebaseConfig: FirebaseConfig, forceRefresh = false): Promise<TeacherFirebaseConfig[]> {
+    return this.getAllTeachers(schoolFirebaseConfig, forceRefresh);
+  }
+
+  /**
+   * Get specific teachers by ID without loading the whole collection.
+   * Uses the full-list cache when it is warm.
+   */
+  async getTeachersByIds(schoolFirebaseConfig: FirebaseConfig, teacherIds: string[]): Promise<TeacherFirebaseConfig[]> {
+    const projectId = schoolFirebaseConfig.projectId;
+    const ids = Array.from(new Set(teacherIds.filter(Boolean)));
+    if (ids.length === 0) return [];
+
+    const all = this.teachersCache.get(`${projectId}:all`);
+    if (all) return all.filter(t => ids.includes(t.teacherId));
+
+    const result: TeacherFirebaseConfig[] = [];
+    const missing: string[] = [];
+    for (const id of ids) {
+      const cached = this.teachersByIdCache.get(`${projectId}:${id}`);
+      if (cached !== undefined) {
+        if (cached) result.push(cached);
+      } else {
+        missing.push(id);
+      }
     }
-    return null;
+
+    if (missing.length > 0) {
+      const database = this.getSchoolDB(schoolFirebaseConfig);
+      const colRef = collection(database, this.teachersCollection);
+      const snaps = await Promise.all(
+        chunkArray(missing, 30).map(chunk => withRetry(() => getDocs(query(colRef, where(documentId(), 'in', chunk)))))
+      );
+      const foundIds = new Set<string>();
+      for (const snap of snaps) {
+        for (const d of snap.docs) {
+          const data = d.data() as TeacherFirebaseConfig;
+          foundIds.add(d.id);
+          this.teachersByIdCache.set(`${projectId}:${d.id}`, data);
+          result.push(data);
+        }
+      }
+      missing.filter(id => !foundIds.has(id)).forEach(id => this.teachersByIdCache.set(`${projectId}:${id}`, null));
+    }
+
+    return result;
   }
 
   /**
-   * Get all teachers from school database
+   * Save teacher whitelist to school database.
+   * Writes only whitelist-owned fields with merge, so email/uid/role/firebaseConfig
+   * set during teacher setup are never overwritten.
    */
-  async getAllTeachers(schoolFirebaseConfig: any): Promise<TeacherFirebaseConfig[]> {
+  async saveTeacherWhitelist(schoolFirebaseConfig: FirebaseConfig, teachers: WhitelistTeacherRow[], onProgress?: ProgressCallback): Promise<void> {
     const database = this.getSchoolDB(schoolFirebaseConfig);
-    const querySnapshot = await getDocs(collection(database, this.teachersCollection));
-    return querySnapshot.docs.map(doc => doc.data() as TeacherFirebaseConfig);
+    // Existing roster (usually already cached by the admin page) tells us which docs are new
+    const existing = await this.getAllTeachers(schoolFirebaseConfig);
+    const existingIds = new Set(existing.map(t => t.teacherId));
+    this.invalidateTeachers();
+
+    await this.commitInBatches(teachers.filter(t => t.teacherId), onProgress, (batch, chunk) => {
+      for (const teacher of chunk) {
+        const teacherRef = doc(database, this.teachersCollection, teacher.teacherId);
+        const teacherData: Record<string, unknown> = {
+          teacherId: teacher.teacherId,
+          name: teacher.name,
+          updatedAt: new Date(),
+        };
+        if (!existingIds.has(teacher.teacherId)) {
+          teacherData.createdAt = new Date();
+          if (teacher.email) teacherData.email = teacher.email;
+        }
+        batch.set(teacherRef, teacherData, { merge: true });
+      }
+    }, database);
+  }
+
+  async deleteTeacher(schoolFirebaseConfig: FirebaseConfig, teacherId: string): Promise<void> {
+    this.invalidateTeachers();
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    await deleteDoc(doc(database, this.teachersCollection, teacherId));
+  }
+
+  async deleteTeacherWhitelist(schoolFirebaseConfig: FirebaseConfig, teacherIds: string[]): Promise<void> {
+    this.invalidateTeachers();
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    for (const chunk of chunkArray(teacherIds, 499)) {
+      const batch = writeBatch(database);
+      chunk.forEach(id => batch.delete(doc(database, this.teachersCollection, id)));
+      await batch.commit();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Students
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Save student whitelist to school database.
+   * Writes only whitelist-owned fields with merge: email/uid/role set during student setup
+   * are never overwritten, and teacherNodes is only written when the row provides it.
+   * Returns teacher IDs referenced in teacherNodes that don't exist in the teachers collection.
+   */
+  async saveStudentWhitelist(
+    schoolFirebaseConfig: FirebaseConfig,
+    students: WhitelistStudentRow[],
+    onProgress?: ProgressCallback
+  ): Promise<{ unknownTeacherIds: string[] }> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    const [existingStudents, teachers] = await Promise.all([
+      this.getAllStudents(schoolFirebaseConfig),
+      this.getAllTeachers(schoolFirebaseConfig),
+    ]);
+    const existingIds = new Set(existingStudents.map(s => s.studentId));
+    const teacherIds = new Set(teachers.map(t => t.teacherId));
+    const unknownTeacherIds = new Set<string>();
+    this.invalidateStudents();
+
+    await this.commitInBatches(students.filter(s => s.studentId), onProgress, (batch, chunk) => {
+      for (const student of chunk) {
+        const studentRef = doc(database, this.studentsCollection, student.studentId);
+        const isNew = !existingIds.has(student.studentId);
+        const studentData: Record<string, unknown> = {
+          studentId: student.studentId,
+          name: student.name,
+          class: student.class || '',
+          number: student.number || '',
+          schoolId: student.schoolId || 'default',
+          updatedAt: new Date(),
+        };
+
+        if (Array.isArray(student.teacherNodes) && student.teacherNodes.length > 0) {
+          studentData.teacherNodes = student.teacherNodes;
+          student.teacherNodes.filter(id => !teacherIds.has(id)).forEach(id => unknownTeacherIds.add(id));
+        } else if (isNew) {
+          studentData.teacherNodes = [];
+        }
+
+        if (isNew) {
+          studentData.createdAt = new Date();
+          studentData.role = 'student';
+          if (student.email) studentData.email = student.email;
+        }
+
+        batch.set(studentRef, studentData, { merge: true });
+      }
+    }, database);
+
+    return { unknownTeacherIds: Array.from(unknownTeacherIds) };
   }
 
   /**
-   * Get all teachers from school database (optimized - select only essential fields)
-   * Use this for dashboard stats where full data is not needed
+   * Save single student data (merge). Used during student setup to update email and uid.
    */
-  async getAllTeachersOptimized(schoolFirebaseConfig: any): Promise<TeacherFirebaseConfig[]> {
+  async saveStudentData(schoolFirebaseConfig: FirebaseConfig, studentData: Partial<StudentData> & { studentId: string }): Promise<void> {
+    this.invalidateStudents();
     const database = this.getSchoolDB(schoolFirebaseConfig);
-    const querySnapshot = await getDocs(collection(database, this.teachersCollection));
-    return querySnapshot.docs.map(doc => {
-      const data = doc.data();
-      return {
-        teacherId: data.teacherId,
-        name: data.name,
-        email: data.email,
-        firebaseConfig: data.firebaseConfig,
-      } as TeacherFirebaseConfig;
+    await setDoc(doc(database, this.studentsCollection, studentData.studentId), studentData, { merge: true });
+  }
+
+  /**
+   * Get student data by studentId (cached for 5 minutes; several student pages call this).
+   */
+  async getStudentData(schoolFirebaseConfig: FirebaseConfig, studentId: string, forceRefresh = false): Promise<StudentData | null> {
+    if (!studentId) return null;
+    return this.studentCache.getOrLoad(`${schoolFirebaseConfig.projectId}:id:${studentId}`, async () => {
+      const database = this.getSchoolDB(schoolFirebaseConfig);
+      const snap = await withRetry(() => getDoc(doc(database, this.studentsCollection, studentId)));
+      return snap.exists() ? (snap.data() as StudentData) : null;
+    }, forceRefresh);
+  }
+
+  /**
+   * Get student data by email (cached for 5 minutes)
+   */
+  async getStudentDataByEmail(schoolFirebaseConfig: FirebaseConfig, email: string): Promise<StudentData | null> {
+    if (!email) return null;
+    return this.studentCache.getOrLoad(`${schoolFirebaseConfig.projectId}:email:${email}`, async () => {
+      const database = this.getSchoolDB(schoolFirebaseConfig);
+      const snap = await withRetry(() => getDocs(query(collection(database, this.studentsCollection), where('email', '==', email))));
+      return snap.empty ? null : (snap.docs[0].data() as StudentData);
     });
   }
 
   /**
-   * Get teacher data from school database
+   * The signed-in student's record: by studentId (userId), falling back to email.
+   * Both lookups are cached, so every student screen can call this freely.
    */
-  async getTeacherData(schoolFirebaseConfig: any, teacherId: string): Promise<TeacherFirebaseConfig | null> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    const teacherRef = doc(database, this.teachersCollection, teacherId);
-    const teacherSnap = await getDoc(teacherRef);
-
-    if (teacherSnap.exists()) {
-      return teacherSnap.data() as TeacherFirebaseConfig;
-    }
-    return null;
+  async getStudentForAccount(
+    schoolFirebaseConfig: FirebaseConfig,
+    account: { userId?: string; email?: string | null },
+    forceRefresh = false
+  ): Promise<StudentData | null> {
+    const byId = await this.getStudentData(schoolFirebaseConfig, account.userId || '', forceRefresh);
+    if (byId || !account.email) return byId;
+    return this.getStudentDataByEmail(schoolFirebaseConfig, account.email);
   }
 
   /**
-   * Save teacher whitelist (without Firebase config) to school database
-   * Preserves email, uid, role for existing teachers (checked by teacherId)
+   * Get all students from school database (cached for 5 minutes)
    */
-  async saveTeacherWhitelist(schoolFirebaseConfig: any, teachers: any[]): Promise<void> {
+  async getAllStudents(schoolFirebaseConfig: FirebaseConfig, forceRefresh = false): Promise<StudentData[]> {
+    return this.studentsCache.getOrLoad(`${schoolFirebaseConfig.projectId}:all`, async () => {
+      const database = this.getSchoolDB(schoolFirebaseConfig);
+      const querySnapshot = await withRetry(() => getDocs(collection(database, this.studentsCollection)));
+      return querySnapshot.docs.map(d => d.data() as StudentData);
+    }, forceRefresh);
+  }
+
+  /**
+   * Same data as getAllStudents (shares its cache). Kept for existing callers.
+   */
+  async getAllStudentsOptimized(schoolFirebaseConfig: FirebaseConfig): Promise<StudentData[]> {
+    return this.getAllStudents(schoolFirebaseConfig);
+  }
+
+  async deleteStudent(schoolFirebaseConfig: FirebaseConfig, studentId: string): Promise<void> {
+    this.invalidateStudents();
     const database = this.getSchoolDB(schoolFirebaseConfig);
+    await deleteDoc(doc(database, this.studentsCollection, studentId));
+  }
 
-    for (const teacher of teachers) {
-      const teacherRef = doc(database, this.teachersCollection, teacher.teacherId);
-      const existingDoc = await getDoc(teacherRef);
+  async deleteStudentWhitelist(schoolFirebaseConfig: FirebaseConfig, studentIds: string[]): Promise<void> {
+    this.invalidateStudents();
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    for (const chunk of chunkArray(studentIds, 499)) {
+      const batch = writeBatch(database);
+      chunk.forEach(id => batch.delete(doc(database, this.studentsCollection, id)));
+      await batch.commit();
+    }
+  }
 
-      let teacherData: any = {
-        teacherId: teacher.teacherId,
-        name: teacher.name,
-        updatedAt: new Date(),
-      };
+  // ---------------------------------------------------------------------------
+  // Admins
+  // ---------------------------------------------------------------------------
 
-      // Preserve email, uid, role from existing data (checked by teacherId)
-      if (existingDoc.exists()) {
-        const existingData = existingDoc.data();
-        if (existingData.email) teacherData.email = existingData.email;
-        if (existingData.uid) teacherData.uid = existingData.uid;
-        if (existingData.role) teacherData.role = existingData.role;
-        if (existingData.createdAt) teacherData.createdAt = existingData.createdAt;
+  async saveAdminWhitelist(schoolFirebaseConfig: FirebaseConfig, admins: AdminWhitelistRow[]): Promise<void> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    for (const chunk of chunkArray(admins, 499)) {
+      const batch = writeBatch(database);
+      for (const admin of chunk) {
+        batch.set(doc(database, this.adminsCollection, admin.email), {
+          email: admin.email,
+          uid: admin.uid || '',
+          role: admin.role || 'admin',
+          name: admin.name || 'Admin',
+          schoolId: admin.schoolId || 'default',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      }
+      await batch.commit();
+    }
+  }
+
+  async deleteAdmin(schoolFirebaseConfig: FirebaseConfig, email: string): Promise<void> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    await deleteDoc(doc(database, this.adminsCollection, email));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Subjects
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Get all subjects from school database (cached for 5 minutes).
+   * For student screens use getSubjectsForStudent instead.
+   */
+  async getAllSubjects(schoolFirebaseConfig: FirebaseConfig, forceRefresh = false): Promise<SubjectData[]> {
+    return this.subjectsCache.getOrLoad(`${schoolFirebaseConfig.projectId}:all`, async () => {
+      const database = this.getSchoolDB(schoolFirebaseConfig);
+      const querySnapshot = await withRetry(() => getDocs(collection(database, this.subjectsCollection)));
+      return querySnapshot.docs.map(d => d.data() as SubjectData);
+    }, forceRefresh);
+  }
+
+  /**
+   * Subjects a student takes: basic subjects of their classroom plus electives they're enrolled in.
+   * Reads only matching documents (two indexed queries) instead of the whole collection.
+   */
+  async getSubjectsForStudent(
+    schoolFirebaseConfig: FirebaseConfig,
+    student: Pick<StudentData, 'studentId' | 'class'>,
+    forceRefresh = false
+  ): Promise<SubjectData[]> {
+    const projectId = schoolFirebaseConfig.projectId;
+    const key = `${projectId}:${student.studentId}:${student.class}`;
+    return this.studentSubjectsCache.getOrLoad(key, async () => {
+      const all = this.subjectsCache.get(`${projectId}:all`);
+      let candidates: SubjectData[];
+      if (all) {
+        candidates = all;
       } else {
-        // New teacher
-        teacherData.email = teacher.email || '';
-        teacherData.createdAt = new Date();
+        const database = this.getSchoolDB(schoolFirebaseConfig);
+        const colRef = collection(database, this.subjectsCollection);
+        const [byClass, byEnrollment] = await Promise.all([
+          student.class
+            ? withRetry(() => getDocs(query(colRef, where('classroom', '==', student.class))))
+            : Promise.resolve(null),
+          student.studentId
+            ? withRetry(() => getDocs(query(colRef, where('studentIds', 'array-contains', student.studentId))))
+            : Promise.resolve(null),
+        ]);
+        const byId = new Map<string, SubjectData>();
+        for (const snap of [byClass, byEnrollment]) {
+          snap?.docs.forEach(d => byId.set(d.id, d.data() as SubjectData));
+        }
+        candidates = Array.from(byId.values());
       }
 
-      await setDoc(teacherRef, teacherData);
-    }
-  }
-
-  /**
-   * Save student data to school database
-   * Preserves email, uid, role for existing students (checked by studentId)
-   */
-  async saveStudentWhitelist(schoolFirebaseConfig: any, students: any[]): Promise<void> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-
-    for (const student of students) {
-      const studentRef = doc(database, this.studentsCollection, student.studentId);
-      const existingDoc = await getDoc(studentRef);
-
-      let studentData: any = {
-        studentId: student.studentId,
-        name: student.name,
-        class: student.class || '',
-        number: student.number || '',
-        schoolId: student.schoolId || 'default',
-        teacherNodes: student.teacherNodes || [],
-        updatedAt: new Date(),
-      };
-
-      // Preserve email, uid, role from existing data (checked by studentId)
-      if (existingDoc.exists()) {
-        const existingData = existingDoc.data();
-        if (existingData.email) studentData.email = existingData.email;
-        if (existingData.uid) studentData.uid = existingData.uid;
-        if (existingData.role) studentData.role = existingData.role;
-        if (existingData.createdAt) studentData.createdAt = existingData.createdAt;
-      } else {
-        // New student
-        studentData.email = student.email || '';
-        studentData.uid = student.uid || '';
-        studentData.role = student.role || 'student';
-        studentData.createdAt = new Date();
-      }
-
-      await setDoc(studentRef, studentData);
-    }
-  }
-
-  /**
-   * Save single student data to school database (direct update, no preserve logic)
-   * Used during student setup to update email and uid
-   */
-  async saveStudentData(schoolFirebaseConfig: any, studentData: any): Promise<void> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    const studentRef = doc(database, this.studentsCollection, studentData.studentId);
-    await setDoc(studentRef, studentData, { merge: true });
-  }
-
-  /**
-   * Get student data from school database by studentId
-   */
-  async getStudentData(schoolFirebaseConfig: any, studentId: string): Promise<StudentData | null> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    const studentRef = doc(database, this.studentsCollection, studentId);
-    const studentSnap = await getDoc(studentRef);
-    
-    if (studentSnap.exists()) {
-      const data = studentSnap.data() as StudentData;
-      console.log('getStudentData - studentId:', studentId);
-      console.log('getStudentData - studentData:', data);
-      console.log('getStudentData - teacherNodes:', data.teacherNodes);
-      return data;
-    }
-    console.log('getStudentData - student not found for id:', studentId);
-    return null;
-  }
-
-  /**
-   * Get student data from school database by email
-   */
-  async getStudentDataByEmail(schoolFirebaseConfig: any, email: string): Promise<StudentData | null> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    const q = query(collection(database, this.studentsCollection), where('email', '==', email));
-    const querySnapshot = await getDocs(q);
-    
-    if (!querySnapshot.empty) {
-      const data = querySnapshot.docs[0].data() as StudentData;
-      console.log('getStudentDataByEmail - email:', email);
-      console.log('getStudentDataByEmail - studentData:', data);
-      console.log('getStudentDataByEmail - teacherNodes:', data.teacherNodes);
-      return data;
-    }
-    console.log('getStudentDataByEmail - student not found for email:', email);
-    return null;
-  }
-
-  /**
-   * Get all students from school database
-   */
-  async getAllStudents(schoolFirebaseConfig: any): Promise<StudentData[]> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    const querySnapshot = await getDocs(collection(database, this.studentsCollection));
-    return querySnapshot.docs.map(doc => doc.data() as StudentData);
-  }
-
-  /**
-   * Get all students from school database (optimized - select only essential fields)
-   * Use this for dashboard stats where full data is not needed
-   */
-  async getAllStudentsOptimized(schoolFirebaseConfig: any): Promise<StudentData[]> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    const querySnapshot = await getDocs(collection(database, this.studentsCollection));
-    return querySnapshot.docs.map(doc => {
-      const data = doc.data();
-      return {
-        studentId: data.studentId,
-        name: data.name,
-        uid: data.uid,
-      } as StudentData;
-    });
-  }
-
-  /**
-   * Save admin data to school database
-   */
-  async saveAdminWhitelist(schoolFirebaseConfig: any, admins: any[]): Promise<void> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    
-    for (const admin of admins) {
-      const adminRef = doc(database, this.adminsCollection, admin.email);
-      await setDoc(adminRef, {
-        email: admin.email,
-        uid: admin.uid,
-        role: admin.role || 'admin',
-        name: admin.name || 'Admin',
-        schoolId: admin.schoolId || 'default',
-        createdAt: new Date(),
-        updatedAt: new Date(),
+      return candidates.filter(subject => {
+        if (subject.subjectType === 'elective') {
+          return Array.isArray(subject.studentIds) && subject.studentIds.includes(student.studentId);
+        }
+        return subject.classroom === student.class;
       });
-    }
+    }, forceRefresh);
   }
 
   /**
-   * Delete teacher from school database
+   * Subjects taught by one teacher (single indexed query, cached 5 minutes).
    */
-  async deleteTeacher(schoolFirebaseConfig: any, teacherId: string): Promise<void> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    const teacherRef = doc(database, this.teachersCollection, teacherId);
-    await deleteDoc(teacherRef);
+  async getSubjectsForTeacher(schoolFirebaseConfig: FirebaseConfig, teacherId: string, forceRefresh = false): Promise<SubjectData[]> {
+    const projectId = schoolFirebaseConfig.projectId;
+    if (!teacherId) return [];
+    return this.teacherSubjectsCache.getOrLoad(`${projectId}:${teacherId}`, async () => {
+      const all = this.subjectsCache.get(`${projectId}:all`);
+      if (all) return all.filter(s => s.teacherId === teacherId);
+      const database = this.getSchoolDB(schoolFirebaseConfig);
+      const snap = await withRetry(() => getDocs(query(collection(database, this.subjectsCollection), where('teacherId', '==', teacherId))));
+      return snap.docs.map(d => d.data() as SubjectData);
+    }, forceRefresh);
   }
 
   /**
-   * Delete student from school database
+   * Students enrolled in the given subjects: whole classrooms for basic subjects,
+   * listed studentIds for electives that have them. Reads only those students.
    */
-  async deleteStudent(schoolFirebaseConfig: any, studentId: string): Promise<void> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    const studentRef = doc(database, this.studentsCollection, studentId);
-    await deleteDoc(studentRef);
-  }
-
-  /**
-   * Delete admin from school database
-   */
-  async deleteAdmin(schoolFirebaseConfig: any, email: string): Promise<void> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    const adminRef = doc(database, this.adminsCollection, email);
-    await deleteDoc(adminRef);
-  }
-
-  /**
-   * Delete multiple teachers from school database
-   */
-  async deleteTeacherWhitelist(schoolFirebaseConfig: any, teacherIds: string[]): Promise<void> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    
-    for (const teacherId of teacherIds) {
-      const teacherRef = doc(database, this.teachersCollection, teacherId);
-      await deleteDoc(teacherRef);
-    }
-  }
-
-  /**
-   * Delete multiple students from school database
-   */
-  async deleteStudentWhitelist(schoolFirebaseConfig: any, studentIds: string[]): Promise<void> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-
-    for (const studentId of studentIds) {
-      const studentRef = doc(database, this.studentsCollection, studentId);
-      await deleteDoc(studentRef);
-    }
-  }
-
-  /**
-   * Get all subjects from school database
-   */
-  async getAllSubjects(schoolFirebaseConfig: any): Promise<SubjectData[]> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    const querySnapshot = await getDocs(collection(database, this.subjectsCollection));
-    return querySnapshot.docs.map(doc => doc.data() as SubjectData);
-  }
-
-  /**
-   * Save subject whitelist to school database
-   */
-  async saveSubjectWhitelist(schoolFirebaseConfig: any, subjects: any[]): Promise<void> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-
+  async getStudentsForSubjects(schoolFirebaseConfig: FirebaseConfig, subjects: SubjectData[]): Promise<StudentData[]> {
+    const classrooms = new Set<string>();
+    const studentIds = new Set<string>();
     for (const subject of subjects) {
-      const subjectRef = doc(database, this.subjectsCollection, subject.subjectId);
-      const existingDoc = await getDoc(subjectRef);
-
-      let subjectData: any = {
-        subjectId: subject.subjectId,
-        teacherId: subject.teacherId,
-        subjectName: subject.subjectName,
-        classroom: subject.classroom,
-        day: subject.day,
-        time: subject.time,
-        duration: subject.duration || '1',
-        updatedAt: new Date(),
-      };
-
-      if (existingDoc.exists()) {
-        const existingData = existingDoc.data();
-        if (existingData.createdAt) subjectData.createdAt = existingData.createdAt;
-      } else {
-        subjectData.createdAt = new Date();
+      if (subject.subjectType === 'elective' && Array.isArray(subject.studentIds) && subject.studentIds.length > 0) {
+        subject.studentIds.forEach(id => studentIds.add(id));
+      } else if (subject.classroom) {
+        classrooms.add(subject.classroom);
       }
-
-      await setDoc(subjectRef, subjectData);
     }
+    if (classrooms.size === 0 && studentIds.size === 0) return [];
+
+    const projectId = schoolFirebaseConfig.projectId;
+    const key = `${projectId}:${Array.from(classrooms).sort().join('|')}:${Array.from(studentIds).sort().join('|')}`;
+    return this.subjectStudentsCache.getOrLoad(key, async () => {
+      const all = this.studentsCache.get(`${projectId}:all`);
+      if (all) return all.filter(s => classrooms.has(s.class) || studentIds.has(s.studentId));
+
+      const database = this.getSchoolDB(schoolFirebaseConfig);
+      const colRef = collection(database, this.studentsCollection);
+      const snaps = await Promise.all([
+        ...chunkArray(Array.from(classrooms), 30).map(chunk =>
+          withRetry(() => getDocs(query(colRef, where('class', 'in', chunk))))),
+        ...chunkArray(Array.from(studentIds), 30).map(chunk =>
+          withRetry(() => getDocs(query(colRef, where(documentId(), 'in', chunk))))),
+      ]);
+      const byId = new Map<string, StudentData>();
+      snaps.forEach(snap => snap.docs.forEach(d => byId.set(d.id, d.data() as StudentData)));
+      return Array.from(byId.values());
+    });
+  }
+
+  /**
+   * Save subject whitelist to school database (merge keeps createdAt and extra fields)
+   */
+  async saveSubjectWhitelist(schoolFirebaseConfig: FirebaseConfig, subjects: SubjectWhitelistRow[], onProgress?: ProgressCallback): Promise<void> {
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    const existing = await this.getAllSubjects(schoolFirebaseConfig);
+    const existingIds = new Set(existing.map(s => s.subjectId));
+    this.invalidateSubjects();
+
+    await this.commitInBatches(subjects.filter(s => s.subjectId), onProgress, (batch, chunk) => {
+      for (const subject of chunk) {
+        const subjectData: Record<string, unknown> = {
+          subjectId: subject.subjectId,
+          teacherId: subject.teacherId,
+          subjectName: subject.subjectName,
+          classroom: subject.classroom,
+          day: subject.day,
+          time: subject.time,
+          duration: subject.duration || '1',
+          updatedAt: new Date(),
+        };
+        if (subject.subjectType) subjectData.subjectType = subject.subjectType;
+        if (subject.schedules) subjectData.schedules = subject.schedules;
+        if (!existingIds.has(subject.subjectId)) subjectData.createdAt = new Date();
+        batch.set(doc(database, this.subjectsCollection, subject.subjectId), subjectData, { merge: true });
+      }
+    }, database);
+  }
+
+  /**
+   * Commit rows in write batches, several batches in parallel, reporting rows written.
+   * Whitelist writes are idempotent merges, so a retried batch is safe.
+   */
+  private async commitInBatches<T>(
+    rows: T[],
+    onProgress: ProgressCallback | undefined,
+    fill: (batch: WriteBatch, chunk: T[]) => void,
+    database: Firestore
+  ): Promise<void> {
+    let done = 0;
+    onProgress?.(0, rows.length);
+    await runPool(chunkArray(rows, UPLOAD_BATCH_SIZE), UPLOAD_CONCURRENCY, async chunk => {
+      await withRetry(() => {
+        const batch = writeBatch(database);
+        fill(batch, chunk);
+        return batch.commit();
+      });
+      done += chunk.length;
+      onProgress?.(done, rows.length);
+    });
   }
 
   /**
    * Add single subject to school database
    */
-  async addSubject(schoolFirebaseConfig: any, subject: any): Promise<void> {
+  async addSubject(schoolFirebaseConfig: FirebaseConfig, subject: Partial<SubjectData> & { subjectId: string }): Promise<void> {
+    this.invalidateSubjects();
     const database = this.getSchoolDB(schoolFirebaseConfig);
-    const subjectRef = doc(database, this.subjectsCollection, subject.subjectId);
-    await setDoc(subjectRef, {
+    await setDoc(doc(database, this.subjectsCollection, subject.subjectId), {
       ...subject,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
   }
 
-  /**
-   * Delete subject from school database
-   */
-  async deleteSubject(schoolFirebaseConfig: any, subjectId: string): Promise<void> {
+  async deleteSubject(schoolFirebaseConfig: FirebaseConfig, subjectId: string): Promise<void> {
+    this.invalidateSubjects();
     const database = this.getSchoolDB(schoolFirebaseConfig);
-    const subjectRef = doc(database, this.subjectsCollection, subjectId);
-    await deleteDoc(subjectRef);
+    await deleteDoc(doc(database, this.subjectsCollection, subjectId));
   }
 
-  /**
-   * Get all attendance records for a specific subject + classroom from school database (for admin teachers)
-   */
-  async getAttendanceBySubject(schoolFirebaseConfig: any, subjectId: string, classroom: string): Promise<any[]> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    const q = query(
-      collection(database, 'attendance'),
-      where('subjectId', '==', subjectId)
-    );
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(d => d.data());
+  // ---------------------------------------------------------------------------
+  // Teacher data stored in the School DB (teachers without their own Firebase project)
+  // These are the same operations as teacherDatabaseService, pointed at the school project.
+  // ---------------------------------------------------------------------------
+
+  async getAttendanceBySubject(schoolFirebaseConfig: FirebaseConfig, subjectId: string, classroom: string) {
+    return teacherDatabaseService.getAttendanceBySubject(schoolFirebaseConfig, subjectId, classroom);
   }
 
-  /**
-   * Delete all data related to a subject from school database (grades, assignments, attendance, schedules, materials)
-   */
-  async deleteSubjectAllData(schoolFirebaseConfig: any, subjectId: string, classroom: string): Promise<void> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    const collectionsToDelete = [
-      'grades', 
-      'assignments', 
-      'attendance', 
-      'schedules', 
-      'materials',
-      'gradeConfigs',
-      'assignmentGroups',
-      'studentScores'
-    ];
-    
-    for (const collectionName of collectionsToDelete) {
-      try {
-        // Query by subjectId is enough and more robust than including classroom
-        const q = query(
-          collection(database, collectionName),
-          where('subjectId', '==', subjectId)
-        );
-        const querySnapshot = await getDocs(q);
-        for (const docSnapshot of querySnapshot.docs) {
-          await deleteDoc(docSnapshot.ref);
-        }
-      } catch (error) {
-        console.error(`Error deleting subject data from school database collection ${collectionName}:`, error);
-      }
-    }
+  async deleteSubjectAllData(schoolFirebaseConfig: FirebaseConfig, subjectId: string, classroom: string): Promise<void> {
+    this.invalidateSubjects();
+    await teacherDatabaseService.deleteSubjectAllData(schoolFirebaseConfig, subjectId, classroom);
   }
 
-  /**
-   * Delete all attendance records for a specific subject + classroom from school database (for admin teachers)
-   */
-  async deleteAttendanceBySubject(schoolFirebaseConfig: any, subjectId: string, classroom: string): Promise<void> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    const q = query(
-      collection(database, 'attendance'),
-      where('subjectId', '==', subjectId)
-    );
-    const querySnapshot = await getDocs(q);
-    
-    for (const doc of querySnapshot.docs) {
-      await deleteDoc(doc.ref);
-    }
+  async deleteAttendanceBySubject(schoolFirebaseConfig: FirebaseConfig, subjectId: string, classroom: string): Promise<void> {
+    return teacherDatabaseService.deleteAttendanceBySubject(schoolFirebaseConfig, subjectId, classroom);
   }
 
-  /**
-   * GRADE & ASSIGNMENT METHODS (for admin teachers)
-   */
-
-  async getGradeConfig(schoolFirebaseConfig: any, subjectId: string): Promise<GradeConfig | null> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    const configRef = doc(database, 'gradeConfigs', subjectId);
-    const snap = await getDoc(configRef);
-    if (snap.exists()) {
-      const data = snap.data();
-      return {
-        ...data,
-        updatedAt: data.updatedAt?.toDate() || new Date()
-      } as GradeConfig;
-    }
-    return null;
+  async getGradeConfig(schoolFirebaseConfig: FirebaseConfig, subjectId: string): Promise<GradeConfig | null> {
+    return teacherDatabaseService.getGradeConfig(schoolFirebaseConfig, subjectId);
   }
 
-  async saveGradeConfig(schoolFirebaseConfig: any, config: GradeConfig): Promise<void> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    const configRef = doc(database, 'gradeConfigs', config.subjectId);
-    await setDoc(configRef, {
-      ...config,
-      updatedAt: new Date()
-    });
+  async saveGradeConfig(schoolFirebaseConfig: FirebaseConfig, config: GradeConfig): Promise<void> {
+    return teacherDatabaseService.saveGradeConfig(schoolFirebaseConfig, config);
   }
 
-  async getAssignments(schoolFirebaseConfig: any, subjectId: string, classroom: string): Promise<Assignment[]> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    const q = query(
-      collection(database, 'assignments'),
-      where('subjectId', '==', subjectId),
-      where('classroom', '==', classroom)
-    );
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(d => {
-      const data = d.data();
-      return {
-        ...data,
-        createdAt: data.createdAt?.toDate() || new Date(),
-        updatedAt: data.updatedAt?.toDate() || new Date()
-      } as Assignment;
-    });
+  async getAssignments(schoolFirebaseConfig: FirebaseConfig, subjectId: string, classroom: string): Promise<Assignment[]> {
+    return teacherDatabaseService.getAssignments(schoolFirebaseConfig, subjectId, classroom);
   }
 
-  async saveAssignment(schoolFirebaseConfig: any, assignment: Assignment): Promise<void> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    const assignmentRef = doc(database, 'assignments', assignment.id);
-    await setDoc(assignmentRef, {
-      ...assignment,
-      createdAt: assignment.createdAt || new Date(),
-      updatedAt: new Date()
-    });
+  async saveAssignment(schoolFirebaseConfig: FirebaseConfig, assignment: Assignment): Promise<void> {
+    return teacherDatabaseService.saveAssignment(schoolFirebaseConfig, assignment);
   }
 
-  async deleteAssignment(schoolFirebaseConfig: any, assignmentId: string): Promise<void> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    await deleteDoc(doc(database, 'assignments', assignmentId));
+  async deleteAssignment(schoolFirebaseConfig: FirebaseConfig, assignmentId: string): Promise<void> {
+    return teacherDatabaseService.deleteAssignment(schoolFirebaseConfig, assignmentId);
   }
 
-  async getAssignmentGroups(schoolFirebaseConfig: any, subjectId: string, classroom: string): Promise<AssignmentGroup[]> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    const q = query(
-      collection(database, 'assignmentGroups'),
-      where('subjectId', '==', subjectId),
-      where('classroom', '==', classroom)
-    );
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(d => {
-      const data = d.data();
-      return {
-        ...data,
-        createdAt: data.createdAt?.toDate() || new Date(),
-        updatedAt: data.updatedAt?.toDate() || new Date()
-      } as AssignmentGroup;
-    });
+  async getAssignmentGroups(schoolFirebaseConfig: FirebaseConfig, subjectId: string, classroom: string): Promise<AssignmentGroup[]> {
+    return teacherDatabaseService.getAssignmentGroups(schoolFirebaseConfig, subjectId, classroom);
   }
 
-  async saveAssignmentGroup(schoolFirebaseConfig: any, group: AssignmentGroup): Promise<void> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    const groupRef = doc(database, 'assignmentGroups', group.id);
-    await setDoc(groupRef, {
-      ...group,
-      createdAt: group.createdAt || new Date(),
-      updatedAt: new Date()
-    });
+  async saveAssignmentGroup(schoolFirebaseConfig: FirebaseConfig, group: AssignmentGroup): Promise<void> {
+    return teacherDatabaseService.saveAssignmentGroup(schoolFirebaseConfig, group);
   }
 
-  async deleteAssignmentGroup(schoolFirebaseConfig: any, groupId: string): Promise<void> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    await deleteDoc(doc(database, 'assignmentGroups', groupId));
+  async deleteAssignmentGroup(schoolFirebaseConfig: FirebaseConfig, groupId: string): Promise<void> {
+    return teacherDatabaseService.deleteAssignmentGroup(schoolFirebaseConfig, groupId);
   }
 
-  async getStudentScores(schoolFirebaseConfig: any, subjectId: string, classroom: string): Promise<StudentScore[]> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    const q = query(
-      collection(database, 'studentScores'),
-      where('subjectId', '==', subjectId),
-      where('classroom', '==', classroom)
-    );
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(d => {
-      const data = d.data();
-      return {
-        ...data,
-        updatedAt: data.updatedAt?.toDate() || new Date()
-      } as StudentScore;
-    });
+  async getStudentScores(schoolFirebaseConfig: FirebaseConfig, subjectId: string, classroom: string): Promise<StudentScore[]> {
+    return teacherDatabaseService.getStudentScores(schoolFirebaseConfig, subjectId, classroom);
   }
 
-  async saveStudentScore(schoolFirebaseConfig: any, score: StudentScore): Promise<void> {
-    const database = this.getSchoolDB(schoolFirebaseConfig);
-    const scoreId = `${score.subjectId}_${score.classroom.replace(/\//g, '-')}_${score.studentId}`;
-    const scoreRef = doc(database, 'studentScores', scoreId);
-    await setDoc(scoreRef, {
-      ...score,
-      updatedAt: new Date()
-    });
+  async saveStudentScore(schoolFirebaseConfig: FirebaseConfig, score: StudentScore): Promise<void> {
+    return teacherDatabaseService.saveStudentScore(schoolFirebaseConfig, score);
   }
+
+  // ---------------------------------------------------------------------------
+  // Bulk deletion
+  // ---------------------------------------------------------------------------
 
   /**
    * Delete all school data (teachers, students, subjects)
    */
-  async deleteAllSchoolData(schoolFirebaseConfig: any): Promise<void> {
-    // Delete all teachers
-    const teachers = await this.getAllTeachers(schoolFirebaseConfig);
-    const teacherIds = teachers.map(t => t.teacherId);
-    if (teacherIds.length > 0) {
-      await this.deleteTeacherWhitelist(schoolFirebaseConfig, teacherIds);
+  async deleteAllSchoolData(schoolFirebaseConfig: FirebaseConfig): Promise<void> {
+    const [teachers, students, subjects] = await Promise.all([
+      this.getAllTeachers(schoolFirebaseConfig, true),
+      this.getAllStudents(schoolFirebaseConfig, true),
+      this.getAllSubjects(schoolFirebaseConfig, true),
+    ]);
+
+    if (teachers.length > 0) {
+      await this.deleteTeacherWhitelist(schoolFirebaseConfig, teachers.map(t => t.teacherId));
+    }
+    if (students.length > 0) {
+      await this.deleteStudentWhitelist(schoolFirebaseConfig, students.map(s => s.studentId));
     }
 
-    // Delete all students
-    const students = await this.getAllStudents(schoolFirebaseConfig);
-    const studentIds = students.map(s => s.studentId);
-    if (studentIds.length > 0) {
-      await this.deleteStudentWhitelist(schoolFirebaseConfig, studentIds);
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    for (const chunk of chunkArray(subjects.map(s => s.subjectId), 499)) {
+      const batch = writeBatch(database);
+      chunk.forEach(id => batch.delete(doc(database, this.subjectsCollection, id)));
+      await batch.commit();
     }
-
-    // Delete all subjects
-    const subjects = await this.getAllSubjects(schoolFirebaseConfig);
-    for (const subject of subjects) {
-      await this.deleteSubject(schoolFirebaseConfig, subject.subjectId);
-    }
+    this.clearCache();
   }
 
   /**
    * Delete all teacher databases for all teachers in the school
    */
-  async deleteAllTeacherDatabases(schoolFirebaseConfig: any): Promise<void> {
-    const teachers = await this.getAllTeachers(schoolFirebaseConfig);
-
+  async deleteAllTeacherDatabases(schoolFirebaseConfig: FirebaseConfig): Promise<void> {
+    const teachers = await this.getAllTeachers(schoolFirebaseConfig, true);
     for (const teacher of teachers) {
       if (teacher.firebaseConfig) {
         try {
           await teacherDatabaseService.deleteTeacherDatabase(teacher.firebaseConfig);
-          console.log(`Deleted teacher database for: ${teacher.teacherId}`);
         } catch (error) {
           console.error(`Error deleting teacher database for ${teacher.teacherId}:`, error);
         }
@@ -638,27 +815,13 @@ class SchoolDatabaseService {
   /**
    * Delete all user accounts from Master Registry (teachers and students)
    */
-  async deleteAllUserAccountsFromMasterRegistry(
-    teacherEmails: string[],
-    studentEmails: string[]
-  ): Promise<void> {
-    // Delete teacher accounts
-    for (const email of teacherEmails) {
+  async deleteAllUserAccountsFromMasterRegistry(teacherEmails: string[], studentEmails: string[]): Promise<void> {
+    for (const email of [...teacherEmails, ...studentEmails]) {
+      if (!email) continue;
       try {
         await firestoreService.deleteUserAccount(email);
-        console.log(`Deleted teacher account: ${email}`);
       } catch (error) {
-        console.error(`Error deleting teacher account ${email}:`, error);
-      }
-    }
-
-    // Delete student accounts
-    for (const email of studentEmails) {
-      try {
-        await firestoreService.deleteUserAccount(email);
-        console.log(`Deleted student account: ${email}`);
-      } catch (error) {
-        console.error(`Error deleting student account ${email}:`, error);
+        console.error(`Error deleting account ${email}:`, error);
       }
     }
   }

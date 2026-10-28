@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { studentDatabaseService, StudentSubjectInfo, StudentGradeInfo, StudentAttendanceInfo } from '@/services/student-database.service';
 import { schoolDatabaseService } from '@/services/school-database.service';
+import { allowAction } from '@/lib/firestore-helpers';
 import StudentHeader from '@/components/StudentHeader';
 import StudentFooter from '@/components/StudentFooter';
 import { 
@@ -27,6 +28,7 @@ import {
   Filler,
   ChartOptions
 } from 'chart.js';
+import { useTheme } from '@/contexts/ThemeContext';
 
 ChartJS.register(
   ArcElement,
@@ -109,9 +111,10 @@ const DetailModal = ({ item, onClose, isDark }: { item: any, onClose: () => void
 
 export default function StudentSubjectsPage() {
   const { userAccount } = useAuth();
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const { isDark: isDarkMode, toggleTheme } = useTheme();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [partialFailure, setPartialFailure] = useState(false);
   const [subjects, setSubjects] = useState<StudentSubjectInfo[]>([]);
   const [grades, setGrades] = useState<StudentGradeInfo[]>([]);
   const [attendance, setAttendance] = useState<StudentAttendanceInfo[]>([]);
@@ -123,26 +126,6 @@ export default function StudentSubjectsPage() {
   const [expandedChapters, setExpandedChapters] = useState<Record<string, boolean>>({});
   const [detailModalItem, setDetailModalItem] = useState<any>(null);
   const [viewMode, setViewMode] = useState<'list' | 'grades' | 'attendance'>('grades');
-
-  const toggleTheme = () => {
-    setIsDarkMode(!isDarkMode);
-    document.documentElement.classList.toggle('dark');
-  };
-
-  useEffect(() => {
-    setIsDarkMode(document.documentElement.classList.contains('dark'));
-
-    const observer = new MutationObserver(() => {
-      setIsDarkMode(document.documentElement.classList.contains('dark'));
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-
-    return () => observer.disconnect();
-  }, []);
 
   const toggleChapter = (chapter: string) => {
     setExpandedChapters(prev => ({ ...prev, [chapter]: !prev[chapter] }));
@@ -159,17 +142,7 @@ export default function StudentSubjectsPage() {
       }
 
       // Get student data from school database
-      let studentData = await schoolDatabaseService.getStudentData(
-        userAccount.schoolFirebaseConfig,
-        userAccount?.userId || ''
-      );
-
-      if (!studentData && userAccount?.email) {
-        studentData = await schoolDatabaseService.getStudentDataByEmail(
-          userAccount.schoolFirebaseConfig,
-          userAccount.email
-        );
-      }
+      const studentData = await schoolDatabaseService.getStudentForAccount(userAccount.schoolFirebaseConfig, userAccount, force);
 
       if (!studentData) {
         setError('ไม่พบข้อมูลนักเรียน');
@@ -178,21 +151,18 @@ export default function StudentSubjectsPage() {
 
       setStudentInfo(studentData);
 
-      // Fetch subjects first (needed by grades/attendance as dependency)
-      const subjectsData = await studentDatabaseService.getStudentSubjects(
-        userAccount.schoolFirebaseConfig,
-        studentData
-      );
+      // Subjects, grades and attendance share one cached context (one set of reads)
+      const {
+        subjects: subjectsData,
+        grades: gradesData,
+        attendance: attendanceData,
+        failedTeacherIds,
+      } = await studentDatabaseService.getStudentSubjectOverview(userAccount.schoolFirebaseConfig, studentData, force);
+
       setSubjects(subjectsData);
-
-      // Fetch grades and attendance in PARALLEL for speed
-      const [gradesData, attendanceData] = await Promise.all([
-        studentDatabaseService.getStudentGrades(userAccount.schoolFirebaseConfig, studentData),
-        studentDatabaseService.getStudentAttendance(userAccount.schoolFirebaseConfig, studentData),
-      ]);
-
       setGrades(gradesData);
       setAttendance(attendanceData);
+      setPartialFailure(failedTeacherIds.length > 0);
 
       if (subjectsData.length === 1) {
         setSelectedSubject(subjectsData[0]);
@@ -218,6 +188,12 @@ export default function StudentSubjectsPage() {
       fetchData();
     }
   }, [userAccount]);
+
+  // Manual retry re-reads from the server; throttled to avoid hammering Firestore
+  const handleRetry = () => {
+    if (!allowAction('student-subjects-refresh', 10_000)) return;
+    fetchData(true);
+  };
 
   const handleSubjectSelect = (subject: StudentSubjectInfo) => {
     setSelectedSubject(subject);
@@ -314,7 +290,24 @@ export default function StudentSubjectsPage() {
             {error && (
               <div className={`${isDarkMode ? 'bg-red-900/30 border-red-700' : 'bg-red-50 border-red-200'} border rounded-2xl p-6`}>
                 <p className="text-red-600 font-bold">{error}</p>
+                <button
+                  onClick={handleRetry}
+                  disabled={refreshing}
+                  className="mt-3 text-sm font-semibold text-red-600 underline disabled:opacity-50"
+                >
+                  {refreshing ? 'กำลังโหลด...' : 'ลองใหม่'}
+                </button>
               </div>
+            )}
+
+            {!error && partialFailure && (
+              <button
+                onClick={handleRetry}
+                disabled={refreshing}
+                className={`w-full text-left ${isDarkMode ? 'bg-amber-900/30 border-amber-700 text-amber-300' : 'bg-amber-50 border-amber-200 text-amber-700'} border rounded-2xl p-4 text-sm font-semibold disabled:opacity-50`}
+              >
+                {refreshing ? 'กำลังโหลด...' : 'บางวิชาโหลดไม่สำเร็จ แตะเพื่อลองใหม่'}
+              </button>
             )}
 
             <div className="pt-2 px-2">
@@ -484,6 +477,9 @@ export default function StudentSubjectsPage() {
                     >
                       <div className="flex-1 pr-4 min-w-0">
                         <p className={`font-bold text-xl leading-tight truncate ${item.score === "" ? 'text-red-600' : (isDarkMode ? 'text-slate-200' : 'text-slate-700')}`}>{item.label}</p>
+                        {item.score === "" && (
+                          <p className="text-xs font-bold text-red-500 mt-1">งานค้าง</p>
+                        )}
                         {item.score === "" && item.description && (
                           <p className="text-sm font-bold leading-relaxed italic text-red-500/80 mt-1">{item.description}</p>
                         )}
@@ -493,7 +489,7 @@ export default function StudentSubjectsPage() {
                       </div>
                       <div className="shrink-0 flex items-center gap-1">
                         <span className={`font-black text-2xl tracking-tighter ${item.score === "" ? 'text-red-600' : 'text-indigo-500'}`}>
-                          {item.score === "" ? '0' : <CountUp value={item.score} duration={0.8} />}
+                          {item.score === "" ? '–' : <CountUp value={item.score} duration={0.8} />}
                         </span>
                         {item.max && <span className="text-sm font-bold text-slate-400 uppercase">/ {item.max}</span>}
                       </div>

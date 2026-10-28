@@ -4,11 +4,14 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { studentDatabaseService } from '@/services/student-database.service';
 import { schoolDatabaseService } from '@/services/school-database.service';
 import { firestoreService } from '@/services/firestore.service';
-import { teacherDatabaseService } from '@/services/teacher-database.service';
+import { runPool } from '@/lib/firestore-helpers';
+import UploadProgressModal, { UploadProgress } from '@/components/UploadProgressModal';
 import * as XLSX from 'xlsx';
 import { Download, Upload, Trash2, Edit, Eye, EyeOff, RefreshCw, Plus, ArrowLeft, Search, X } from 'lucide-react';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function StudentsManagement() {
   const router = useRouter();
@@ -21,7 +24,7 @@ export default function StudentsManagement() {
   const [studentsToAdd, setStudentsToAdd] = useState<any[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [pendingStudentsData, setPendingStudentsData] = useState<any[]>([]);
-  const [isDark, setIsDark] = useState(false);
+  const { isDark } = useTheme();
   const [openClass, setOpenClass] = useState<string | null>(null);
   const [showUID, setShowUID] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -45,23 +48,9 @@ export default function StudentsManagement() {
     email: ''
   });
   const [searchQuery, setSearchQuery] = useState('');
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const lastLoadedConfigRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    setIsDark(document.documentElement.classList.contains('dark'));
-
-    const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains('dark'));
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     loadStudents();
@@ -128,6 +117,8 @@ export default function StudentsManagement() {
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    // Reset so choosing the same file again still triggers onChange
+    e.target.value = '';
     if (!file) return;
 
     if (!userAccount?.schoolFirebaseConfig) {
@@ -136,6 +127,7 @@ export default function StudentsManagement() {
     }
 
     setLoading(true);
+    setUploadProgress({ title: 'กำลังอัพโหลดรายชื่อนักเรียน', label: 'กำลังอ่านไฟล์และตรวจสอบข้อมูล', step: 1, totalSteps: 2, done: 0, total: 0 });
     try {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
@@ -143,25 +135,26 @@ export default function StudentsManagement() {
       const worksheet = workbook.Sheets[sheetName];
       const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
 
+      // Excel may give numeric cells as numbers; document IDs and fields are strings
       const studentsData = jsonData.map((row: any) => ({
-        studentId: row['เลขประจำตัวนักเรียน'] || '',
-        name: row['ชื่อ-สกุล'] || '',
-        class: row['ชั้น'] || '',
-        number: row['เลขที่'] || '',
+        studentId: String(row['เลขประจำตัวนักเรียน'] ?? ''),
+        name: String(row['ชื่อ-สกุล'] ?? ''),
+        class: String(row['ชั้น'] ?? ''),
+        number: String(row['เลขที่'] ?? ''),
         schoolId: userAccount.schoolId || 'default',
-        teacherNodes: []
+        // teacherNodes isn't in the Excel file: omit it so existing values are kept
       }));
 
       // Get existing students
       const existingStudents = await schoolDatabaseService.getAllStudents(userAccount.schoolFirebaseConfig);
-      const newStudentIds = studentsData.map(s => s.studentId);
-      const existingStudentIds = existingStudents.map(s => s.studentId);
-      
+      const newStudentIds = new Set(studentsData.map(s => s.studentId));
+      const existingStudentIds = new Set(existingStudents.map(s => s.studentId));
+
       // Find students to delete (in old but not in new)
-      const studentsToDelete = existingStudents.filter(s => !newStudentIds.includes(s.studentId));
-      
+      const studentsToDelete = existingStudents.filter(s => !newStudentIds.has(s.studentId));
+
       // Find students to add (in new but not in old)
-      const studentsToAdd = studentsData.filter(s => !existingStudentIds.includes(s.studentId));
+      const studentsToAdd = studentsData.filter(s => !existingStudentIds.has(s.studentId));
 
       // If there are students to delete or add, show confirmation dialog
       if (studentsToDelete.length > 0 || studentsToAdd.length > 0) {
@@ -169,18 +162,30 @@ export default function StudentsManagement() {
         setStudentsToAdd(studentsToAdd);
         setPendingStudentsData(studentsData);
         setShowDeleteConfirm(true);
+        setUploadProgress(null);
         setLoading(false);
         return;
       }
 
       // No changes, proceed with upload
-      await schoolDatabaseService.saveStudentWhitelist(userAccount.schoolFirebaseConfig, studentsData);
+      const { unknownTeacherIds } = await schoolDatabaseService.saveStudentWhitelist(
+        userAccount.schoolFirebaseConfig,
+        studentsData,
+        (done, total) => setUploadProgress(p => p && { ...p, label: 'กำลังบันทึกรายชื่อ', step: 2, done, total })
+      );
+      setUploadProgress(p => p && { ...p, label: 'กำลังโหลดรายชื่อล่าสุด', done: 0, total: 0 });
       await loadStudents(true);
+      setUploadProgress(null);
+      if (unknownTeacherIds.length > 0) {
+        alert(`คำเตือน: ไม่พบครูรหัส ${unknownTeacherIds.join(', ')} ในระบบ (teacherNodes) ข้อมูลนักเรียนถูกบันทึกแล้ว`);
+      }
       alert('อัพโหลดรายชื่อนักเรียนสำเร็จ');
     } catch (error) {
       console.error('Error uploading students:', error);
+      setUploadProgress(null);
       alert('ไม่สามารถอัพโหลดรายชื่อนักเรียนได้');
     } finally {
+      setUploadProgress(null);
       setLoading(false);
     }
   };
@@ -195,57 +200,58 @@ export default function StudentsManagement() {
 
     setLoading(true);
     setShowDeleteConfirm(false);
+    const hasDeletes = studentsToDelete.length > 0;
+    const totalSteps = hasDeletes ? 2 : 1;
+    const title = 'กำลังอัพโหลดรายชื่อนักเรียน';
     try {
-      // Get all teachers to get their firebase configs
-      const allTeachers = await schoolDatabaseService.getAllTeachers(userAccount.schoolFirebaseConfig);
-      const teacherConfigs = new Map();
-      for (const teacher of allTeachers) {
-        if (teacher.firebaseConfig) {
-          teacherConfigs.set(teacher.teacherId, teacher.firebaseConfig);
-        }
-      }
-
-      // Delete students that are not in the new file
-      for (const student of studentsToDelete) {
-        try {
-          // Delete from School Database
-          await schoolDatabaseService.deleteStudent(userAccount.schoolFirebaseConfig, student.studentId);
-
-          // Delete user account from Master Registry (if email exists)
-          if (student.email) {
-            await firestoreService.deleteUserAccount(student.email);
+      // Delete students that are not in the new file (School DB, Master Registry and Teacher DBs).
+      // Each delete is independent, so a few run at once; one failure doesn't stop the rest.
+      const failedTeacherIds = new Set<string>();
+      const failedStudentIds: string[] = [];
+      if (hasDeletes) {
+        let deleted = 0;
+        setUploadProgress({ title, label: 'กำลังลบนักเรียนที่ไม่อยู่ในไฟล์', step: 1, totalSteps, done: 0, total: studentsToDelete.length });
+        await runPool(studentsToDelete, 5, async student => {
+          try {
+            const result = await studentDatabaseService.deleteStudentCompletely(userAccount.schoolFirebaseConfig!, student);
+            result.failedTeacherIds.forEach(id => failedTeacherIds.add(id));
+          } catch (error) {
+            console.error('Error deleting student:', student.studentId, error);
+            failedStudentIds.push(student.studentId);
           }
-
-          // Note: Firebase Auth deletion requires Admin SDK (server-side)
-          // Cannot be done from client SDK - will need manual cleanup or server endpoint
-
-          // Delete all student data from each Teacher Database
-          if (student.teacherNodes && student.teacherNodes.length > 0) {
-            for (const teacherId of student.teacherNodes) {
-              const teacherConfig = teacherConfigs.get(teacherId);
-              if (teacherConfig) {
-                try {
-                  await teacherDatabaseService.deleteAllStudentData(teacherConfig, student.studentId);
-                } catch (error) {
-                  console.error('Error deleting student data from teacher database:', teacherId, error);
-                }
-              }
-            }
-          }
-        } catch (error) {
-          console.error('Error deleting student:', student.studentId, error);
-        }
+          deleted++;
+          setUploadProgress(p => p && { ...p, done: deleted });
+        });
       }
 
       // Save new students to School Database
-      await schoolDatabaseService.saveStudentWhitelist(userAccount.schoolFirebaseConfig, pendingStudentsData);
+      setUploadProgress({ title, label: 'กำลังบันทึกรายชื่อ', step: totalSteps, totalSteps, done: 0, total: pendingStudentsData.length });
+      const { unknownTeacherIds } = await schoolDatabaseService.saveStudentWhitelist(
+        userAccount.schoolFirebaseConfig,
+        pendingStudentsData,
+        (done, total) => setUploadProgress(p => p && { ...p, done, total })
+      );
+      setUploadProgress(p => p && { ...p, label: 'กำลังโหลดรายชื่อล่าสุด', done: 0, total: 0 });
       await loadStudents(true);
       invalidateCache();
+      setUploadProgress(null);
+
+      if (failedStudentIds.length > 0) {
+        alert(`ลบนักเรียนบางคนไม่สำเร็จ: ${failedStudentIds.join(', ')}`);
+      }
+      if (failedTeacherIds.size > 0) {
+        alert(`ลบข้อมูลในฐานข้อมูลครูบางคนไม่สำเร็จ: ${Array.from(failedTeacherIds).join(', ')}`);
+      }
+      if (unknownTeacherIds.length > 0) {
+        alert(`คำเตือน: ไม่พบครูรหัส ${unknownTeacherIds.join(', ')} ในระบบ (teacherNodes) ข้อมูลนักเรียนถูกบันทึกแล้ว`);
+      }
       alert('อัพโหลดรายชื่อนักเรียนสำเร็จ');
     } catch (error) {
       console.error('Error uploading students:', error);
+      setUploadProgress(null);
       alert('ไม่สามารถอัพโหลดรายชื่อนักเรียนได้');
     } finally {
+      setUploadProgress(null);
       setLoading(false);
       setStudentsToDelete([]);
       setStudentsToAdd([]);
@@ -438,12 +444,15 @@ export default function StudentsManagement() {
     setLoading(true);
     try {
       const studentIdsArray = Array.from(selectedStudents);
+      const failedTeacherIds = new Set<string>();
       for (const studentId of studentIdsArray) {
         const student = students.find(s => s.studentId === studentId);
-        if (student?.email) {
-          await firestoreService.deleteUserAccount(student.email);
-        }
-        await schoolDatabaseService.deleteStudent(userAccount.schoolFirebaseConfig, studentId);
+        if (!student) continue;
+        const result = await studentDatabaseService.deleteStudentCompletely(userAccount.schoolFirebaseConfig, student);
+        result.failedTeacherIds.forEach(id => failedTeacherIds.add(id));
+      }
+      if (failedTeacherIds.size > 0) {
+        alert(`ลบข้อมูลในฐานข้อมูลครูบางคนไม่สำเร็จ: ${Array.from(failedTeacherIds).join(', ')}`);
       }
       setSelectedStudents(new Set());
       await loadStudents(true);
@@ -485,7 +494,8 @@ export default function StudentsManagement() {
           newStudentData.email,
           userAccount.schoolId,
           undefined,
-          'student'
+          'student',
+          newStudentData.studentId
         );
       }
 
@@ -552,7 +562,7 @@ export default function StudentsManagement() {
     setSelectedClass(null);
   };
 
-  if (loading && students.length === 0) {
+  if (loading && students.length === 0 && !uploadProgress) {
     return (
       <div className={`min-h-screen p-6 pb-24 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
         <h1 className={`text-3xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-800'}`}>จัดการข้อมูลนักเรียน</h1>
@@ -1050,12 +1060,20 @@ export default function StudentsManagement() {
             {studentsToDelete.length > 0 && (
               <div className={`max-h-40 overflow-y-auto mb-4 rounded-2xl p-4 ${isDark ? 'bg-red-900/30' : 'bg-red-50'}`}>
                 <p className={`text-sm mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>รายชื่อที่จะถูกลบ ({studentsToDelete.length} คน):</p>
+                {studentsToDelete.some(s => s.uid) && (
+                  <p className="text-sm font-semibold text-red-600 mb-2">
+                    มี {studentsToDelete.filter(s => s.uid).length} คนที่ใช้งานระบบอยู่แล้ว คะแนนและการเช็คชื่อของนักเรียนเหล่านี้จะถูกลบด้วย
+                  </p>
+                )}
                 {studentsToDelete.map((student) => (
                   <div key={student.studentId} className="flex items-center gap-2 py-1">
                     <span className="text-red-500">🗑️</span>
                     <span className={isDark ? 'text-gray-200' : 'text-gray-800'}>
                       {student.studentId} - {student.name} (ชั้น {student.class})
                     </span>
+                    {student.uid && (
+                      <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-red-500 text-white">ใช้งานอยู่</span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1101,6 +1119,8 @@ export default function StudentsManagement() {
           </motion.div>
         </motion.div>
       )}
+
+      <UploadProgressModal progress={uploadProgress} isDark={isDark} />
 
       {/* Add Student Modal */}
       {showAddModal && (

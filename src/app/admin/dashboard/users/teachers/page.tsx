@@ -7,8 +7,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { schoolDatabaseService } from '@/services/school-database.service';
 import { firestoreService } from '@/services/firestore.service';
 import { teacherDatabaseService } from '@/services/teacher-database.service';
+import { runPool } from '@/lib/firestore-helpers';
+import UploadProgressModal, { UploadProgress } from '@/components/UploadProgressModal';
 import * as XLSX from 'xlsx';
 import { Eye, EyeOff, Edit, RefreshCw, Trash2, Download, Upload, Plus, ArrowLeft, Search, X } from 'lucide-react';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function TeachersManagement() {
   const router = useRouter();
@@ -21,9 +24,9 @@ export default function TeachersManagement() {
   const [teachersToAdd, setTeachersToAdd] = useState<any[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [pendingTeachersData, setPendingTeachersData] = useState<any[]>([]);
-  const [isDark, setIsDark] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
+  const { isDark } = useTheme();
   const [showUID, setShowUID] = useState(false);
-  const [showFirebaseConfigInline, setShowFirebaseConfigInline] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editTeacherData, setEditTeacherData] = useState({
     teacherId: '',
@@ -42,21 +45,6 @@ export default function TeachersManagement() {
   });
   const [searchQuery, setSearchQuery] = useState('');
   const lastLoadedConfigRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    setIsDark(document.documentElement.classList.contains('dark'));
-
-    const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains('dark'));
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     loadTeachers();
@@ -119,6 +107,8 @@ export default function TeachersManagement() {
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    // Reset so choosing the same file again still triggers onChange
+    e.target.value = '';
     if (!file) return;
 
     if (!userAccount?.schoolFirebaseConfig) {
@@ -127,6 +117,7 @@ export default function TeachersManagement() {
     }
 
     setLoading(true);
+    setUploadProgress({ title: 'กำลังอัพโหลดรายชื่อครู', label: 'กำลังอ่านไฟล์และตรวจสอบข้อมูล', step: 1, totalSteps: 2, done: 0, total: 0 });
     try {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
@@ -134,22 +125,23 @@ export default function TeachersManagement() {
       const worksheet = workbook.Sheets[sheetName];
       const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
 
+      // Excel may give numeric cells as numbers; document IDs and fields are strings
       const teachersData = jsonData.map((row: any) => ({
-        teacherId: row['เลขประจำตัวครู'] || '',
-        name: row['ชื่อ-สกุล'] || '',
-        email: row['Email'] || ''
+        teacherId: String(row['เลขประจำตัวครู'] ?? ''),
+        name: String(row['ชื่อ-สกุล'] ?? ''),
+        email: String(row['Email'] ?? '')
       }));
 
       // Get existing teachers
       const existingTeachers = await schoolDatabaseService.getAllTeachers(userAccount.schoolFirebaseConfig);
-      const newTeacherIds = teachersData.map(t => t.teacherId);
-      const existingTeacherIds = existingTeachers.map(t => t.teacherId);
-      
+      const newTeacherIds = new Set(teachersData.map(t => t.teacherId));
+      const existingTeacherIds = new Set(existingTeachers.map(t => t.teacherId));
+
       // Find teachers to delete (in old but not in new)
-      const teachersToDelete = existingTeachers.filter(t => !newTeacherIds.includes(t.teacherId));
-      
+      const teachersToDelete = existingTeachers.filter(t => !newTeacherIds.has(t.teacherId));
+
       // Find teachers to add (in new but not in old)
-      const teachersToAdd = teachersData.filter(t => !existingTeacherIds.includes(t.teacherId));
+      const teachersToAdd = teachersData.filter(t => !existingTeacherIds.has(t.teacherId));
 
       // If there are teachers to delete or add, show confirmation dialog
       if (teachersToDelete.length > 0 || teachersToAdd.length > 0) {
@@ -157,18 +149,27 @@ export default function TeachersManagement() {
         setTeachersToAdd(teachersToAdd);
         setPendingTeachersData(teachersData);
         setShowDeleteConfirm(true);
+        setUploadProgress(null);
         setLoading(false);
         return;
       }
 
       // No changes, proceed with upload
-      await schoolDatabaseService.saveTeacherWhitelist(userAccount.schoolFirebaseConfig, teachersData);
+      await schoolDatabaseService.saveTeacherWhitelist(
+        userAccount.schoolFirebaseConfig,
+        teachersData,
+        (done, total) => setUploadProgress(p => p && { ...p, label: 'กำลังบันทึกรายชื่อ', step: 2, done, total })
+      );
+      setUploadProgress(p => p && { ...p, label: 'กำลังโหลดรายชื่อล่าสุด', done: 0, total: 0 });
       await loadTeachers(true);
+      setUploadProgress(null);
       alert('อัพโหลดรายชื่อครูสำเร็จ');
     } catch (error) {
       console.error('Error uploading teachers:', error);
+      setUploadProgress(null);
       alert('ไม่สามารถอัพโหลดรายชื่อครูได้');
     } finally {
+      setUploadProgress(null);
       setLoading(false);
     }
   };
@@ -183,39 +184,64 @@ export default function TeachersManagement() {
 
     setLoading(true);
     setShowDeleteConfirm(false);
+    const schoolConfig = userAccount.schoolFirebaseConfig;
+    const hasDeletes = teachersToDelete.length > 0;
+    const totalSteps = hasDeletes ? 2 : 1;
+    const title = 'กำลังอัพโหลดรายชื่อครู';
     try {
-      // Delete teachers that are not in the new file
-      for (const teacher of teachersToDelete) {
-        try {
-          // Delete from School Database
-          await schoolDatabaseService.deleteTeacher(userAccount.schoolFirebaseConfig, teacher.teacherId);
+      // Delete teachers that are not in the new file, a few at a time
+      const failedTeacherIds: string[] = [];
+      if (hasDeletes) {
+        let deleted = 0;
+        setUploadProgress({ title, label: 'กำลังลบครูที่ไม่อยู่ในไฟล์', step: 1, totalSteps, done: 0, total: teachersToDelete.length });
+        await runPool(teachersToDelete, 3, async teacher => {
+          try {
+            // Delete from School Database
+            await schoolDatabaseService.deleteTeacher(schoolConfig, teacher.teacherId);
 
-          // Delete user account from Master Registry (if email exists)
-          if (teacher.email) {
-            await firestoreService.deleteUserAccount(teacher.email);
+            // Delete user account from Master Registry (if email exists)
+            if (teacher.email) {
+              await firestoreService.deleteUserAccount(teacher.email);
+            }
+
+            // Note: Firebase Auth deletion requires Admin SDK (server-side)
+            // Cannot be done from client SDK - will need manual cleanup or server endpoint
+
+            // Delete all data from the teacher's own database. Never when it points at the
+            // school project: that would wipe data of every teacher stored in the School DB.
+            if (teacher.firebaseConfig && teacher.firebaseConfig.projectId !== schoolConfig.projectId) {
+              await teacherDatabaseService.deleteTeacherDatabase(teacher.firebaseConfig);
+            }
+          } catch (error) {
+            console.error('Error deleting teacher:', teacher.teacherId, error);
+            failedTeacherIds.push(teacher.teacherId);
           }
-
-          // Note: Firebase Auth deletion requires Admin SDK (server-side)
-          // Cannot be done from client SDK - will need manual cleanup or server endpoint
-
-          // Delete all data from Teacher Database (if teacher has firebaseConfig)
-          if (teacher.firebaseConfig) {
-            await teacherDatabaseService.deleteTeacherDatabase(teacher.firebaseConfig);
-          }
-        } catch (error) {
-          console.error('Error deleting teacher:', teacher.teacherId, error);
-        }
+          deleted++;
+          setUploadProgress(p => p && { ...p, done: deleted });
+        });
       }
 
       // Save new teachers to School Database
-      await schoolDatabaseService.saveTeacherWhitelist(userAccount.schoolFirebaseConfig, pendingTeachersData);
+      setUploadProgress({ title, label: 'กำลังบันทึกรายชื่อ', step: totalSteps, totalSteps, done: 0, total: pendingTeachersData.length });
+      await schoolDatabaseService.saveTeacherWhitelist(
+        schoolConfig,
+        pendingTeachersData,
+        (done, total) => setUploadProgress(p => p && { ...p, done, total })
+      );
+      setUploadProgress(p => p && { ...p, label: 'กำลังโหลดรายชื่อล่าสุด', done: 0, total: 0 });
       await loadTeachers(true);
       invalidateCache();
+      setUploadProgress(null);
+      if (failedTeacherIds.length > 0) {
+        alert(`ลบครูบางคนไม่สำเร็จ: ${failedTeacherIds.join(', ')}`);
+      }
       alert('อัพโหลดรายชื่อครูสำเร็จ');
     } catch (error) {
       console.error('Error uploading teachers:', error);
+      setUploadProgress(null);
       alert('ไม่สามารถอัพโหลดรายชื่อครูได้');
     } finally {
+      setUploadProgress(null);
       setLoading(false);
       setTeachersToDelete([]);
       setTeachersToAdd([]);
@@ -458,7 +484,8 @@ export default function TeachersManagement() {
           newTeacherData.email,
           userAccount.schoolId,
           undefined,
-          'teacher'
+          'teacher',
+          newTeacherData.teacherId
         );
       }
 
@@ -479,7 +506,7 @@ export default function TeachersManagement() {
     }
   };
 
-  if (loading && teachers.length === 0) {
+  if (loading && teachers.length === 0 && !uploadProgress) {
     return (
       <div className={`min-h-screen p-6 pb-24 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
         <h1 className={`text-3xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-800'}`}>จัดการข้อมูลครู</h1>
@@ -683,7 +710,6 @@ export default function TeachersManagement() {
           className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
           onClick={() => {
             setShowPopup(false);
-            setShowFirebaseConfigInline(false);
           }}
         >
           <motion.div
@@ -693,26 +719,7 @@ export default function TeachersManagement() {
             onClick={(e) => e.stopPropagation()}
             className={`rounded-2xl p-6 max-w-md w-full shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
           >
-            {/* Firebase Config View */}
-            {showFirebaseConfigInline ? (
-              <div>
-                <div className="flex items-center gap-3 mb-4">
-                  <button
-                    onClick={() => setShowFirebaseConfigInline(false)}
-                    className={`p-2 rounded-lg ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
-                  >
-                    <ArrowLeft size={20} className={isDark ? 'text-gray-400' : 'text-gray-600'} />
-                  </button>
-                  <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
-                    Firebase Config
-                  </h3>
-                </div>
-                <pre className={`p-4 rounded-xl overflow-x-auto text-xs ${isDark ? 'bg-gray-900 text-green-400' : 'bg-black text-green-400'}`}>
-                  <code>{JSON.stringify(selectedTeacher.firebaseConfig, null, 2)}</code>
-                </pre>
-              </div>
-            ) : (
-              <>
+            <>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
                     รายละเอียดครู
@@ -720,7 +727,6 @@ export default function TeachersManagement() {
                   <button
                     onClick={() => {
                       setShowPopup(false);
-                      setShowFirebaseConfigInline(false);
                     }}
                     className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-100 text-gray-400 hover:text-gray-600'}`}
                   >
@@ -758,14 +764,16 @@ export default function TeachersManagement() {
                       )}
                     </div>
                   )}
-                  {selectedTeacher.firebaseConfig && (
-                    <div
-                      onClick={() => setShowFirebaseConfigInline(true)}
-                      className={`cursor-pointer ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'} p-2 rounded-lg transition-colors`}
-                    >
-                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Firebase Config</p>
-                    </div>
-                  )}
+                  <div>
+                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>ฐานข้อมูลครู</p>
+                    <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>
+                      {selectedTeacher.firebaseConfig
+                        ? 'เชื่อมต่อฐานข้อมูลครูแล้ว'
+                        : selectedTeacher.uid
+                          ? 'ใช้ฐานข้อมูลโรงเรียน'
+                          : 'ยังไม่ได้ลงทะเบียนใช้ระบบ'}
+                    </p>
+                  </div>
                 </div>
                 <div className="flex gap-3 mt-6">
                   <motion.button
@@ -789,8 +797,7 @@ export default function TeachersManagement() {
                     </motion.button>
                   )}
                 </div>
-              </>
-            )}
+            </>
           </motion.div>
         </motion.div>
       )}
@@ -894,12 +901,20 @@ export default function TeachersManagement() {
             {teachersToDelete.length > 0 && (
               <div className={`max-h-40 overflow-y-auto mb-4 rounded-2xl p-4 ${isDark ? 'bg-red-900/30' : 'bg-red-50'}`}>
                 <p className={`text-sm mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>รายชื่อที่จะถูกลบ ({teachersToDelete.length} คน):</p>
+                {teachersToDelete.some(t => t.uid) && (
+                  <p className="text-sm font-semibold text-red-600 mb-2">
+                    มี {teachersToDelete.filter(t => t.uid).length} คนที่ใช้งานระบบอยู่แล้ว ข้อมูลเช็คชื่อและคะแนนในฐานข้อมูลของครูเหล่านี้จะถูกลบด้วย
+                  </p>
+                )}
                 {teachersToDelete.map((teacher) => (
                   <div key={teacher.teacherId} className="flex items-center gap-2 py-1">
                     <span className="text-red-500">🗑️</span>
                     <span className={isDark ? 'text-gray-200' : 'text-gray-800'}>
                       {teacher.teacherId} - {teacher.name}
                     </span>
+                    {teacher.uid && (
+                      <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-red-500 text-white">ใช้งานอยู่</span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -945,6 +960,8 @@ export default function TeachersManagement() {
           </motion.div>
         </motion.div>
       )}
+
+      <UploadProgressModal progress={uploadProgress} isDark={isDark} />
 
       {/* Add Teacher Modal */}
       {showAddModal && (

@@ -10,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { schoolDatabaseService } from '@/services/school-database.service';
 import { studentDatabaseService } from '@/services/student-database.service';
 import { AlertCircle, Clock, BookOpen, ChevronRight } from 'lucide-react';
+import { useTheme } from '@/contexts/ThemeContext';
 
 interface PendingAssignment {
   subjectId: string;
@@ -21,7 +22,7 @@ interface PendingAssignment {
 }
 
 export default function StudentDashboard() {
-  const [isDark, setIsDark] = useState(false);
+  const { isDark, toggleTheme } = useTheme();
   const [studentInfo, setStudentInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [pendingAssignments, setPendingAssignments] = useState<PendingAssignment[]>([]);
@@ -29,44 +30,13 @@ export default function StudentDashboard() {
   const router = useRouter();
   const { userAccount } = useAuth();
 
-  const toggleTheme = () => {
-    setIsDark(!isDark);
-    document.documentElement.classList.toggle('dark');
-  };
-
-  useEffect(() => {
-    setIsDark(document.documentElement.classList.contains('dark'));
-
-    const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains('dark'));
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-
-    return () => observer.disconnect();
-  }, []);
-
   useEffect(() => {
     const loadStudentInfo = async () => {
       if (!userAccount?.schoolFirebaseConfig || !userAccount?.userId) return;
 
       try {
         setLoading(true);
-        let studentData = await schoolDatabaseService.getStudentData(
-          userAccount.schoolFirebaseConfig,
-          userAccount.userId
-        );
-
-        // If not found by userId, try by email
-        if (!studentData && userAccount?.email) {
-          studentData = await schoolDatabaseService.getStudentDataByEmail(
-            userAccount.schoolFirebaseConfig,
-            userAccount.email
-          );
-        }
+        const studentData = await schoolDatabaseService.getStudentForAccount(userAccount.schoolFirebaseConfig, userAccount);
 
         setStudentInfo(studentData);
 

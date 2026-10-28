@@ -4,11 +4,10 @@ import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEffect, useState } from 'react';
-import { firestoreService } from '@/services/firestore.service';
 
 export default function RoleSwitcher() {
   const router = useRouter();
-  const { userAccount, setUserAccount, user } = useAuth();
+  const { userAccount } = useAuth();
   const [loading, setLoading] = useState(false);
 
   // Auto-redirect based on single role
@@ -27,37 +26,10 @@ export default function RoleSwitcher() {
     }
   }, [userAccount, router]);
 
-  const handleSwitchToTeacher = async () => {
-    if (!userAccount || !user?.email || !user?.uid) {
-      alert('ไม่พบข้อมูลผู้ใช้');
-      return;
-    }
-
+  // View switch only: the admin keeps their admin role (same as the switch button in TeacherHeader)
+  const handleSwitchToTeacher = () => {
     setLoading(true);
-    try {
-      // Update Master Registry to change role to teacher
-      await firestoreService.saveUserAccount(
-        user.email,
-        userAccount.schoolId,
-        user.uid,
-        'teacher'
-      );
-
-      // Update userAccount locally
-      const updatedUserAccount = {
-        ...userAccount,
-        role: 'teacher' as const,
-      };
-      setUserAccount(updatedUserAccount);
-
-      // Redirect to teacher dashboard
-      router.push('/teacher/dashboard');
-    } catch (error) {
-      console.error('Error switching to teacher role:', error);
-      alert('ไม่สามารถเปลี่ยนบทบาทได้');
-    } finally {
-      setLoading(false);
-    }
+    router.push('/teacher/dashboard');
   };
 
   if (!userAccount) {

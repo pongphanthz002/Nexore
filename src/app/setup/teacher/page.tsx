@@ -87,24 +87,11 @@ function TeacherSetupContent() {
         return;
       }
 
-      const teachers = await schoolDatabaseService.getAllTeachers(schoolFirebaseConfig);
-      console.log('Teachers from Firestore:', teachers);
-      console.log('Teacher ID entered:', teacherId);
-      
-      const teacherExists = teachers.some((t: any) => t.teacherId === teacherId);
-      console.log('Teacher exists:', teacherExists);
-      
-      if (!teacherExists) {
-        alert('เลขประจำตัวครูไม่พบในระบบ กรุณาติดต่อแอดมิน');
-        setLoading(false);
-        return;
-      }
-
-      // Get teacher data
-      const teacherData = teachers.find((t: any) => t.teacherId === teacherId);
+      // Read just this teacher's record (1 read) instead of the whole roster
+      const teacherData = await schoolDatabaseService.getTeacherConfig(schoolFirebaseConfig, teacherId.trim());
 
       if (!teacherData) {
-        alert('ไม่พบข้อมูลครู กรุณาติดต่อแอดมิน');
+        alert('เลขประจำตัวครูไม่พบในระบบ กรุณาติดต่อแอดมิน');
         setLoading(false);
         return;
       }
@@ -144,8 +131,7 @@ function TeacherSetupContent() {
       }
 
       // Get teacher data again
-      const teachers = await schoolDatabaseService.getAllTeachers(schoolFirebaseConfig);
-      const teacherData = teachers.find((t: any) => t.teacherId === teacherId);
+      const teacherData = await schoolDatabaseService.getTeacherConfig(schoolFirebaseConfig, teacherId);
       
       if (!teacherData) {
         alert('ไม่พบข้อมูลครู กรุณาติดต่อแอดมิน');
@@ -165,13 +151,8 @@ function TeacherSetupContent() {
 
       await storageService.setUserIdentity(identity);
 
-      // Save email → schoolId mapping to Master Registry
-      console.log('Saving user account to Master Registry:', user.email, schoolId);
-      console.log('User UID:', user.uid);
-      await firestoreService.saveUserAccount(user.email, schoolId, user.uid, 'teacher');
-      console.log('User account saved successfully');
-      
-      // Update teacher data with email, uid, role, and Firebase config in School Database
+      // Link the teacher record first (with their own Firebase config): if this fails
+      // the teacher must not end up half-registered in the Master Registry
       const updatedTeacherData: TeacherFirebaseConfig = {
         teacherId: teacherId,
         name: teacherData.name,
@@ -182,27 +163,19 @@ function TeacherSetupContent() {
         createdAt: teacherData.createdAt || new Date(),
         updatedAt: new Date(),
       };
+      await schoolDatabaseService.saveTeacherConfig(schoolFirebaseConfig, updatedTeacherData);
 
-      try {
-        await schoolDatabaseService.saveTeacherConfig(schoolFirebaseConfig, updatedTeacherData);
-        console.log('Teacher data saved to school database successfully');
-      } catch (error) {
-        console.error('Error saving teacher data to school database:', error);
-      }
+      // Save uid → schoolId mapping to Master Registry
+      await firestoreService.saveUserAccount(user.email, schoolId, user.uid, 'teacher', teacherId);
 
       // Set up user account for navigation with teacher's Firebase config
-      console.log('=== Setting up user account for navigation ===');
-      console.log('User email:', user.email);
-      console.log('School ID:', schoolId);
-      console.log('Teacher ID:', teacherId);
-      console.log('Teacher name:', teacherData.name);
-      console.log('Teacher Firebase config:', teacherFirebaseConfig);
 
       const userAccount: UserAccount = {
         id: user.email,
         email: user.email,
         schoolId: schoolId,
-        schoolFirebaseConfig: teacherFirebaseConfig, // Use teacher's own Firebase config
+        // School config, same as AuthContext; the teacher's own config is read from their teacher record
+        schoolFirebaseConfig: schoolFirebaseConfig,
         role: 'teacher',
         userId: teacherId,
         name: teacherData.name,

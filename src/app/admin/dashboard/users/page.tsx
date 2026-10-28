@@ -2,16 +2,17 @@
 
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { schoolDatabaseService } from '@/services/school-database.service';
 import { firestoreService } from '@/services/firestore.service';
 import { Users, GraduationCap, Book, ArrowLeft, AlertTriangle, X } from 'lucide-react';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function AdminUsers() {
   const router = useRouter();
   const { userAccount, invalidateCache, signOut } = useAuth();
-  const [isDark, setIsDark] = useState(false);
+  const { isDark } = useTheme();
   const [swipeProgress, setSwipeProgress] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
   const [touchStartX, setTouchStartX] = useState(0);
@@ -23,22 +24,6 @@ export default function AdminUsers() {
   const [resetInputText, setResetInputText] = useState('');
   const [deleteInputText, setDeleteInputText] = useState('');
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    setIsDark(document.documentElement.classList.contains('dark'));
-
-    // Listen for theme changes
-    const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains('dark'));
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-
-    return () => observer.disconnect();
-  }, []);
 
   // Swipe gesture handlers for back navigation
   const handleTouchStart = (e: React.TouchEvent) => {

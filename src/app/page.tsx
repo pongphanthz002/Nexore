@@ -6,7 +6,7 @@ import LoginSignup from '@/components/LoginSignup';
 import { useIdentityCheck } from '@/hooks/useIdentityCheck';
 
 export default function Home() {
-  const { loading, identity } = useIdentityCheck();
+  const { loading, redirecting } = useIdentityCheck();
   const [showLoading, setShowLoading] = useState(true);
 
   useEffect(() => {
@@ -22,7 +22,7 @@ export default function Home() {
     return <LoadingScreen />;
   }
 
-  if (identity && identity.isSetup) {
+  if (redirecting) {
     // Will be redirected by useIdentityCheck hook
     return <LoadingScreen />;
   }

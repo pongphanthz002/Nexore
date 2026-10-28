@@ -3,17 +3,9 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { schoolDatabaseService } from '@/services/school-database.service';
+import { schoolDatabaseService, SubjectData } from '@/services/school-database.service';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 
-interface SubjectData {
-  subjectId: string;
-  teacherId: string;
-  subjectName: string;
-  classroom: string;
-  day: string;
-  time: string;
-}
 
 interface StudentScheduleWidgetProps {
   isDark: boolean;
@@ -80,12 +72,8 @@ const StudentScheduleWidget = ({ isDark, studentInfo }: StudentScheduleWidgetPro
     async function loadSubjects() {
       if (userAccount?.schoolFirebaseConfig && studentInfo?.class) {
         try {
-          const allSubjects = await schoolDatabaseService.getAllSubjects(userAccount.schoolFirebaseConfig);
-          
-          // Filter subjects by student's classroom
-          const studentSubjects = allSubjects.filter(
-            s => s.classroom === studentInfo.class
-          );
+          // Only this student's subjects (classroom + enrolled electives), all teachers included
+          const studentSubjects = await schoolDatabaseService.getSubjectsForStudent(userAccount.schoolFirebaseConfig, studentInfo);
           setSubjects(studentSubjects);
         } catch (error) {
           console.error('Error loading subjects:', error);
@@ -98,7 +86,19 @@ const StudentScheduleWidget = ({ isDark, studentInfo }: StudentScheduleWidgetPro
   }, [userAccount, studentInfo]);
 
   const getSubjectsForDay = (day: string) => {
-    return subjects.filter(s => s.day === day).sort((a, b) => a.time.localeCompare(b.time));
+    const daySubjects: SubjectData[] = [];
+    subjects.forEach(s => {
+      if (s.schedules && s.schedules.length > 0) {
+        s.schedules.forEach(sch => {
+          if (sch.day === day) {
+            daySubjects.push({ ...s, day: sch.day, time: sch.time, duration: sch.duration || s.duration });
+          }
+        });
+      } else if (s.day === day) {
+        daySubjects.push(s);
+      }
+    });
+    return daySubjects.sort((a, b) => a.time.localeCompare(b.time));
   };
 
   // Merge subjects with same name and time but different rooms

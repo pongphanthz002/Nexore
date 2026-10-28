@@ -3,17 +3,9 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { schoolDatabaseService } from '@/services/school-database.service';
+import { schoolDatabaseService, SubjectData } from '@/services/school-database.service';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 
-interface SubjectData {
-  subjectId: string;
-  teacherId: string;
-  subjectName: string;
-  classroom: string;
-  day: string;
-  time: string;
-}
 
 interface ScheduleWidgetProps {
   isDark: boolean;
@@ -79,8 +71,7 @@ const ScheduleWidget = ({ isDark }: ScheduleWidgetProps) => {
     async function loadSubjects() {
       if (userAccount?.schoolFirebaseConfig && userAccount?.userId) {
         try {
-          const allSubjects = await schoolDatabaseService.getAllSubjects(userAccount.schoolFirebaseConfig);
-          const teacherSubjects = allSubjects.filter(s => s.teacherId === userAccount.userId);
+          const teacherSubjects = await schoolDatabaseService.getSubjectsForTeacher(userAccount.schoolFirebaseConfig, userAccount.userId);
           setSubjects(teacherSubjects);
         } catch (error) {
           console.error('Error loading subjects:', error);
@@ -93,7 +84,19 @@ const ScheduleWidget = ({ isDark }: ScheduleWidgetProps) => {
   }, [userAccount]);
 
   const getSubjectsForDay = (day: string) => {
-    return subjects.filter(s => s.day === day).sort((a, b) => a.time.localeCompare(b.time));
+    const daySubjects: SubjectData[] = [];
+    subjects.forEach(s => {
+      if (s.schedules && s.schedules.length > 0) {
+        s.schedules.forEach(sch => {
+          if (sch.day === day) {
+            daySubjects.push({ ...s, day: sch.day, time: sch.time, duration: sch.duration || s.duration });
+          }
+        });
+      } else if (s.day === day) {
+        daySubjects.push(s);
+      }
+    });
+    return daySubjects.sort((a, b) => a.time.localeCompare(b.time));
   };
 
   // Merge subjects with same name and time but different rooms
