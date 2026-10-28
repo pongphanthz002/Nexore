@@ -9,6 +9,8 @@ import {
 
 /** px per minute in the home card's vertical timeline */
 const PX_PER_MIN = 1.4;
+/** School lunch break, labelled in the card when no period overlaps it */
+const LUNCH = { start: 11 * 60 + 50, end: 12 * 60 + 40 };
 
 export const blockState = (entry: TimetableEntry, isToday: boolean, now: number): BlockState =>
   !isToday ? 'upcoming' : now >= entry.end ? 'past' : now >= entry.start ? 'current' : 'upcoming';
@@ -30,7 +32,7 @@ export function TimetableCard({ role, entries, range, now, dateLabel, next, isDa
   const reduce = useReducedMotion();
   const title = role === 'teacher' ? 'ตารางสอนวันนี้' : 'ตารางเรียนวันนี้';
   const y = (m: number) => (m - range.from) * PX_PER_MIN;
-  const lunchFree = !entries.some(e => e.start < 13 * 60 && e.end > 12 * 60) && range.from < 12 * 60 && range.to > 13 * 60;
+  const lunchFree = !entries.some(e => e.start < LUNCH.end && e.end > LUNCH.start) && range.from <= LUNCH.start && range.to >= LUNCH.end;
 
   return (
     <motion.section
@@ -84,7 +86,7 @@ export function TimetableCard({ role, entries, range, now, dateLabel, next, isDa
             </div>
           ))}
           {lunchFree && (
-            <div className="absolute inset-x-0 grid place-items-center text-xs text-gray-400 dark:text-gray-500" style={{ top: y(12 * 60), height: 60 * PX_PER_MIN }}>
+            <div className="absolute inset-x-0 grid place-items-center text-xs text-gray-400 dark:text-gray-500" style={{ top: y(LUNCH.start), height: (LUNCH.end - LUNCH.start) * PX_PER_MIN }}>
               พักกลางวัน
             </div>
           )}
