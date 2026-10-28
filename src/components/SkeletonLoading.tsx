@@ -11,13 +11,13 @@ export default function SkeletonLoading() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4"
+            className="h-8 bg-gray-300/60 dark:bg-white/10 rounded w-1/3 mb-4"
           />
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.1 }}
-            className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/4"
+            className="h-6 bg-gray-300/60 dark:bg-white/10 rounded w-1/4"
           />
         </div>
 
@@ -29,10 +29,10 @@ export default function SkeletonLoading() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.1 }}
-              className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg"
+              className="bg-surface rounded-2xl p-6 shadow-neu-lg"
             >
-              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-4" />
-              <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-3/4" />
+              <div className="h-4 bg-gray-300/60 dark:bg-white/10 rounded w-1/2 mb-4" />
+              <div className="h-8 bg-gray-300/60 dark:bg-white/10 rounded w-3/4" />
             </motion.div>
           ))}
         </div>
@@ -42,11 +42,11 @@ export default function SkeletonLoading() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
-          className="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-lg mb-8"
+          className="bg-surface rounded-2xl p-8 shadow-neu-lg mb-8"
         >
-          <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/4 mb-6" />
+          <div className="h-6 bg-gray-300/60 dark:bg-white/10 rounded w-1/4 mb-6" />
           <div className="flex justify-center">
-            <div className="w-48 h-48 bg-gray-200 dark:bg-gray-700 rounded-full" />
+            <div className="w-48 h-48 bg-gray-300/60 dark:bg-white/10 rounded-full" />
           </div>
         </motion.div>
 
@@ -58,11 +58,11 @@ export default function SkeletonLoading() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.6 + i * 0.1 }}
-              className="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-lg"
+              className="bg-surface rounded-2xl p-8 shadow-neu-lg"
             >
-              <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded-full w-12 mb-4" />
-              <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-2" />
-              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4" />
+              <div className="h-12 bg-gray-300/60 dark:bg-white/10 rounded-full w-12 mb-4" />
+              <div className="h-6 bg-gray-300/60 dark:bg-white/10 rounded w-1/2 mb-2" />
+              <div className="h-4 bg-gray-300/60 dark:bg-white/10 rounded w-3/4" />
             </motion.div>
           ))}
         </div>

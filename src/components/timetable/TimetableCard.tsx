@@ -45,7 +45,7 @@ export function TimetableCard({ role, entries, range, now, dateLabel, next, isDa
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.36, ease: [0.2, 0.8, 0.2, 1] }}
       whileTap={reduce ? undefined : { scale: 0.992 }}
-      className="w-full cursor-pointer rounded-[22px] border border-gray-200 bg-white p-4 pb-5 text-gray-900 outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-50"
+      className="w-full cursor-pointer rounded-[24px] bg-surface p-4 pb-5 text-gray-900 shadow-neu-lg outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-50"
     >
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
@@ -55,7 +55,7 @@ export function TimetableCard({ role, entries, range, now, dateLabel, next, isDa
           </p>
         </div>
         {entries.length > 0 && (
-          <span aria-hidden className="grid h-11 w-11 flex-none place-items-center rounded-full bg-gray-100 dark:bg-gray-700">
+          <span aria-hidden className="grid h-11 w-11 flex-none place-items-center rounded-full bg-surface shadow-neu-sm">
             <Maximize2 size={20} />
           </span>
         )}
@@ -63,7 +63,7 @@ export function TimetableCard({ role, entries, range, now, dateLabel, next, isDa
 
       {entries.length === 0 ? (
         <div className="flex flex-col items-start gap-1.5 pb-1 pt-2">
-          <span className="mb-1.5 grid h-12 w-12 place-items-center rounded-full bg-gray-100 dark:bg-gray-700"><Coffee size={22} /></span>
+          <span className="mb-1.5 grid h-12 w-12 place-items-center rounded-full shadow-neu-in-sm"><Coffee size={22} /></span>
           <h3 className="text-[17px] font-semibold">วันนี้ไม่มีคาบ</h3>
           {next && (
             <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -71,7 +71,7 @@ export function TimetableCard({ role, entries, range, now, dateLabel, next, isDa
               {role === 'teacher' ? ` ${next.classrooms.join(', ')}` : ''}
             </p>
           )}
-          <span className="mt-2 inline-flex h-10 items-center gap-1 rounded-full bg-gray-100 pl-4 pr-3 text-sm font-semibold dark:bg-gray-700">
+          <span className="mt-2 inline-flex h-10 items-center gap-1 rounded-full bg-surface pl-4 pr-3 text-sm font-semibold shadow-neu-sm">
             ดูตารางทั้งสัปดาห์ <ChevronRight size={16} />
           </span>
         </div>
@@ -79,14 +79,14 @@ export function TimetableCard({ role, entries, range, now, dateLabel, next, isDa
         <div className="relative ml-12" style={{ height: y(range.to) }}>
           {rangeTicks(range.from, range.to).map(m => (
             <div key={m}>
-              <div className="absolute inset-x-0 h-px bg-gray-200 dark:bg-gray-700" style={{ top: y(m) }} />
-              <div className="absolute -left-12 w-10 -translate-y-1/2 text-right text-xs leading-none tabular-nums text-gray-400 dark:text-gray-500" style={{ top: y(m) }}>
+              <div className="absolute inset-x-0 h-px bg-gray-300/70 dark:bg-white/10" style={{ top: y(m) }} />
+              <div className="absolute -left-12 w-10 -translate-y-1/2 text-right text-xs leading-none tabular-nums text-gray-500 dark:text-gray-400" style={{ top: y(m) }}>
                 {formatMinutes(m)}
               </div>
             </div>
           ))}
           {lunchFree && (
-            <div className="absolute inset-x-0 grid place-items-center text-xs text-gray-400 dark:text-gray-500" style={{ top: y(LUNCH.start), height: (LUNCH.end - LUNCH.start) * PX_PER_MIN }}>
+            <div className="absolute inset-x-0 grid place-items-center text-xs text-gray-500 dark:text-gray-400" style={{ top: y(LUNCH.start), height: (LUNCH.end - LUNCH.start) * PX_PER_MIN }}>
               พักกลางวัน
             </div>
           )}
@@ -136,7 +136,7 @@ export function AttendanceBar({ entry, now, isDark, onOpen }: AttendanceBarProps
       transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}
       whileTap={reduce ? undefined : { scale: 0.985 }}
       style={hueVars(entry.hue, isDark)}
-      className="flex w-full items-center gap-3 rounded-[18px] bg-gray-900 py-3 pl-4 pr-3 text-left text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 dark:bg-gray-50 dark:text-gray-900"
+      className="flex w-full items-center gap-3 rounded-[18px] bg-gray-900 py-3 pl-4 pr-3 text-left text-white shadow-neu focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 dark:bg-gray-50 dark:text-gray-900"
     >
       <span className="h-3 w-3 flex-none rounded-full bg-[var(--sbar)]" />
       <span className="min-w-0 flex-1">

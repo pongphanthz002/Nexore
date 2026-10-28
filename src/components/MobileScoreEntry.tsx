@@ -63,15 +63,17 @@ export default function MobileScoreEntry({ isDark, students, assignments, groups
     onEdit([{ studentId, field, value: parsed.value }]);
   };
 
-  const surface = isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200';
+  // Soft UI: the picker card rises, each student row sits sunk into the page
+  const raised = 'border-transparent bg-surface shadow-neu';
+  const sunk = 'border-transparent shadow-neu-in-sm';
 
   return (
     <div className="space-y-3">
-      <div className={`sticky top-0 z-10 p-3 rounded-2xl border ${surface}`}>
+      <div className={`sticky top-0 z-10 p-3 rounded-2xl border ${raised}`}>
         <select
           value={field}
           onChange={e => setField(e.target.value as ScoreField)}
-          className={`w-full h-12 px-3 rounded-xl border text-base font-bold ${isDark ? 'bg-gray-900 border-gray-700 text-white' : 'bg-gray-50 border-gray-200'}`}
+          className={`w-full h-12 px-3 rounded-xl border border-transparent bg-surface shadow-neu-in-sm text-base font-bold ${isDark ? 'text-white' : ''}`}
         >
           {options.map(o => <option key={o.field} value={o.field}>{o.label}</option>)}
         </select>
@@ -84,7 +86,7 @@ export default function MobileScoreEntry({ isDark, students, assignments, groups
         const key = `${s.studentId}|${field}`;
         const bad = invalid.has(key);
         return (
-          <div key={s.studentId} className={`flex items-center gap-3 p-3 rounded-2xl border ${bad ? 'border-red-400 bg-red-50 dark:bg-red-950/40' : surface}`}>
+          <div key={s.studentId} className={`flex items-center gap-3 p-3 rounded-2xl border ${bad ? 'border-red-400 bg-red-50 dark:bg-red-950/40' : sunk}`}>
             <span className={`w-8 text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{s.number || '-'}</span>
             <span className="flex-1 min-w-0 truncate font-semibold">{s.name}</span>
             <input
@@ -101,7 +103,7 @@ export default function MobileScoreEntry({ isDark, students, assignments, groups
                 const next = inputs.current[i + 1];
                 if (next) next.focus(); else (e.target as HTMLInputElement).blur();
               }}
-              className={`w-20 h-12 text-center text-lg font-bold rounded-xl border ${bad ? 'border-red-500 text-red-600' : isDark ? 'bg-gray-900 border-gray-600 text-white' : 'bg-gray-50 border-gray-200'} focus:outline-none focus:ring-2 focus:ring-blue-500/30`}
+              className={`w-20 h-12 text-center text-lg font-bold rounded-xl border ${bad ? 'border-red-500 bg-surface text-red-700' : `border-transparent bg-surface shadow-neu-sm ${isDark ? 'text-white' : ''}`} focus:outline-none focus:ring-2 focus:ring-blue-500/30`}
             />
           </div>
         );

@@ -55,7 +55,7 @@ export default function UploadProgressModal({ progress, isDark }: { progress: Up
         </div>
 
         <div
-          className={`h-2.5 rounded-full overflow-hidden ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`}
+          className="h-2.5 rounded-full overflow-hidden shadow-neu-in-xs"
           role="progressbar"
           aria-valuemin={0}
           aria-valuemax={100}

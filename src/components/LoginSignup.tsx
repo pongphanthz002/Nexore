@@ -88,7 +88,7 @@ export default function LoginSignup() {
           : null;
 
   return (
-    <div className="no-scroll bg-white flex items-center justify-center relative">
+    <div className="no-scroll soft-light bg-surface flex items-center justify-center relative">
       {/* Main content */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -129,12 +129,12 @@ export default function LoginSignup() {
         )}
 
         {/* Button Card */}
-        <div className="bg-white rounded-2xl p-6 shadow-lg">
+        <div className="bg-surface rounded-2xl p-6 shadow-neu-lg">
           {/* Sign In Button */}
           <button
             onClick={handleSignIn}
             disabled={loading}
-            className="w-full bg-gray-500 text-white font-bold py-4 rounded-lg mb-2 hover:bg-[#000000] hover:scale-105 transition-all duration-150 disabled:opacity-50 flex items-center justify-center gap-3 shadow-md"
+            className="w-full bg-gray-500 text-white font-bold py-4 rounded-lg mb-2 hover:bg-[#000000] hover:scale-105 transition-all duration-150 disabled:opacity-50 flex items-center justify-center gap-3 shadow-neu-sm"
           >
             <svg className="w-6 h-6" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04-2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -156,7 +156,7 @@ export default function LoginSignup() {
           <button
             onClick={handleSignup}
             disabled={loading}
-            className="w-full bg-white border border-gray-200 text-black font-bold py-4 rounded-lg hover:border-gray-400 hover:scale-105 transition-all duration-150 disabled:opacity-50 flex items-center justify-center gap-3 shadow-md"
+            className="w-full bg-surface text-black font-bold py-4 rounded-lg hover:border-gray-400 hover:scale-105 transition-all duration-150 disabled:opacity-50 flex items-center justify-center gap-3 shadow-neu-sm"
           >
             <svg className="w-6 h-6" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04-2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>

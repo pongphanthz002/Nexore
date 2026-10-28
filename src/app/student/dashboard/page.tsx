@@ -89,7 +89,7 @@ export default function StudentDashboard() {
   };
 
   return (
-    <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+    <div className="min-h-screen bg-surface">
       <StudentHeader isDark={isDark} toggleTheme={toggleTheme} />
       
       {/* Main content */}
@@ -105,16 +105,16 @@ export default function StudentDashboard() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4 }}
             >
-              <div className={`${isDark ? 'bg-[#1E293B] border-[#334155]' : 'bg-white border-slate-100'} border rounded-2xl p-5 shadow-sm`}>
+              <div className="rounded-[24px] bg-surface p-5 shadow-neu-lg">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-red-950/50' : 'bg-red-50'}`}>
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-neu-in-sm">
                     <AlertCircle className="w-5 h-5 text-red-500" />
                   </div>
                   <div>
                     <h3 className={`font-bold text-base ${isDark ? 'text-slate-100' : 'text-slate-800'}`}>
                       งานค้าง
                     </h3>
-                    <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                       {pendingAssignments.length} รายการ
                     </p>
                   </div>
@@ -132,32 +132,32 @@ export default function StudentDashboard() {
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: idx * 0.05 }}
                         onClick={() => router.push(`/student/dashboard/subjects?subject=${encodeURIComponent(item.subjectId)}`)}
-                        className={`p-4 rounded-xl border cursor-pointer transition-all hover:shadow-sm active:scale-[0.98] ${
+                        className={`p-4 rounded-2xl cursor-pointer transition-shadow active:shadow-neu-in-sm ${
                           isOverdue
-                            ? (isDark ? 'bg-red-950/20 border-red-900/40' : 'bg-red-50/60 border-red-200/60')
-                            : (isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-100')
+                            ? (isDark ? 'bg-red-950/20 shadow-neu-sm' : 'bg-red-50/70 shadow-neu-sm')
+                            : 'bg-surface shadow-neu-sm'
                         }`}
                       >
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex-1 min-w-0">
                             <p className={`font-bold text-sm leading-tight truncate ${
-                              isOverdue ? 'text-red-500' : (isDark ? 'text-slate-200' : 'text-slate-700')
+                              isOverdue ? (isDark ? 'text-red-400' : 'text-red-700') : (isDark ? 'text-slate-200' : 'text-slate-700')
                             }`}>
                               {item.assignmentTitle}
                             </p>
-                            <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                            <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                               {item.subjectName}
                             </p>
                             {deadlineInfo && typeof deadlineInfo === 'object' && (
                               <p className={`text-xs font-semibold flex items-center gap-1 mt-1 ${
-                                isOverdue ? 'text-red-500' : (isDark ? 'text-slate-400' : 'text-slate-500')
+                                isOverdue ? (isDark ? 'text-red-400' : 'text-red-700') : (isDark ? 'text-slate-400' : 'text-slate-600')
                               }`}>
                                 <Clock className="w-3 h-3" />
                                 กำหนดส่ง: {deadlineInfo.text}
                               </p>
                             )}
                           </div>
-                          <div className={`p-1.5 rounded-lg shrink-0 ${isDark ? 'bg-slate-700 text-slate-400' : 'bg-slate-100 text-slate-400'}`}>
+                          <div className={`p-1.5 rounded-lg shrink-0 shadow-neu-in-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                             <ChevronRight className="w-4 h-4" />
                           </div>
                         </div>

@@ -215,7 +215,7 @@ export default function AdminSetup() {
   };
 
   return (
-    <div className="min-h-screen bg-white relative p-4 pt-8 overflow-y-auto">
+    <div className="min-h-screen soft-light bg-surface relative p-4 pt-8 overflow-y-auto">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -251,7 +251,7 @@ export default function AdminSetup() {
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="bg-white rounded-2xl p-6 shadow-lg"
+            className="bg-surface rounded-2xl p-6 shadow-neu-lg"
           >
             <h2 className="text-2xl font-bold text-black mb-6">
               SET UP with Firebase
@@ -267,7 +267,7 @@ export default function AdminSetup() {
                   type="text"
                   value={config.schoolName || ''}
                   onChange={(e) => handleConfigChange('schoolName', e.target.value)}
-                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -278,7 +278,7 @@ export default function AdminSetup() {
                   type="text"
                   value={config.schoolApiKey || ''}
                   onChange={(e) => handleConfigChange('schoolApiKey', e.target.value)}
-                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -289,7 +289,7 @@ export default function AdminSetup() {
                   type="text"
                   value={config.schoolAuthDomain || ''}
                   onChange={(e) => handleConfigChange('schoolAuthDomain', e.target.value)}
-                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -300,7 +300,7 @@ export default function AdminSetup() {
                   type="text"
                   value={config.schoolProjectId || ''}
                   onChange={(e) => handleConfigChange('schoolProjectId', e.target.value)}
-                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -311,7 +311,7 @@ export default function AdminSetup() {
                   type="text"
                   value={config.schoolStorageBucket || ''}
                   onChange={(e) => handleConfigChange('schoolStorageBucket', e.target.value)}
-                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -322,7 +322,7 @@ export default function AdminSetup() {
                   type="text"
                   value={config.schoolMessagingSenderId || ''}
                   onChange={(e) => handleConfigChange('schoolMessagingSenderId', e.target.value)}
-                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -333,7 +333,7 @@ export default function AdminSetup() {
                   type="text"
                   value={config.schoolAppId || ''}
                   onChange={(e) => handleConfigChange('schoolAppId', e.target.value)}
-                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>

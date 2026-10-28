@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 
 export default function LoadingScreen() {
   return (
-    <div className="no-scroll bg-white flex items-center justify-center relative">
+    <div className="no-scroll soft-light bg-surface flex items-center justify-center relative">
       {/* Main content */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}

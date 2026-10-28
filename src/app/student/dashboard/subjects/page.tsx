@@ -102,7 +102,7 @@ export default function StudentSubjectsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans text-gray-900 dark:bg-gray-900 dark:text-gray-50">
+    <div className="min-h-screen bg-surface font-sans text-gray-900 dark:text-gray-50">
       <StudentHeader isDark={isDark} toggleTheme={toggleTheme} />
 
       <main className="mx-auto w-full max-w-7xl px-4 pb-32 pt-24 sm:px-6">
@@ -125,7 +125,7 @@ export default function StudentSubjectsPage() {
               <button
                 type="button"
                 onClick={() => openSubject(null)}
-                className="-ml-2 inline-flex h-11 items-center gap-1 rounded-full pl-1 pr-4 text-[15px] font-medium text-gray-700 transition-colors hover:bg-gray-200/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 dark:text-gray-300 dark:hover:bg-gray-800"
+                className="inline-flex h-11 items-center gap-1 rounded-full bg-surface pl-2 pr-4 text-[15px] font-medium text-gray-700 shadow-neu-sm transition-shadow focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 active:shadow-neu-in-sm dark:text-gray-300"
               >
                 <ChevronLeft size={20} /> วิชาทั้งหมด
               </button>
@@ -133,7 +133,7 @@ export default function StudentSubjectsPage() {
 
             <SubjectHeader subject={selected} isDark={isDark} />
 
-            <div role="tablist" aria-label="ข้อมูลวิชา" className="grid grid-cols-2 gap-1 rounded-full bg-gray-200/70 p-1 dark:bg-gray-800 sm:max-w-sm">
+            <div role="tablist" aria-label="ข้อมูลวิชา" className="grid grid-cols-2 gap-1 rounded-full p-1.5 shadow-neu-in-sm sm:max-w-sm">
               {([['grades', 'คะแนน'], ['attendance', 'เวลาเรียน']] as const).map(([mode, label]) => (
                 <button
                   key={mode}
@@ -143,7 +143,7 @@ export default function StudentSubjectsPage() {
                   onClick={() => setViewMode(mode)}
                   className={`h-10 rounded-full text-[15px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 ${
                     viewMode === mode
-                      ? 'bg-white text-gray-900 dark:bg-gray-600 dark:text-white'
+                      ? 'bg-surface text-gray-900 shadow-neu-sm dark:text-white'
                       : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
                   }`}
                 >

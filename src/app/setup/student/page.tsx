@@ -142,7 +142,7 @@ export default function StudentSetup() {
   };
 
   return (
-    <div className="no-scroll bg-white flex items-center justify-center overflow-hidden relative p-4">
+    <div className="no-scroll soft-light bg-surface flex items-center justify-center overflow-hidden relative p-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -178,7 +178,7 @@ export default function StudentSetup() {
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="bg-white rounded-2xl p-6 shadow-lg"
+            className="bg-surface rounded-2xl p-6 shadow-neu-lg"
           >
             <p className="text-gray-500 mb-6">
               กรุณากรอก School ID
@@ -191,7 +191,7 @@ export default function StudentSetup() {
                   value={schoolId}
                   onChange={(e) => setSchoolId(e.target.value)}
                   placeholder="ใส่ School ID ของโรงเรียน"
-                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors pr-10"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors pr-10"
                 />
                 <button
                   type="button"
@@ -226,7 +226,7 @@ export default function StudentSetup() {
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="bg-white rounded-2xl p-6 shadow-lg"
+            className="bg-surface rounded-2xl p-6 shadow-neu-lg"
           >
             <h2 className="text-2xl font-bold text-black mb-6">
               ID Verification
@@ -240,7 +240,7 @@ export default function StudentSetup() {
                 type="text"
                 value={studentId}
                 onChange={(e) => setStudentId(e.target.value)}
-                className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
+                className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                 placeholder="เช่น S001"
                 required
               />

@@ -41,7 +41,7 @@ export default function StudentLearningPage() {
 
   if (loading) {
     return (
-      <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'} flex items-center justify-center`}>
+      <div className="min-h-screen bg-surface flex items-center justify-center">
         <div className="text-center">
           <Clock className="w-12 h-12 animate-spin text-red-500 mx-auto mb-4" />
           <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>กำลังโหลด...</p>
@@ -50,7 +50,7 @@ export default function StudentLearningPage() {
     );
   }
 
-  const darkClass = isDarkMode ? "dark bg-gray-900 text-slate-100" : "bg-gray-50 text-slate-900";
+  const darkClass = isDarkMode ? "dark bg-surface text-slate-100" : "bg-surface text-slate-900";
 
   return (
     <div className={`min-h-screen ${darkClass} font-sans transition-colors duration-300 overflow-x-hidden`}>
@@ -69,7 +69,7 @@ export default function StudentLearningPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className={`${isDarkMode ? 'bg-[#1E293B] border-[#334155]' : 'bg-white border-slate-100'} border rounded-[3rem] p-12 shadow-sm text-center relative overflow-hidden`}
+          className="bg-surface rounded-[3rem] p-12 shadow-neu-lg text-center relative overflow-hidden"
         >
           <motion.div 
             animate={{ y: [0, -10, 0] }}
@@ -86,17 +86,17 @@ export default function StudentLearningPage() {
               ฟีเจอร์นี้กำลังอยู่ในระหว่างการพัฒนา
             </p>
             <div className="flex flex-wrap justify-center gap-4">
-              <div className={`p-4 rounded-2xl ${isDarkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
+              <div className="p-4 rounded-2xl shadow-neu-in-sm">
                 <Lightbulb className="w-6 h-6 text-yellow-500 mx-auto mb-2" />
-                <p className={`text-xs font-bold ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>คลังความรู้</p>
+                <p className={`text-xs font-bold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>คลังความรู้</p>
               </div>
-              <div className={`p-4 rounded-2xl ${isDarkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
+              <div className="p-4 rounded-2xl shadow-neu-in-sm">
                 <GraduationCap className="w-6 h-6 text-red-500 mx-auto mb-2" />
-                <p className={`text-xs font-bold ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>คอร์สเสริม</p>
+                <p className={`text-xs font-bold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>คอร์สเสริม</p>
               </div>
-              <div className={`p-4 rounded-2xl ${isDarkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
+              <div className="p-4 rounded-2xl shadow-neu-in-sm">
                 <Zap className="w-6 h-6 text-orange-500 mx-auto mb-2" />
-                <p className={`text-xs font-bold ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>แบบฝึกหัด</p>
+                <p className={`text-xs font-bold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>แบบฝึกหัด</p>
               </div>
             </div>
           </motion.div>

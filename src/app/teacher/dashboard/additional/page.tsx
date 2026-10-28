@@ -13,7 +13,7 @@ export default function AdditionalPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
+          className={`rounded-2xl p-6 bg-surface shadow-neu-lg`}
         >
           <h1 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
             ระบบเพิ่มเติม

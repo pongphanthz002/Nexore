@@ -675,11 +675,11 @@ export default function GradesPage() {
     return (
       <div className="p-6">
         <div className="max-w-7xl mx-auto">
-          <div className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg animate-pulse`}>
-            <div className={`h-8 w-40 rounded-lg mb-4 ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+          <div className={`rounded-2xl p-6 bg-surface shadow-neu-lg animate-pulse`}>
+            <div className={`h-8 w-40 rounded-lg mb-4 ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
             <div className="grid grid-cols-2 gap-3">
               {[1, 2, 3, 4].map(i => (
-                <div key={i} className={`h-20 rounded-xl ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                <div key={i} className={`h-20 rounded-xl ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
               ))}
             </div>
           </div>
@@ -719,11 +719,9 @@ export default function GradesPage() {
                     }}
                     disabled={uniqueSubjects.length === 0}
                     title="ดาวน์โหลด Excel (Google Sheets)"
-                    className={`p-3 rounded-2xl border transition-all flex items-center justify-center shadow-sm hover:shadow-md ${
-                      isDark 
-                        ? 'bg-gray-800 border-gray-700 hover:bg-gray-700/80 hover:border-emerald-500/50 text-white' 
-                        : 'bg-white border-gray-200 hover:bg-gray-50 hover:border-emerald-400 text-gray-800'
-                    } disabled:opacity-40 disabled:cursor-not-allowed`}
+                    className={`p-3 rounded-2xl bg-surface shadow-neu-sm transition-shadow flex items-center justify-center active:shadow-neu-in-sm ${
+                      isDark ? 'text-white' : 'text-gray-800'
+                    } disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none`}
                   >
                     <GoogleSheetsIcon size={24} />
                   </motion.button>
@@ -732,18 +730,14 @@ export default function GradesPage() {
 
               {uniqueSubjects.length > 0 ? (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {uniqueSubjects.map((subject) => (
                       <motion.div
                         key={`${subject.subjectName}-${subject.classroom}`}
                         whileHover={{ scale: 1.01, y: -2 }}
                         whileTap={{ scale: 0.99 }}
                         onClick={() => handleSelectSubject(subject)}
-                        className={`p-4 rounded-xl cursor-pointer transition-all border-2 ${
-                          isDark 
-                            ? 'bg-gray-800 border-gray-700 hover:border-red-500/50 hover:bg-gray-750' 
-                            : 'bg-gray-50 border-gray-100 hover:border-red-200 hover:bg-white hover:shadow-lg hover:shadow-red-500/5'
-                        }`}
+                        className="p-4 rounded-2xl cursor-pointer bg-surface shadow-neu transition-shadow active:shadow-neu-in-sm"
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4">
@@ -768,10 +762,8 @@ export default function GradesPage() {
                   </div>
                 </div>
               ) : (
-                <div className={`flex flex-col items-center justify-center py-20 rounded-[3rem] border-2 border-dashed ${
-                  isDark ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'
-                }`}>
-                  <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${isDark ? 'bg-gray-700' : 'bg-white shadow-md'}`}>
+                <div className="flex flex-col items-center justify-center py-20 rounded-[3rem] shadow-neu-in">
+                  <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 bg-surface shadow-neu`}>
                     <BookOpen className="opacity-20" size={32} />
                   </div>
                   <p className={`text-lg font-bold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -787,7 +779,7 @@ export default function GradesPage() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 50 }}
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              className={`rounded-2xl p-4 md:p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
+              className={`rounded-2xl p-4 md:p-6 bg-surface shadow-neu-lg`}
             >
               <div className="flex flex-wrap items-center gap-3 mb-4">
                 <motion.button
@@ -797,7 +789,7 @@ export default function GradesPage() {
                     if (isScoreEditing) handleFinishEditing();
                     else setSelectedSubject(null);
                   }}
-                  className={`p-2 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
+                  className={`p-2 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
                 >
                   <ChevronLeft size={24} />
                 </motion.button>
@@ -818,7 +810,7 @@ export default function GradesPage() {
                       whileTap={{ scale: 0.95 }}
                       onClick={handleStartEditing}
                       disabled={loadingGrades}
-                      className="flex items-center gap-2 px-6 py-2 bg-amber-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-amber-500/20 disabled:opacity-50"
+                      className="flex items-center gap-2 px-6 py-2 bg-amber-500 text-white rounded-xl text-sm font-bold shadow-neu-sm disabled:opacity-50"
                     >
                       <Edit2 size={18} />
                       กรอกคะแนน
@@ -827,7 +819,7 @@ export default function GradesPage() {
                     <>
                       <span
                         className={`px-3 py-2 rounded-xl text-xs font-bold ${{
-                          gray: isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600',
+                          gray: isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-600',
                           blue: isDark ? 'bg-blue-900/40 text-blue-300' : 'bg-blue-50 text-blue-600',
                           green: isDark ? 'bg-emerald-900/40 text-emerald-300' : 'bg-emerald-50 text-emerald-600',
                           amber: isDark ? 'bg-amber-900/40 text-amber-300' : 'bg-amber-50 text-amber-700',
@@ -841,7 +833,7 @@ export default function GradesPage() {
                         onClick={() => stepHistory('undo')}
                         disabled={historySize.undo === 0}
                         title="ย้อนกลับ (Ctrl+Z)"
-                        className={`p-2 rounded-xl disabled:opacity-30 ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}
+                        className={`p-2 rounded-xl disabled:opacity-30 ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-600'}`}
                       >
                         <Undo2 size={18} />
                       </button>
@@ -850,7 +842,7 @@ export default function GradesPage() {
                         onClick={() => stepHistory('redo')}
                         disabled={historySize.redo === 0}
                         title="ทำซ้ำ (Ctrl+Shift+Z)"
-                        className={`p-2 rounded-xl disabled:opacity-30 ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}
+                        className={`p-2 rounded-xl disabled:opacity-30 ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-600'}`}
                       >
                         <Redo2 size={18} />
                       </button>
@@ -865,7 +857,7 @@ export default function GradesPage() {
                       <button
                         type="button"
                         onClick={() => setShowGradeConfigModal(true)}
-                        className={`flex items-center gap-1 px-3 py-2 rounded-xl text-sm font-bold ${isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                        className={`flex items-center gap-1 px-3 py-2 rounded-xl text-sm font-bold bg-surface shadow-neu-sm active:shadow-neu-in-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}
                       >
                         <Settings size={16} />
                         ตั้งค่าเกรด
@@ -875,7 +867,7 @@ export default function GradesPage() {
                         whileTap={{ scale: 0.95 }}
                         onClick={handleFinishEditing}
                         disabled={isFinishing}
-                        className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/20 disabled:opacity-60"
+                        className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white rounded-xl text-sm font-bold shadow-neu-sm disabled:opacity-60"
                       >
                         {isFinishing ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Check size={18} />}
                         เสร็จสิ้น
@@ -961,26 +953,26 @@ export default function GradesPage() {
                 }} className="space-y-5">
                   <div>
                     <label className="block text-sm font-bold mb-2 opacity-70">ชื่อชิ้นงาน</label>
-                    <input name="title" defaultValue={editingAssignment?.title} required className={`w-full h-12 px-4 text-base rounded-xl border ${isDark ? 'bg-gray-900 border-gray-700 focus:border-blue-500' : 'bg-gray-50 border-gray-200 focus:border-blue-400'} focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all`} placeholder="เช่น การบ้านครั้งที่ 1" />
+                    <input name="title" defaultValue={editingAssignment?.title} required className={`w-full h-12 px-4 text-base rounded-xl border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm focus:border-blue-500' : 'border-transparent bg-surface shadow-neu-in-sm focus:border-blue-400'} focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all`} placeholder="เช่น การบ้านครั้งที่ 1" />
                   </div>
                   <div>
                     <label className="block text-sm font-bold mb-2 opacity-70">คำอธิบาย (ถ้ามี)</label>
-                    <textarea name="description" defaultValue={editingAssignment?.description} className={`w-full p-4 text-base rounded-xl border ${isDark ? 'bg-gray-900 border-gray-700 focus:border-blue-500' : 'bg-gray-50 border-gray-200 focus:border-blue-400'} focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all`} rows={2} placeholder="รายละเอียดเพิ่มเติม..." />
+                    <textarea name="description" defaultValue={editingAssignment?.description} className={`w-full p-4 text-base rounded-xl border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm focus:border-blue-500' : 'border-transparent bg-surface shadow-neu-in-sm focus:border-blue-400'} focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all`} rows={2} placeholder="รายละเอียดเพิ่มเติม..." />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-bold mb-2 opacity-70">คะแนนเต็ม</label>
-                      <input name="maxScore" type="number" step="any" defaultValue={editingAssignment?.maxScore || 10} required className={`w-full h-12 px-4 text-base rounded-xl border ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-gray-200'} focus:outline-none focus:ring-2 focus:ring-blue-500/20`} />
+                      <input name="maxScore" type="number" step="any" defaultValue={editingAssignment?.maxScore || 10} required className={`w-full h-12 px-4 text-base rounded-xl border border-transparent bg-surface shadow-neu-in-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20`} />
                     </div>
                     <div>
                       <label className="block text-sm font-bold mb-2 opacity-70">กำหนดส่ง</label>
-                      <input name="deadline" type="date" defaultValue={editingAssignment?.deadline} className={`w-full h-12 px-4 text-base rounded-xl border ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-gray-200'} focus:outline-none focus:ring-2 focus:ring-blue-500/20`} />
+                      <input name="deadline" type="date" defaultValue={editingAssignment?.deadline} className={`w-full h-12 px-4 text-base rounded-xl border border-transparent bg-surface shadow-neu-in-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20`} />
                     </div>
                   </div>
                   <div className="pt-4 flex items-center gap-3">
                     <label className="flex items-center gap-3 cursor-pointer group">
                       <div className={`w-12 h-12 rounded-xl border-2 flex items-center justify-center transition-all ${
-                        isDark ? 'bg-gray-900 border-gray-700 group-hover:border-blue-500' : 'bg-gray-50 border-gray-200 group-hover:border-blue-400'
+                        isDark ? 'border-transparent bg-surface shadow-neu-in-sm group-hover:border-blue-500' : 'border-transparent bg-surface shadow-neu-in-sm group-hover:border-blue-400'
                       }`}>
                         <input 
                           name="isVisible" 
@@ -999,7 +991,7 @@ export default function GradesPage() {
                     {editingAssignment && (
                       <button type="button" onClick={() => { setShowAssignmentModal(false); gridActions.deleteAssignments([editingAssignment.id]); }} className="h-14 flex-1 rounded-2xl bg-red-500/10 text-red-500 font-bold hover:bg-red-500/20 transition-all">ลบชิ้นงาน</button>
                     )}
-                    <button type="submit" className="h-14 flex-[2] rounded-2xl bg-red-500 text-white font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-500/20">บันทึกข้อมูล</button>
+                    <button type="submit" className="h-14 flex-[2] rounded-2xl bg-red-500 text-white font-bold hover:bg-red-600 transition-all shadow-neu-sm">บันทึกข้อมูล</button>
                   </div>
                 </form>
         </Modal>
@@ -1015,7 +1007,7 @@ export default function GradesPage() {
                       <TrendingUp size={16} className="text-blue-500" />
                       สัดส่วนคะแนนรวม (100%)
                     </h4>
-                    <div className="space-y-6 p-4 rounded-2xl bg-gray-50 dark:bg-gray-900/50">
+                    <div className="space-y-6 p-4 rounded-2xl shadow-neu-in-sm">
                       <div>
                         <div className="flex justify-between text-sm mb-3 font-bold">
                           <span>คะแนนเก็บ</span>
@@ -1025,7 +1017,7 @@ export default function GradesPage() {
                                 const val = parseInt(e.target.value) || 0;
                                 setGradeConfig({ ...gradeConfig, proportions: { ...gradeConfig.proportions, collected: val } });
                               }}
-                              className={`w-16 h-8 text-center rounded-lg border text-sm ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} />
+                              className={`w-16 h-8 text-center rounded-lg border text-sm border-transparent bg-surface shadow-neu-in-sm`} />
                             <span className="opacity-50">%</span>
                           </div>
                         </div>
@@ -1034,7 +1026,7 @@ export default function GradesPage() {
                             const val = parseInt(e.target.value);
                             setGradeConfig({ ...gradeConfig, proportions: { ...gradeConfig.proportions, collected: val } });
                           }}
-                          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+                          className="w-full h-2 rounded-lg shadow-neu-in-xs appearance-none cursor-pointer accent-blue-500" />
                       </div>
                       <div>
                         <div className="flex justify-between text-sm mb-3 font-bold">
@@ -1045,7 +1037,7 @@ export default function GradesPage() {
                                 const val = parseInt(e.target.value) || 0;
                                 setGradeConfig({ ...gradeConfig, proportions: { ...gradeConfig.proportions, midterm: val } });
                               }}
-                              className={`w-16 h-8 text-center rounded-lg border text-sm ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} />
+                              className={`w-16 h-8 text-center rounded-lg border text-sm border-transparent bg-surface shadow-neu-in-sm`} />
                             <span className="opacity-50">%</span>
                           </div>
                         </div>
@@ -1054,7 +1046,7 @@ export default function GradesPage() {
                             const val = parseInt(e.target.value);
                             setGradeConfig({ ...gradeConfig, proportions: { ...gradeConfig.proportions, midterm: val } });
                           }}
-                          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+                          className="w-full h-2 rounded-lg shadow-neu-in-xs appearance-none cursor-pointer accent-blue-500" />
                       </div>
                       <div>
                         <div className="flex justify-between text-sm mb-3 font-bold">
@@ -1065,7 +1057,7 @@ export default function GradesPage() {
                                 const val = parseInt(e.target.value) || 0;
                                 setGradeConfig({ ...gradeConfig, proportions: { ...gradeConfig.proportions, final: val } });
                               }}
-                              className={`w-16 h-8 text-center rounded-lg border text-sm ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} />
+                              className={`w-16 h-8 text-center rounded-lg border text-sm border-transparent bg-surface shadow-neu-in-sm`} />
                             <span className="opacity-50">%</span>
                           </div>
                         </div>
@@ -1074,7 +1066,7 @@ export default function GradesPage() {
                             const val = parseInt(e.target.value);
                             setGradeConfig({ ...gradeConfig, proportions: { ...gradeConfig.proportions, final: val } });
                           }}
-                          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+                          className="w-full h-2 rounded-lg shadow-neu-in-xs appearance-none cursor-pointer accent-blue-500" />
                       </div>
                       <div className={`p-4 rounded-xl text-center text-base font-black ${
                         (gradeConfig.proportions.collected + gradeConfig.proportions.midterm + gradeConfig.proportions.final) === 100
@@ -1091,10 +1083,10 @@ export default function GradesPage() {
                       <Settings size={16} className="text-purple-500" />
                       เกณฑ์การตัดเกรด
                     </h4>
-                    <div className="space-y-3 p-4 rounded-2xl bg-gray-50 dark:bg-gray-900/50">
+                    <div className="space-y-3 p-4 rounded-2xl shadow-neu-in-sm">
                       {gradeConfig.thresholds.map((t, idx) => (
                         <div key={t.grade} className="flex items-center gap-4">
-                          <div className={`w-12 h-12 flex items-center justify-center rounded-xl font-black text-xl shadow-sm ${isDark ? 'bg-gray-800' : 'bg-white'} ${t.color}`}>
+                          <div className={`w-12 h-12 flex items-center justify-center rounded-xl font-black text-xl bg-surface shadow-neu-in-sm ${t.color}`}>
                             {t.grade}
                           </div>
                           <div className="flex-1">
@@ -1106,7 +1098,7 @@ export default function GradesPage() {
                                   newThresholds[idx] = { ...t, minScore: val };
                                   setGradeConfig({ ...gradeConfig, thresholds: newThresholds });
                                 }}
-                                className={`w-24 h-12 px-4 text-center text-base font-bold rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} focus:outline-none focus:ring-2 focus:ring-purple-500/20`} />
+                                className={`w-24 h-12 px-4 text-center text-base font-bold rounded-xl border border-transparent bg-surface shadow-neu-in-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20`} />
                               <span className="text-sm font-bold opacity-50">คะแนนขึ้นไป</span>
                             </div>
                           </div>
@@ -1120,9 +1112,9 @@ export default function GradesPage() {
                   <button 
                     disabled={(gradeConfig.proportions.collected + gradeConfig.proportions.midterm + gradeConfig.proportions.final) !== 100}
                     onClick={() => handleSaveGradeConfig(gradeConfig)}
-                    className={`w-full h-16 rounded-2xl font-black text-lg transition-all shadow-lg flex items-center justify-center gap-2 ${
+                    className={`w-full h-16 rounded-2xl font-black text-lg transition-all shadow-neu-sm flex items-center justify-center gap-2 ${
                       (gradeConfig.proportions.collected + gradeConfig.proportions.midterm + gradeConfig.proportions.final) === 100
-                        ? 'bg-red-500 text-white hover:bg-red-600 shadow-red-500/20'
+                        ? 'bg-red-500 text-white hover:bg-red-600'
                         : 'bg-gray-500 text-white cursor-not-allowed opacity-50'
                     }`}
                   >
@@ -1174,7 +1166,7 @@ export default function GradesPage() {
                         </button>
                       </div>
                     </div>
-                    <div className={`max-h-60 overflow-y-auto rounded-2xl p-2 border ${isDark ? 'bg-gray-900/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                    <div className="max-h-60 overflow-y-auto rounded-2xl p-2 shadow-neu-in-sm">
                       {uniqueSubjects.map((subject) => {
                         const key = `${subject.subjectId}|||${subject.classroom}`;
                         const isSelected = selectedSubjectsForDownload.includes(key);
@@ -1184,7 +1176,7 @@ export default function GradesPage() {
                             className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
                               isSelected 
                                 ? (isDark ? 'bg-red-950/30 text-red-400' : 'bg-red-50 text-red-600') 
-                                : (isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-100')
+                                : 'hover:bg-black/5 dark:hover:bg-white/5'
                             }`}
                           >
                             <input 
@@ -1214,7 +1206,7 @@ export default function GradesPage() {
                     <button
                       onClick={handleDownloadExcel}
                       disabled={isDownloading || selectedSubjectsForDownload.length === 0}
-                      className={`w-full py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg ${
+                      className={`w-full py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-neu-sm ${
                         isDownloading || selectedSubjectsForDownload.length === 0
                           ? 'bg-gray-500 cursor-not-allowed text-white'
                           : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-900/20'

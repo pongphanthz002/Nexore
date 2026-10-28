@@ -15,7 +15,7 @@ export default function RoleSelection() {
   };
 
   return (
-    <div className="no-scroll bg-white flex items-center justify-center relative">
+    <div className="no-scroll soft-light bg-surface flex items-center justify-center relative">
       {/* Main content */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -46,7 +46,7 @@ export default function RoleSelection() {
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.4, duration: 0.6 }}
             onClick={() => handleRoleSelect('student')}
-            className="w-full bg-gray-500 text-white rounded-lg p-6 text-center hover:bg-[#000000] hover:scale-105 transition-all duration-150 shadow-md"
+            className="w-full bg-gray-500 text-white rounded-lg p-6 text-center hover:bg-[#000000] hover:scale-105 transition-all duration-150 shadow-neu-sm"
           >
             <h2 className="text-2xl font-bold mb-2">
               นักเรียน
@@ -62,7 +62,7 @@ export default function RoleSelection() {
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.5, duration: 0.6 }}
             onClick={() => handleRoleSelect('teacher')}
-            className="w-full bg-gray-500 text-white rounded-lg p-6 text-center hover:bg-[#000000] hover:scale-105 transition-all duration-150 shadow-md"
+            className="w-full bg-gray-500 text-white rounded-lg p-6 text-center hover:bg-[#000000] hover:scale-105 transition-all duration-150 shadow-neu-sm"
           >
             <h2 className="text-2xl font-bold mb-2">
               ครู

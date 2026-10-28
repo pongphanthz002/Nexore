@@ -203,10 +203,10 @@ export default function AdminUsers() {
             whileHover={{ scale: 1.02, y: -5 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => router.push('/admin/dashboard/users/teachers')}
-            className={`rounded-2xl p-6 cursor-pointer ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
+            className={`rounded-2xl p-6 cursor-pointer bg-surface shadow-neu-lg`}
           >
             <div className="flex items-center gap-4">
-              <div className={`w-16 h-16 rounded-xl flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-gray-700' : 'bg-blue-100'}`}>
+              <div className={`w-16 h-16 rounded-xl flex items-center justify-center flex-shrink-0 shadow-neu-in-sm ${isDark ? 'bg-white/5' : 'bg-blue-100/70'}`}>
                 <Users size={32} className={isDark ? 'text-blue-400' : 'text-blue-600'} />
               </div>
               <div className="flex-1">
@@ -228,10 +228,10 @@ export default function AdminUsers() {
             whileHover={{ scale: 1.02, y: -5 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => router.push('/admin/dashboard/users/students')}
-            className={`rounded-2xl p-6 cursor-pointer ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
+            className={`rounded-2xl p-6 cursor-pointer bg-surface shadow-neu-lg`}
           >
             <div className="flex items-center gap-4">
-              <div className={`w-16 h-16 rounded-xl flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-gray-700' : 'bg-blue-100'}`}>
+              <div className={`w-16 h-16 rounded-xl flex items-center justify-center flex-shrink-0 shadow-neu-in-sm ${isDark ? 'bg-white/5' : 'bg-blue-100/70'}`}>
                 <GraduationCap size={32} className={isDark ? 'text-blue-400' : 'text-blue-600'} />
               </div>
               <div className="flex-1">
@@ -253,10 +253,10 @@ export default function AdminUsers() {
             whileHover={{ scale: 1.02, y: -5 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => router.push('/admin/dashboard/users/subjects')}
-            className={`rounded-2xl p-6 cursor-pointer ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
+            className={`rounded-2xl p-6 cursor-pointer bg-surface shadow-neu-lg`}
           >
             <div className="flex items-center gap-4">
-              <div className={`w-16 h-16 rounded-xl flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-gray-700' : 'bg-blue-100'}`}>
+              <div className={`w-16 h-16 rounded-xl flex items-center justify-center flex-shrink-0 shadow-neu-in-sm ${isDark ? 'bg-white/5' : 'bg-blue-100/70'}`}>
                 <Book size={32} className={isDark ? 'text-blue-400' : 'text-blue-600'} />
               </div>
               <div className="flex-1">
@@ -280,7 +280,7 @@ export default function AdminUsers() {
             whileHover={{ scale: 1.02, y: -5 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => setShowMainModal(true)}
-            className={`rounded-2xl p-6 cursor-pointer border-2 border-red-500 ${isDark ? 'bg-red-900/20' : 'bg-red-50'} shadow-lg`}
+            className={`rounded-2xl p-6 cursor-pointer border-2 border-red-500 ${isDark ? 'bg-red-900/20' : 'bg-red-50'} shadow-neu-lg`}
           >
             <div className="flex items-center justify-center gap-4">
               <div className={`w-16 h-16 rounded-xl flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-red-900/40' : 'bg-red-200'}`}>
@@ -304,7 +304,7 @@ export default function AdminUsers() {
             <div className="flex items-center justify-end mb-4">
               <button
                 onClick={() => setShowMainModal(false)}
-                className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-100 text-gray-400 hover:text-gray-600'}`}
+                className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-white/5 text-gray-400 hover:text-gray-200' : 'hover:bg-black/5 text-gray-500 hover:text-gray-700'}`}
               >
                 <X size={24} />
               </button>
@@ -318,7 +318,7 @@ export default function AdminUsers() {
                   setShowMainModal(false);
                   setShowResetModal(true);
                 }}
-                className={`w-full py-4 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                className={`w-full py-4 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
               >
                 <div className="font-semibold">รีเซ็ตข้อมูล</div>
                 <div className="text-sm opacity-70">Reset Data</div>
@@ -347,7 +347,7 @@ export default function AdminUsers() {
               </h3>
               <button
                 onClick={() => setShowResetModal(false)}
-                className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-100 text-gray-400 hover:text-gray-600'}`}
+                className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-white/5 text-gray-400 hover:text-gray-200' : 'hover:bg-black/5 text-gray-500 hover:text-gray-700'}`}
               >
                 <X size={24} />
               </button>
@@ -381,7 +381,7 @@ export default function AdminUsers() {
                   value={resetInputText}
                   onChange={(e) => setResetInputText(e.target.value)}
                   placeholder={getSchoolName()}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-800'}`}
                 />
               </div>
 
@@ -394,7 +394,7 @@ export default function AdminUsers() {
                     setResetInputText('');
                   }}
                   disabled={loading}
-                  className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'} ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'} ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   ยกเลิก
                 </motion.button>
@@ -419,7 +419,7 @@ export default function AdminUsers() {
               </h3>
               <button
                 onClick={() => setShowDeleteModal(false)}
-                className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-100 text-gray-400 hover:text-gray-600'}`}
+                className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-white/5 text-gray-400 hover:text-gray-200' : 'hover:bg-black/5 text-gray-500 hover:text-gray-700'}`}
               >
                 <X size={24} />
               </button>
@@ -453,7 +453,7 @@ export default function AdminUsers() {
                   value={deleteInputText}
                   onChange={(e) => setDeleteInputText(e.target.value)}
                   placeholder={getSchoolName()}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-800'}`}
                 />
               </div>
 
@@ -466,7 +466,7 @@ export default function AdminUsers() {
                     setDeleteInputText('');
                   }}
                   disabled={loading}
-                  className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'} ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'} ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   ยกเลิก
                 </motion.button>

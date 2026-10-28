@@ -4,28 +4,48 @@
 
 :root {
   --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
+  /* Soft UI ("neumorphic") surface: page, cards and controls share one colour and get
+     their depth only from two shadows, light from the top left and dark from the bottom
+     right. Raised = outer shadows (big cards, buttons, the selected knob), sunken = inset
+     shadows (small cards, wells, inputs, tracks). Tailwind: bg-surface, shadow-neu-lg,
+     shadow-neu, shadow-neu-sm, shadow-neu-in, shadow-neu-in-sm, shadow-neu-in-xs. */
+  --surface: 232 235 240;
+  --neu-lo: rgb(146 158 182 / 0.55);
+  --neu-hi: rgb(255 255 255 / 0.95);
   /* The app has its own theme toggle (html.dark, see ThemeContext); the phone's
      dark mode must not restyle native controls or the body. */
   color-scheme: light;
 }
 
-/* Only the backdrop follows the app theme (safe-area strips, overscroll).
-   Text colour stays dark: pages set their own text colours for dark mode. */
 html.dark {
-  --background-start-rgb: 17, 24, 39;
-  --background-end-rgb: 17, 24, 39;
+  --surface: 38 42 51;
+  --neu-lo: rgb(8 10 14 / 0.7);
+  --neu-hi: rgb(66 73 88 / 0.5);
 }
 
+/* Light-only screens (login, signup, setup) keep the light surface while the app theme is dark */
+.soft-light {
+  --surface: 232 235 240;
+  --neu-lo: rgb(146 158 182 / 0.55);
+  --neu-hi: rgb(255 255 255 / 0.95);
+}
+
+/* Re-declared wherever the two shadow colours change, so the composites pick up the local ones */
+:root, html.dark, .soft-light {
+  --neu-raised-lg: 10px 10px 24px var(--neu-lo), -10px -10px 24px var(--neu-hi);
+  --neu-raised: 6px 6px 14px var(--neu-lo), -6px -6px 14px var(--neu-hi);
+  --neu-raised-sm: 3px 3px 7px var(--neu-lo), -3px -3px 7px var(--neu-hi);
+  --neu-inset: inset 5px 5px 10px var(--neu-lo), inset -5px -5px 10px var(--neu-hi);
+  --neu-inset-sm: inset 3px 3px 6px var(--neu-lo), inset -3px -3px 6px var(--neu-hi);
+  /* thin tracks (progress bars, h-2 to h-3) */
+  --neu-inset-xs: inset 1.5px 1.5px 3px var(--neu-lo), inset -1.5px -1.5px 3px var(--neu-hi);
+}
+
+/* Body text stays dark (pages set their own dark-mode text colours); the backdrop is the
+   surface in both themes (safe-area strips, overscroll). */
 body {
   color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  background: rgb(var(--surface));
   user-select: none;
   -webkit-user-select: none;
   -moz-user-select: none;
@@ -87,24 +107,22 @@ html, body {
   overscroll-behavior-y: none;
 }
 
-/* Timetable subject blocks (colours come from hueVars in src/lib/timetable.ts) */
+/* Timetable subject blocks (colours come from hueVars in src/lib/timetable.ts). Periods sit
+   sunk into the card; the one running now rises out of it. */
 :root {
-  --tt-card: #ffffff;
-}
-html.dark {
-  --tt-card: #1f2937;
+  --tt-card: rgb(var(--surface));
 }
 .timetable-block {
   background: var(--sb);
-  box-shadow: inset 4px 0 0 var(--sbar);
+  box-shadow: inset 4px 0 0 var(--sbar), var(--neu-inset-sm);
 }
 .timetable-block.current {
-  box-shadow: inset 4px 0 0 var(--sbar), 0 0 0 2px var(--sbar);
+  box-shadow: inset 4px 0 0 var(--sbar), 0 0 0 2px var(--sbar), var(--neu-raised);
 }
 /* Today's finished periods: a little quieter than what is still to come, but stronger than other days */
 .timetable-block.past {
   background: color-mix(in srgb, var(--sb) 80%, var(--tt-card));
-  box-shadow: inset 4px 0 0 color-mix(in srgb, var(--sbar) 75%, var(--tt-card));
+  box-shadow: inset 4px 0 0 color-mix(in srgb, var(--sbar) 75%, var(--tt-card)), var(--neu-inset-sm);
 }
 .timetable-block.past > * {
   opacity: 0.85;
@@ -112,7 +130,7 @@ html.dark {
 /* Days other than today: clearly lighter, so today always stands out */
 .timetable-block.other {
   background: color-mix(in srgb, var(--sb) 35%, var(--tt-card));
-  box-shadow: inset 4px 0 0 color-mix(in srgb, var(--sbar) 40%, var(--tt-card));
+  box-shadow: inset 4px 0 0 color-mix(in srgb, var(--sbar) 40%, var(--tt-card)), var(--neu-inset-sm);
 }
 .timetable-block.other > * {
   opacity: 0.6;

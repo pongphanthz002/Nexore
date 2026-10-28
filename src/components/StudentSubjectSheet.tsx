@@ -94,11 +94,11 @@ export default function StudentSubjectSheet({ student, subject, teacher, hue, as
 
   return (
     <>
-      <Modal open={!!student && !!info} onClose={onClose} size="4xl" sheet surface="muted" labelledBy="student-sheet-title" className="p-4 sm:p-6">
+      <Modal open={!!student && !!info} onClose={onClose} size="4xl" sheet labelledBy="student-sheet-title" className="p-4 sm:p-6">
         {student && info && (
           <div className="space-y-4">
             <div className="flex items-center gap-3">
-              <span className="grid h-12 w-12 flex-none place-items-center rounded-full bg-gray-900 text-base font-semibold text-white dark:bg-white dark:text-gray-900">
+              <span className="grid h-12 w-12 flex-none place-items-center rounded-full bg-gray-900 text-base font-semibold text-white shadow-neu-sm dark:bg-white dark:text-gray-900">
                 {student.number || '–'}
               </span>
               <div className="min-w-0 flex-1">
@@ -109,7 +109,7 @@ export default function StudentSubjectSheet({ student, subject, teacher, hue, as
                 type="button"
                 onClick={onClose}
                 aria-label="ปิด"
-                className="grid h-11 w-11 flex-none place-items-center rounded-full bg-gray-200/70 text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                className="grid h-11 w-11 flex-none place-items-center rounded-full bg-surface text-gray-700 shadow-neu-sm transition-shadow active:shadow-neu-in-sm dark:text-gray-300"
               >
                 <X size={20} />
               </button>
@@ -117,7 +117,7 @@ export default function StudentSubjectSheet({ student, subject, teacher, hue, as
 
             <SubjectHeader subject={info} isDark={isDark} />
 
-            <div role="tablist" aria-label="ข้อมูลวิชา" className="grid grid-cols-2 gap-1 rounded-full bg-gray-200/70 p-1 dark:bg-gray-800 sm:max-w-sm">
+            <div role="tablist" aria-label="ข้อมูลวิชา" className="grid grid-cols-2 gap-1 rounded-full p-1.5 shadow-neu-in-sm sm:max-w-sm">
               {([['grades', 'คะแนน'], ['attendance', 'เวลาเรียน']] as const).map(([mode, label]) => (
                 <button
                   key={mode}
@@ -127,7 +127,7 @@ export default function StudentSubjectSheet({ student, subject, teacher, hue, as
                   onClick={() => setTab(mode)}
                   className={`h-10 rounded-full text-[15px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 ${
                     tab === mode
-                      ? 'bg-white text-gray-900 dark:bg-gray-600 dark:text-white'
+                      ? 'bg-surface text-gray-900 shadow-neu-sm dark:text-white'
                       : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
                   }`}
                 >
@@ -148,7 +148,7 @@ export default function StudentSubjectSheet({ student, subject, teacher, hue, as
                 {tab === 'grades' ? (
                   <GradesView grade={grade} subject={info} isDark={isDark} onOpen={setOpenItem} />
                 ) : summary === 'loading' ? (
-                  <div className="h-40 animate-pulse rounded-[22px] bg-white dark:bg-gray-800" aria-label="กำลังโหลดเวลาเรียน" />
+                  <div className="h-40 animate-pulse rounded-[22px] bg-surface shadow-neu" aria-label="กำลังโหลดเวลาเรียน" />
                 ) : (
                   <AttendanceView info={attendance} />
                 )}

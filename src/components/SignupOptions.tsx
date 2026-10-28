@@ -28,7 +28,7 @@ export default function SignupOptions() {
   };
 
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center overflow-hidden relative">
+    <div className="min-h-screen soft-light bg-surface flex items-center justify-center overflow-hidden relative">
       {/* Main content */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -70,13 +70,13 @@ export default function SignupOptions() {
         </motion.div>
 
         {/* Button Card */}
-        <div className="bg-white rounded-2xl p-6 shadow-lg">
+        <div className="bg-surface rounded-2xl p-6 shadow-neu-lg">
           {/* Google Sign In Button */}
           {!user && (
             <button
               onClick={handleSignIn}
               disabled={loading}
-              className="w-full bg-gray-500 text-white font-bold py-4 rounded-lg mb-2 hover:bg-[#000000] hover:scale-105 transition-all duration-150 disabled:opacity-50 flex items-center justify-center gap-3 shadow-md"
+              className="w-full bg-gray-500 text-white font-bold py-4 rounded-lg mb-2 hover:bg-[#000000] hover:scale-105 transition-all duration-150 disabled:opacity-50 flex items-center justify-center gap-3 shadow-neu-sm"
             >
               <svg className="w-6 h-6" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04-2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -93,7 +93,7 @@ export default function SignupOptions() {
             <div className="space-y-4">
               <button
                 onClick={() => handleSignup('teacher')}
-                className="w-full bg-white border border-gray-200 text-black rounded-lg py-4 text-center hover:bg-[#000000] hover:text-white hover:border-[#000000] hover:scale-105 transition-all duration-150 shadow-md"
+                className="w-full bg-surface text-black rounded-lg py-4 text-center hover:bg-[#000000] hover:text-white hover:border-[#000000] hover:scale-105 transition-all duration-150 shadow-neu-sm"
               >
                 <h2 className="text-xl font-bold">
                   Teacher
@@ -102,7 +102,7 @@ export default function SignupOptions() {
 
               <button
                 onClick={() => handleSignup('student')}
-                className="w-full bg-white border border-gray-200 text-black rounded-lg py-4 text-center hover:bg-[#000000] hover:text-white hover:border-[#000000] hover:scale-105 transition-all duration-150 shadow-md"
+                className="w-full bg-surface text-black rounded-lg py-4 text-center hover:bg-[#000000] hover:text-white hover:border-[#000000] hover:scale-105 transition-all duration-150 shadow-neu-sm"
               >
                 <h2 className="text-xl font-bold">
                   Student

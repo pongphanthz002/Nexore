@@ -124,7 +124,7 @@ export function TimetableFullscreen({ role, week, days, today, now, range, isDar
       animate={{ opacity: 1, scale: 1 }}
       exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.97 }}
       transition={{ duration: 0.28, ease: [0.2, 0.8, 0.2, 1] }}
-      className={`fixed inset-0 z-[60] overflow-hidden bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-50 ${isDark ? 'dark' : ''}`}
+      className={`fixed inset-0 z-[60] overflow-hidden bg-surface text-gray-900 dark:text-gray-50 ${isDark ? 'dark' : ''}`}
     >
       <div
         className="absolute left-0 top-0 flex flex-col"
@@ -137,20 +137,20 @@ export function TimetableFullscreen({ role, week, days, today, now, range, isDar
         }}
       >
         <div className="flex flex-none items-center gap-3 px-3 pb-1 pt-2" style={rotated ? undefined : { paddingTop: 'max(8px, env(safe-area-inset-top, 0px))' }}>
-          <button type="button" onClick={onClose} aria-label="ปิดตาราง" className="grid h-11 w-11 flex-none place-items-center rounded-full bg-gray-100 transition-transform active:scale-95 dark:bg-gray-700">
+          <button type="button" onClick={onClose} aria-label="ปิดตาราง" className="grid h-11 w-11 flex-none place-items-center rounded-full bg-surface shadow-neu-sm transition-shadow active:shadow-neu-in-sm">
             <X size={20} />
           </button>
           <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-2">
             <b className="text-[17px] font-semibold">{dayDateLabel(day)}</b>
             {day === today ? (
-              <span className="self-center rounded-full bg-red-600 px-2 text-xs font-semibold leading-[22px] text-white dark:bg-red-500">
+              <span className="self-center rounded-full bg-red-600 px-2 text-xs font-semibold leading-[22px] text-white shadow-neu-sm dark:bg-red-500">
                 วันนี้
               </span>
             ) : days.includes(today) && (
               <button
                 type="button"
                 onClick={() => go(days.indexOf(today))}
-                className="self-center rounded-full bg-red-50 px-2.5 text-xs font-semibold leading-[26px] text-red-700 transition-transform active:scale-95 dark:bg-red-950/60 dark:text-red-300"
+                className="self-center rounded-full bg-surface px-2.5 text-xs font-semibold leading-[26px] text-red-700 shadow-neu-sm transition-shadow active:shadow-neu-in-sm dark:text-red-300"
               >
                 กลับไปวันนี้
               </button>
@@ -160,11 +160,11 @@ export function TimetableFullscreen({ role, week, days, today, now, range, isDar
             </small>
           </div>
           {arrows && (
-            <button type="button" onClick={() => go(index - 1)} disabled={index === 0} aria-label="วันก่อนหน้า" className="grid h-10 w-10 place-items-center rounded-full bg-gray-100 disabled:opacity-35 dark:bg-gray-700">
+            <button type="button" onClick={() => go(index - 1)} disabled={index === 0} aria-label="วันก่อนหน้า" className="grid h-10 w-10 place-items-center rounded-full bg-surface shadow-neu-sm active:shadow-neu-in-sm disabled:opacity-35 disabled:shadow-none">
               <ChevronLeft size={20} />
             </button>
           )}
-          <div role="group" aria-label="เลือกวัน" className="flex items-center gap-1">
+          <div role="group" aria-label="เลือกวัน" className="flex items-center gap-1 rounded-full p-1 shadow-neu-in-sm">
             {days.map((d, i) => (
               <button
                 key={d}
@@ -175,10 +175,10 @@ export function TimetableFullscreen({ role, week, days, today, now, range, isDar
                 className={`h-9 min-w-9 rounded-full px-1.5 text-[13px] font-semibold transition-colors ${
                   d === today
                     ? i === index
-                      ? 'bg-red-600 text-white dark:bg-red-500'
-                      : 'text-red-600 shadow-[inset_0_0_0_1.5px_currentColor] dark:text-red-400'
+                      ? 'bg-red-600 text-white shadow-neu-sm dark:bg-red-500'
+                      : 'text-red-700 shadow-[inset_0_0_0_1.5px_currentColor] dark:text-red-400'
                     : i === index
-                      ? 'bg-gray-200 text-gray-900 dark:bg-gray-700 dark:text-gray-50'
+                      ? 'bg-surface text-gray-900 shadow-neu-sm dark:text-gray-50'
                       : 'text-gray-600 dark:text-gray-400'
                 }`}
               >
@@ -187,7 +187,7 @@ export function TimetableFullscreen({ role, week, days, today, now, range, isDar
             ))}
           </div>
           {arrows && (
-            <button type="button" onClick={() => go(index + 1)} disabled={index === days.length - 1} aria-label="วันถัดไป" className="grid h-10 w-10 place-items-center rounded-full bg-gray-100 disabled:opacity-35 dark:bg-gray-700">
+            <button type="button" onClick={() => go(index + 1)} disabled={index === days.length - 1} aria-label="วันถัดไป" className="grid h-10 w-10 place-items-center rounded-full bg-surface shadow-neu-sm active:shadow-neu-in-sm disabled:opacity-35 disabled:shadow-none">
               <ChevronRight size={20} />
             </button>
           )}
@@ -216,8 +216,8 @@ export function TimetableFullscreen({ role, week, days, today, now, range, isDar
                   >
                     {rangeTicks(range.from, range.to).map(m => (
                       <div key={m}>
-                        <div className="absolute bottom-0 top-6 w-px bg-gray-200 dark:bg-gray-700" style={{ left: pct(m) }} />
-                        <div className={`absolute top-0 -translate-x-1/2 leading-5 tabular-nums text-gray-400 dark:text-gray-500 ${large ? 'text-[13px]' : 'text-xs'}`} style={{ left: pct(m) }}>
+                        <div className="absolute bottom-0 top-6 w-px bg-gray-300/70 dark:bg-white/10" style={{ left: pct(m) }} />
+                        <div className={`absolute top-0 -translate-x-1/2 leading-5 tabular-nums text-gray-500 dark:text-gray-400 ${large ? 'text-[13px]' : 'text-xs'}`} style={{ left: pct(m) }}>
                           {formatMinutes(m)}
                         </div>
                       </div>

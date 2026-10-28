@@ -54,7 +54,7 @@ const StudentHeader = ({ isDark, toggleTheme }: StudentHeaderProps) => {
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className={`fixed top-0 left-0 right-0 z-50 border-b px-6 py-4 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-md`}
+        className="fixed top-0 left-0 right-0 z-50 bg-surface px-6 py-4 shadow-neu"
       >
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           {/* Logo */}
@@ -78,7 +78,7 @@ const StudentHeader = ({ isDark, toggleTheme }: StudentHeaderProps) => {
               whileTap={{ scale: 0.95 }}
               transition={{ type: "spring", stiffness: 400, damping: 25 }}
               onClick={handleLogout}
-              className="p-3 rounded-xl bg-red-500 text-white"
+              className="p-3 rounded-xl bg-red-500 text-white shadow-neu-sm"
             >
               <LogOut size={20} />
             </motion.button>

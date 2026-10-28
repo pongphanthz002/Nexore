@@ -107,20 +107,20 @@ function parseInputDateToFormat(dateStr: string): string {
   return formatDate(date);
 }
 
-// Map attendance status to beautiful background/border/text colors
+// Row colour per attendance status: rows sit sunk into the card (soft UI), tinted by status
 function getStatusStyles(status: string, isDark: boolean): string {
   // Same hues as AttendanceStatusSelect; "มา" stays neutral so exceptions stand out
   const tint: Record<string, [string, string]> = {
-    'มา': ['bg-white border-gray-200 text-gray-900', 'bg-gray-800 border-gray-700 text-white'],
-    'ขาด': ['bg-red-50 border-red-200 text-red-900', 'bg-red-950/40 border-red-900/60 text-red-100'],
-    'สาย': ['bg-amber-50 border-amber-200 text-amber-900', 'bg-amber-950/40 border-amber-900/60 text-amber-100'],
-    'ลาป่วย': ['bg-sky-50 border-sky-200 text-sky-900', 'bg-sky-950/40 border-sky-900/60 text-sky-100'],
-    'ลากิจ': ['bg-fuchsia-50 border-fuchsia-200 text-fuchsia-900', 'bg-fuchsia-950/40 border-fuchsia-900/60 text-fuchsia-100'],
-    'กิจกรรม': ['bg-teal-50 border-teal-200 text-teal-900', 'bg-teal-950/40 border-teal-900/60 text-teal-100'],
-    'หนี': ['bg-orange-50 border-orange-200 text-orange-900', 'bg-orange-950/40 border-orange-900/60 text-orange-100'],
+    'มา': ['text-gray-900', 'text-white'],
+    'ขาด': ['bg-red-50/80 text-red-900', 'bg-red-950/40 text-red-100'],
+    'สาย': ['bg-amber-50/80 text-amber-900', 'bg-amber-950/40 text-amber-100'],
+    'ลาป่วย': ['bg-sky-50/80 text-sky-900', 'bg-sky-950/40 text-sky-100'],
+    'ลากิจ': ['bg-fuchsia-50/80 text-fuchsia-900', 'bg-fuchsia-950/40 text-fuchsia-100'],
+    'กิจกรรม': ['bg-teal-50/80 text-teal-900', 'bg-teal-950/40 text-teal-100'],
+    'หนี': ['bg-orange-50/80 text-orange-900', 'bg-orange-950/40 text-orange-100'],
   };
-  const pair = tint[status] ?? ['bg-gray-50 border-gray-100 text-gray-500', 'bg-gray-700/50 border-gray-600 text-gray-300'];
-  return pair[isDark ? 1 : 0];
+  const pair = tint[status] ?? ['text-gray-600', 'text-gray-300'];
+  return `border-transparent shadow-neu-in-sm ${pair[isDark ? 1 : 0]}`;
 }
 
 function SchedulesContent() {
@@ -744,15 +744,15 @@ function SchedulesContent() {
     return (
       <div className="p-6">
         <div className="max-w-7xl mx-auto space-y-6">
-          <div className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg animate-pulse`}>
-            <div className={`h-8 w-48 rounded-lg mb-4 ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
-            <div className={`h-20 rounded-xl ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+          <div className={`rounded-2xl p-6 bg-surface shadow-neu-lg animate-pulse`}>
+            <div className={`h-8 w-48 rounded-lg mb-4 ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
+            <div className={`h-20 rounded-xl ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
           </div>
-          <div className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg animate-pulse`}>
-            <div className={`h-8 w-40 rounded-lg mb-4 ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+          <div className={`rounded-2xl p-6 bg-surface shadow-neu-lg animate-pulse`}>
+            <div className={`h-8 w-40 rounded-lg mb-4 ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
             <div className="space-y-3">
               {[1, 2, 3].map(i => (
-                <div key={i} className={`h-16 rounded-xl ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                <div key={i} className={`h-16 rounded-xl ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
               ))}
             </div>
           </div>
@@ -793,11 +793,9 @@ function SchedulesContent() {
                     }}
                     disabled={allUniqueSubjects.length === 0}
                     title="ดาวน์โหลด Excel (Google Sheets)"
-                    className={`p-3 rounded-2xl border transition-all flex items-center justify-center shadow-sm hover:shadow-md ${
-                      isDark 
-                        ? 'bg-gray-800 border-gray-700 hover:bg-gray-700/80 hover:border-emerald-500/50 text-white' 
-                        : 'bg-white border-gray-200 hover:bg-gray-50 hover:border-emerald-400 text-gray-800'
-                    } disabled:opacity-40 disabled:cursor-not-allowed`}
+                    className={`p-3 rounded-2xl bg-surface shadow-neu-sm transition-shadow flex items-center justify-center active:shadow-neu-in-sm ${
+                      isDark ? 'text-white' : 'text-gray-800'
+                    } disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none`}
                   >
                     <GoogleSheetsIcon size={24} />
                   </motion.button>
@@ -806,18 +804,14 @@ function SchedulesContent() {
               
               {allUniqueSubjects.length > 0 ? (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {allUniqueSubjects.map((subject) => (
                       <motion.div
                         key={`${subject.subjectName}-${subject.classroom}`}
                         whileHover={{ scale: 1.01, y: -2 }}
                         whileTap={{ scale: 0.99 }}
                         onClick={() => handleSelectSubject(subject, 'all')}
-                        className={`p-4 rounded-xl cursor-pointer transition-all border-2 ${
-                          isDark 
-                            ? 'bg-gray-800 border-gray-700 hover:border-red-500/50 hover:bg-gray-750' 
-                            : 'bg-gray-50 border-gray-100 hover:border-red-200 hover:bg-white hover:shadow-lg hover:shadow-red-500/5'
-                        }`}
+                        className="p-4 rounded-2xl cursor-pointer bg-surface shadow-neu transition-shadow active:shadow-neu-in-sm"
                       >
                         <div className="flex items-center justify-between">
                           <div>
@@ -837,7 +831,7 @@ function SchedulesContent() {
                                 handleSelectSubject(subject, 'all');
                                 handleOpenAttendance(subject);
                               }}
-                              className={`p-2 rounded-xl ${isDark ? 'bg-red-950/30 text-red-400' : 'bg-red-50 text-red-600'}`}
+                              className={`p-2 rounded-xl shadow-neu-sm ${isDark ? 'bg-red-950/30 text-red-400' : 'bg-red-50 text-red-700'}`}
                             >
                               <ClipboardList size={20} />
                             </motion.button>
@@ -848,10 +842,8 @@ function SchedulesContent() {
                   </div>
                 </div>
               ) : (
-                <div className={`flex flex-col items-center justify-center py-20 rounded-[3rem] border-2 border-dashed ${
-                  isDark ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'
-                }`}>
-                  <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${isDark ? 'bg-gray-700' : 'bg-white shadow-md'}`}>
+                <div className="flex flex-col items-center justify-center py-20 rounded-[3rem] shadow-neu-in">
+                  <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 bg-surface shadow-neu`}>
                     <ClipboardList className="opacity-20" size={32} />
                   </div>
                   <p className={`text-lg font-bold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -867,7 +859,7 @@ function SchedulesContent() {
                         {/* Subject Selection */}
                         <div>
                           <label className="block text-sm font-bold mb-3 opacity-70">เลือกวิชาที่ต้องการ</label>
-                          <div className={`max-h-48 overflow-y-auto rounded-2xl p-2 border ${isDark ? 'bg-gray-900/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                          <div className="max-h-48 overflow-y-auto rounded-2xl p-2 shadow-neu-in-sm">
                             {allUniqueSubjects.map((subject) => {
                               const key = `${subject.subjectName}|||${subject.classroom}`;
                               const isSelected = selectedSubjectsForDownload.includes(key);
@@ -877,7 +869,7 @@ function SchedulesContent() {
                                   className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
                                     isSelected 
                                       ? (isDark ? 'bg-red-950/30 text-red-400' : 'bg-red-50 text-red-600') 
-                                      : (isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-100')
+                                      : 'hover:bg-black/5 dark:hover:bg-white/5'
                                   }`}
                                 >
                                   <input 
@@ -910,8 +902,8 @@ function SchedulesContent() {
                               onClick={() => setDownloadRange('term')}
                               className={`p-3 rounded-2xl border-2 font-bold transition-all ${
                                 downloadRange === 'term'
-                                  ? 'border-red-500 bg-red-500/10 text-red-500'
-                                  : (isDark ? 'border-gray-700 bg-gray-900/30' : 'border-gray-200 bg-gray-50')
+                                  ? 'border-red-500 bg-red-500/10 text-red-700 shadow-neu-in-sm dark:text-red-400'
+                                  : 'border-transparent bg-surface shadow-neu-sm'
                               }`}
                             >
                               ตลอดเทอม
@@ -920,8 +912,8 @@ function SchedulesContent() {
                               onClick={() => setDownloadRange('month')}
                               className={`p-3 rounded-2xl border-2 font-bold transition-all ${
                                 downloadRange === 'month'
-                                  ? 'border-red-500 bg-red-500/10 text-red-500'
-                                  : (isDark ? 'border-gray-700 bg-gray-900/30' : 'border-gray-200 bg-gray-50')
+                                  ? 'border-red-500 bg-red-500/10 text-red-700 shadow-neu-in-sm dark:text-red-400'
+                                  : 'border-transparent bg-surface shadow-neu-sm'
                               }`}
                             >
                               รายเดือน
@@ -937,7 +929,7 @@ function SchedulesContent() {
                               <select
                                 value={selectedMonth}
                                 onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                                className={`flex-1 p-3 rounded-2xl border ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'}`}
+                                className="flex-1 p-3 rounded-2xl border border-transparent bg-surface shadow-neu-in-sm"
                               >
                                 {Array.from({ length: 12 }).map((_, i) => (
                                   <option key={i + 1} value={i + 1}>
@@ -948,7 +940,7 @@ function SchedulesContent() {
                               <select
                                 value={selectedYear}
                                 onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                                className={`w-32 p-3 rounded-2xl border ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'}`}
+                                className="w-32 p-3 rounded-2xl border border-transparent bg-surface shadow-neu-in-sm"
                               >
                                 {Array.from({ length: 3 }).map((_, i) => (
                                   <option key={i} value={new Date().getFullYear() - i}>
@@ -965,7 +957,7 @@ function SchedulesContent() {
                           <button
                             onClick={handleDownloadExcel}
                             disabled={isDownloading || selectedSubjectsForDownload.length === 0}
-                            className={`w-full py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg ${
+                            className={`w-full py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-neu-sm ${
                               isDownloading || selectedSubjectsForDownload.length === 0
                                 ? 'bg-gray-500 cursor-not-allowed'
                                 : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-900/20'
@@ -995,10 +987,10 @@ function SchedulesContent() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 50 }}
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
+              className={`rounded-2xl p-6 bg-surface shadow-neu-lg`}
             >
               {/* Fixed Dock */}
-              <div className={`sticky top-0 z-10 -mx-6 px-6 py-4 mb-6 border-b ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+              <div className={`sticky top-0 z-10 -mx-6 px-6 py-4 mb-6 border-b bg-surface ${isDark ? 'border-white/5' : 'border-gray-300/50'}`}>
                 <div className="flex items-center gap-3 mb-4">
                   <motion.button
                     whileHover={{ scale: 1.1 }}
@@ -1010,7 +1002,7 @@ function SchedulesContent() {
                         setIsAttendanceMode(false);
                       }
                     }}
-                    className={`p-2 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
+                    className={`p-2 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
                   >
                     <ChevronLeft size={24} />
                   </motion.button>
@@ -1036,14 +1028,14 @@ function SchedulesContent() {
                         setSelectedDate(e.target.value);
                       }
                     }}
-                    className={`px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+                    className={`px-3 py-2 rounded-lg border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'}`}
                   />
                   
                   {/* Hours dropdown */}
                   <select
                     value={selectedHours}
                     onChange={(e) => setSelectedHours(parseInt(e.target.value))}
-                    className={`px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+                    className={`px-3 py-2 rounded-lg border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'}`}
                   >
                     <option value={1}>1 hr.</option>
                     <option value={2}>2 hrs.</option>
@@ -1056,7 +1048,7 @@ function SchedulesContent() {
                     whileTap={{ scale: 0.95 }}
                     onClick={handleSaveAttendance}
                     disabled={loadingAttendance}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium shadow-md ${loadingAttendance ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${isDark ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-900/20' : 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/20'}`}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium shadow-neu-sm ${loadingAttendance ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${isDark ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-900/20' : 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/20'}`}
                   >
                     <Save size={18} />
                     บันทึก
@@ -1131,14 +1123,14 @@ function SchedulesContent() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 50 }}
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
+              className={`rounded-2xl p-6 bg-surface shadow-neu-lg`}
             >
               <div className="flex items-center gap-3 mb-6">
                 <motion.button
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                   onClick={handleBackToMain}
-                  className={`p-2 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
+                  className={`p-2 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
                 >
                   <ChevronLeft size={24} />
                 </motion.button>
@@ -1155,7 +1147,7 @@ function SchedulesContent() {
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.9 }}
                     onClick={() => handleOpenAttendance()}
-                    className={`p-2 rounded-xl shadow-md ${isDark ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-900/20' : 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/20'}`}
+                    className={`p-2 rounded-xl shadow-neu-sm ${isDark ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-900/20' : 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/20'}`}
                   >
                     <ClipboardList size={24} />
                   </motion.button>
@@ -1167,7 +1159,7 @@ function SchedulesContent() {
                   <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className={isDark ? 'border-b border-gray-600' : 'border-b border-gray-200'}>
+                      <tr className={isDark ? 'border-b border-white/10' : 'border-b border-gray-300/70'}>
                         <th className={`py-3 px-4 text-left text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>เลขที่</th>
                         <th className={`py-3 px-4 text-left text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>เลขประจำตัว</th>
                         <th className={`py-3 px-4 text-left text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>ชื่อ</th>
@@ -1193,7 +1185,7 @@ function SchedulesContent() {
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: index * 0.03 }}
-                          className={isDark ? 'border-b border-gray-700' : 'border-b border-gray-100'}
+                          className={isDark ? 'border-b border-white/5' : 'border-b border-gray-300/40'}
                         >
                           <td className={`py-3 px-4 text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{student.number || '-'}</td>
                           <td className={`py-3 px-4 text-sm font-mono ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{student.studentId}</td>

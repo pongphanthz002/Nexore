@@ -594,7 +594,7 @@ export default function ProfilePage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
+          className={`rounded-2xl p-6 bg-surface shadow-neu-lg`}
         >
           <div className="flex items-center justify-between mb-6">
             <h1 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
@@ -605,7 +605,7 @@ export default function ProfilePage() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setIsEditing(true)}
-                className={`p-2 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
+                className={`p-2 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
               >
                 <Edit size={20} />
               </motion.button>
@@ -620,7 +620,7 @@ export default function ProfilePage() {
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className={`w-full mt-1 p-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+                  className={`w-full mt-1 p-2 rounded-lg border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'}`}
                 />
               ) : (
                 <p className={`text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>{userAccount?.name || '-'}</p>
@@ -637,7 +637,7 @@ export default function ProfilePage() {
                     value={formData.defaultRoom}
                     placeholder="เช่น 204, ห้องภาษา 2"
                     onChange={(e) => setFormData({ ...formData, defaultRoom: e.target.value })}
-                    className={`w-full mt-1 p-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+                    className={`w-full mt-1 p-2 rounded-lg border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'}`}
                   />
                   <p className={`mt-1 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>วิชาที่ไม่ได้ตั้งห้องที่สอนจะใช้ห้องนี้ นักเรียนจะเห็นห้องนี้ในตารางเรียน</p>
                 </>
@@ -660,7 +660,7 @@ export default function ProfilePage() {
                   <select
                     value={selectedTeacherId || userAccount?.userId || ''}
                     onChange={(e) => setSelectedTeacherId(e.target.value)}
-                    className={`w-full p-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+                    className={`w-full p-2 rounded-lg border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'}`}
                   >
                     <option value="">-- เลือกเลขประจำตัวครู --</option>
                     {availableTeachers.map((teacher) => (
@@ -674,7 +674,7 @@ export default function ProfilePage() {
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={handleLinkTeacher}
-                      className="w-full mt-2 p-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm shadow-md shadow-red-500/20 transition-all"
+                      className="w-full mt-2 p-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm shadow-neu-sm transition-all"
                     >
                       ยืนยันการผูกข้อมูล
                     </motion.button>
@@ -699,7 +699,7 @@ export default function ProfilePage() {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={handleSave}
-                  className="flex-1 p-3 rounded-xl bg-red-500 hover:bg-red-600 text-white flex items-center justify-center gap-2 shadow-md shadow-red-500/20 transition-all"
+                  className="flex-1 p-3 rounded-xl bg-red-500 hover:bg-red-600 text-white flex items-center justify-center gap-2 shadow-neu-sm transition-all"
                 >
                   <Save size={20} />
                   บันทึก
@@ -708,7 +708,7 @@ export default function ProfilePage() {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={handleCancel}
-                  className={`flex-1 p-3 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'} flex items-center justify-center gap-2`}
+                  className={`flex-1 p-3 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'} flex items-center justify-center gap-2`}
                 >
                   <X size={20} />
                   ยกเลิก
@@ -728,8 +728,8 @@ export default function ProfilePage() {
             whileHover={{ scale: 1.01 }}
             whileTap={{ scale: 0.99 }}
             onClick={() => setShowManageSubjectsModal(true)}
-            className={`w-full p-5 rounded-2xl flex items-center justify-between shadow-lg transition-all ${
-              isDark ? 'bg-gray-800 hover:bg-gray-700/80 text-white' : 'bg-white hover:bg-gray-50 text-gray-900'
+            className={`w-full p-5 rounded-2xl flex items-center justify-between bg-surface shadow-neu-lg transition-shadow active:shadow-neu-in-sm ${
+              isDark ? 'text-white' : 'text-gray-900'
             }`}
           >
             <div className="flex items-center gap-3.5">
@@ -748,7 +748,7 @@ export default function ProfilePage() {
               <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
                 teacherSubjects.length > 0
                   ? isDark ? 'bg-red-950/40 text-red-400 border border-red-800/40' : 'bg-red-50 text-red-600 border border-red-200'
-                  : isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'
+                  : isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-600'
               }`}>
                 {teacherSubjects.length} วิชา
               </span>
@@ -762,11 +762,11 @@ export default function ProfilePage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", stiffness: 300, damping: 30, delay: 0.1 }}
-          className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
+          className={`rounded-2xl p-6 bg-surface shadow-neu-lg`}
         >
           <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>School ID</h2>
           {userAccount?.schoolId && (
-            <div className="relative p-4 rounded-2xl bg-gray-100 dark:bg-gray-700 font-mono text-sm">
+            <div className="relative p-4 rounded-2xl shadow-neu-in-sm font-mono text-sm">
               <div className="flex items-center justify-between">
                 <p className="text-gray-800 dark:text-white">
                   <span className="text-purple-600 dark:text-purple-400">School ID: </span>
@@ -795,7 +795,7 @@ export default function ProfilePage() {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => { setShowConfigPopup(true); setShowConfigValues(false); setIsEditingConfig(false); resetConfigForm(); }}
-            className={`w-full p-4 rounded-2xl flex items-center justify-center gap-2 ${isDark ? 'bg-gray-800 text-gray-300' : 'bg-white text-gray-700'} shadow-lg`}
+            className={`w-full p-4 rounded-2xl flex items-center justify-center gap-2 bg-surface shadow-neu-lg active:shadow-neu-in-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}
           >
             <Settings size={20} />
             <span className="font-medium">Firebase Config</span>
@@ -809,7 +809,7 @@ export default function ProfilePage() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 50, scale: 0.9 }}
             transition={{ type: "spring", stiffness: 400, damping: 25 }}
-            className="fixed bottom-32 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded-2xl shadow-lg z-50"
+            className="fixed bottom-32 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded-2xl shadow-neu z-50"
           >
             คัดลอกแล้ว!
           </motion.div>
@@ -834,7 +834,7 @@ export default function ProfilePage() {
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setShowLinkConfirm(false)}
                   disabled={linkLoading}
-                  className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
+                  className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
                 >
                   ยกเลิก
                 </motion.button>
@@ -843,7 +843,7 @@ export default function ProfilePage() {
                   whileTap={{ scale: 0.98 }}
                   onClick={confirmLinkTeacher}
                   disabled={linkLoading}
-                  className="flex-1 bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 shadow-md shadow-red-500/20 transition-all"
+                  className="flex-1 bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 shadow-neu-sm transition-all"
                 >
                   {linkLoading && <Loader2 size={16} className="animate-spin" />}
                   ยืนยัน
@@ -862,7 +862,7 @@ export default function ProfilePage() {
                       whileHover={{ scale: 1.1 }}
                       whileTap={{ scale: 0.9 }}
                       onClick={() => setShowConfigValues(!showConfigValues)}
-                      className={`p-2 rounded-lg ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'}`}
+                      className={`p-2 rounded-lg ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
                     >
                       {showConfigValues ? <EyeOff size={16} /> : <Eye size={16} />}
                     </motion.button>
@@ -871,7 +871,7 @@ export default function ProfilePage() {
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
                         onClick={() => { setIsEditingConfig(true); setConfigError(''); setValidatedConfigKey(null); }}
-                        className={`p-2 rounded-lg ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'}`}
+                        className={`p-2 rounded-lg ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
                       >
                         <Edit size={16} />
                       </motion.button>
@@ -881,7 +881,7 @@ export default function ProfilePage() {
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
                         onClick={() => setShowConfigPopup(false)}
-                        className={`p-2 rounded-lg ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'}`}
+                        className={`p-2 rounded-lg ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
                       >
                         <X size={16} />
                       </motion.button>
@@ -906,7 +906,7 @@ export default function ProfilePage() {
                   </div>
                 )}
 
-                <div className={`p-4 rounded-xl border-2 ${isEditingConfig ? 'border-red-500 bg-red-50 dark:bg-red-900/20' : isDark ? 'border-gray-600 bg-gray-900' : 'border-gray-200 bg-gray-50'}`}>
+                <div className={`p-4 rounded-xl border-2 ${isEditingConfig ? 'border-red-500 bg-red-50 dark:bg-red-900/20' : 'border-transparent shadow-neu-in-sm'}`}>
                   <div className="space-y-3">
                     {Object.entries(configFormData).map(([key, value]) => (
                       <div key={key}>
@@ -918,7 +918,7 @@ export default function ProfilePage() {
                             onChange={(e) => { setConfigFormData({ ...configFormData, [key]: e.target.value }); setConfigError(''); setValidatedConfigKey(null); }}
                             autoComplete="off"
                             spellCheck={false}
-                            className={`w-full mt-1 p-2 rounded-lg border text-sm font-mono ${isDark ? 'bg-gray-800 border-red-700 text-white' : 'bg-white border-red-300 text-gray-900'}`}
+                            className={`w-full mt-1 p-2 rounded-lg border text-sm font-mono ${isDark ? 'bg-surface border-red-700 text-white' : 'bg-surface border-red-300 text-gray-900'} shadow-neu-in-xs`}
                           />
                         ) : (
                           <p className={`text-sm font-mono ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
@@ -946,7 +946,7 @@ export default function ProfilePage() {
                         whileTap={{ scale: 0.98 }}
                         onClick={handleValidateConfig}
                         disabled={configValidating}
-                        className={`flex-1 p-2 rounded-lg text-sm flex items-center justify-center gap-2 disabled:opacity-50 ${isDark ? 'bg-gray-700 text-gray-100' : 'bg-gray-800 text-white'}`}
+                        className={`flex-1 p-2 rounded-lg text-sm flex items-center justify-center gap-2 disabled:opacity-50 shadow-neu-sm ${isDark ? 'bg-gray-100 text-gray-900' : 'bg-gray-800 text-white'}`}
                       >
                         {configValidating ? <Loader2 size={16} className="animate-spin" /> : <CheckSquare size={16} />}
                         {configValidating ? 'กำลังตรวจสอบ...' : 'ตรวจสอบ Config'}
@@ -967,7 +967,7 @@ export default function ProfilePage() {
                       whileTap={{ scale: 0.98 }}
                       onClick={() => resetConfigForm()}
                       disabled={configValidating}
-                      className={`w-full p-2 rounded-lg text-sm flex items-center justify-center gap-2 ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'}`}
+                      className={`w-full p-2 rounded-lg text-sm flex items-center justify-center gap-2 ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
                     >
                       <X size={16} />
                       ยกเลิก
@@ -995,7 +995,7 @@ export default function ProfilePage() {
                 value={configConfirmText}
                 onChange={(e) => setConfigConfirmText(e.target.value)}
                 placeholder='พิมพ์ &quot;ยืนยัน&quot;'
-                className={`w-full p-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+                className={`w-full p-2 rounded-lg border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'}`}
               />
               {configError && (
                 <p className="text-red-500 text-sm mt-2">{configError}</p>
@@ -1006,7 +1006,7 @@ export default function ProfilePage() {
                   whileTap={{ scale: 0.98 }}
                   onClick={() => { setShowConfigConfirm(false); setConfigConfirmText(''); setConfigError(''); }}
                   disabled={configSaving}
-                  className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
+                  className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
                 >
                   ยกเลิก
                 </motion.button>
@@ -1030,7 +1030,7 @@ export default function ProfilePage() {
         {/* Manage Subjects Modal */}
         <Modal open={showManageSubjectsModal} onClose={() => setShowManageSubjectsModal(false)} size="2xl" className="flex flex-col p-6">
                 {/* Modal Header */}
-                <div className="pb-3 border-b border-gray-200 dark:border-gray-700">
+                <div className="pb-3 border-b border-gray-300/60 dark:border-white/10">
                   <div className="flex items-center justify-between">
                     <h3 className="text-xl sm:text-2xl font-bold">วิชาที่สอน</h3>
                     <div className="flex items-center gap-2">
@@ -1039,14 +1039,14 @@ export default function ProfilePage() {
                         whileTap={{ scale: 0.95 }}
                         onClick={() => openSubjectEditor(null)}
                         title="เพิ่มวิชา"
-                        className="p-2 sm:p-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white shadow-md shadow-red-500/20 transition-all flex items-center justify-center"
+                        className="p-2 sm:p-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white shadow-neu-sm transition-all flex items-center justify-center"
                       >
                         <Plus size={20} />
                       </motion.button>
                       <button 
                         onClick={() => setShowManageSubjectsModal(false)}
                         title="ปิด"
-                        className={`p-2 sm:p-2.5 rounded-xl transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}
+                        className={`p-2 sm:p-2.5 rounded-xl transition-colors ${isDark ? 'hover:bg-white/5 text-gray-400' : 'hover:bg-black/5 text-gray-500'}`}
                       >
                         <X size={20} />
                       </button>
@@ -1065,22 +1065,20 @@ export default function ProfilePage() {
                       กำลังโหลดข้อมูลวิชาเรียน...
                     </div>
                   ) : teacherSubjects.length === 0 ? (
-                    <div className={`p-10 text-center rounded-2xl border-2 border-dashed ${
-                      isDark ? 'border-gray-700 bg-gray-900/40 text-gray-400' : 'border-gray-200 bg-gray-50 text-gray-500'
-                    }`}>
+                    <div className={`p-10 text-center rounded-2xl shadow-neu-in-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                       <BookOpen size={40} className="mx-auto mb-2 opacity-40" />
                       <p className="font-semibold text-base">ยังไม่มีวิชาเรียนที่สอน</p>
                       <p className="text-xs opacity-70 mt-1 mb-4">กดปุ่ม &quot;+&quot; ด้านบนเพื่อเพิ่มวิชาเรียนใหม่</p>
                       <button
                         onClick={() => openSubjectEditor(null)}
-                        className="px-4 py-2 rounded-xl bg-red-500 text-white font-medium text-sm inline-flex items-center gap-1.5 shadow-md shadow-red-500/20"
+                        className="px-4 py-2 rounded-xl bg-red-500 text-white font-medium text-sm inline-flex items-center gap-1.5 shadow-neu-sm"
                       >
                         <Plus size={16} />
                         เพิ่มวิชาเรียนแรก
                       </button>
                     </div>
                   ) : (
-                    <div className={`rounded-2xl border overflow-hidden divide-y ${isDark ? 'border-gray-700 divide-gray-700 bg-gray-900/40' : 'border-gray-200 divide-gray-200 bg-white'}`}>
+                    <div className={`rounded-2xl bg-surface shadow-neu overflow-hidden divide-y ${isDark ? 'divide-white/5' : 'divide-gray-300/50'}`}>
                     {teacherSubjects.map((sub) => {
                       const isElective = sub.subjectType === 'elective';
                       const studentCount = isElective && Array.isArray(sub.studentIds) ? sub.studentIds.length : null;
@@ -1106,8 +1104,8 @@ export default function ProfilePage() {
                           style={{ WebkitTouchCallout: 'none' }}
                           className={`p-4 flex items-center justify-between gap-3 select-none cursor-context-menu outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${
                             subjectMenu?.subject.subjectId === sub.subjectId
-                              ? isDark ? 'bg-gray-700/60' : 'bg-gray-100'
-                              : isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'
+                              ? 'shadow-neu-in-sm'
+                              : isDark ? 'hover:bg-white/5' : 'hover:bg-black/5'
                           }`}
                         >
                           <div className="flex-1 min-w-0">
@@ -1180,11 +1178,11 @@ export default function ProfilePage() {
                 </div>
 
                 {/* Modal Footer */}
-                <div className="pt-3 border-t border-gray-200 dark:border-gray-700 text-right">
+                <div className="pt-3 border-t border-gray-300/60 dark:border-white/10 text-right">
                   <button
                     onClick={() => setShowManageSubjectsModal(false)}
                     className={`px-5 py-2.5 rounded-xl font-medium text-sm transition-all ${
-                      isDark ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-200' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'
                     }`}
                   >
                     ปิด
@@ -1205,20 +1203,20 @@ export default function ProfilePage() {
                 transition={{ duration: 0.16 }}
                 style={{ left: Math.max(8, subjectMenu.x), top: subjectMenu.y }}
                 onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setSubjectMenu(null); } }}
-                className={`fixed z-[111] w-52 rounded-2xl p-1.5 shadow-xl origin-top-left ${isDark ? 'bg-gray-800 text-white ring-1 ring-white/10' : 'bg-white text-gray-900 ring-1 ring-black/5'}`}
+                className={`fixed z-[111] w-52 rounded-2xl p-1.5 bg-surface shadow-neu-lg origin-top-left ${isDark ? 'text-white' : 'text-gray-900'}`}
               >
                 <button
                   role="menuitem"
                   autoFocus
                   onClick={() => openSubjectEditor(subjectMenu.subject)}
-                  className={`flex w-full items-center gap-2.5 rounded-xl px-3 h-11 text-sm font-semibold ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                  className={`flex w-full items-center gap-2.5 rounded-xl px-3 h-11 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/5`}
                 >
                   <Pencil size={18} /> แก้ไข
                 </button>
                 <button
                   role="menuitem"
                   onClick={() => { setSubjectToDelete(subjectMenu.subject); setShowDeleteSubjectConfirm(true); setSubjectMenu(null); }}
-                  className={`flex w-full items-center gap-2.5 rounded-xl px-3 h-11 text-sm font-semibold text-red-500 ${isDark ? 'hover:bg-gray-700' : 'hover:bg-red-50'}`}
+                  className={`flex w-full items-center gap-2.5 rounded-xl px-3 h-11 text-sm font-semibold ${isDark ? 'text-red-400 hover:bg-white/5' : 'text-red-700 hover:bg-red-50'}`}
                 >
                   <Trash2 size={18} /> ลบวิชา
                 </button>
@@ -1229,7 +1227,7 @@ export default function ProfilePage() {
 
         {/* Add Subject Modal */}
         <Modal open={showAddSubjectModal} onClose={closeSubjectEditor} size="lg" closeOnBackdrop={false} className="flex flex-col p-6">
-                <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-300/60 dark:border-white/10">
                   <div className="flex items-center gap-2">
                     <div className={`p-2.5 rounded-xl ${isDark ? 'bg-red-950/40 text-red-400' : 'bg-red-50 text-red-600'}`}>
                       <BookOpen size={22} />
@@ -1238,7 +1236,7 @@ export default function ProfilePage() {
                   </div>
                   <button 
                     onClick={closeSubjectEditor}
-                    className={`p-2 rounded-xl transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}
+                    className={`p-2 rounded-xl transition-colors ${isDark ? 'hover:bg-white/5 text-gray-400' : 'hover:bg-black/5 text-gray-500'}`}
                   >
                     <X size={20} />
                   </button>
@@ -1256,7 +1254,7 @@ export default function ProfilePage() {
                       value={newSubjectData.subjectName}
                       onChange={(e) => setNewSubjectData({ ...newSubjectData, subjectName: e.target.value })}
                       className={`w-full p-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-red-500 ${
-                        isDark ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                        isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                       }`}
                     />
                   </div>
@@ -1273,7 +1271,7 @@ export default function ProfilePage() {
                       value={newSubjectData.subjectCode}
                       onChange={(e) => setNewSubjectData({ ...newSubjectData, subjectCode: e.target.value })}
                       className={`w-full p-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-red-500 ${
-                        isDark ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                        isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                       }`}
                     />
                   </div>
@@ -1290,11 +1288,11 @@ export default function ProfilePage() {
                         className={`p-3 rounded-2xl border-2 flex items-center justify-center gap-2.5 transition-all ${
                           newSubjectData.subjectType === 'basic'
                             ? isDark
-                              ? 'border-blue-500 bg-blue-950/40 text-blue-300 font-bold shadow-md shadow-blue-500/10'
-                              : 'border-blue-500 bg-blue-50 text-blue-700 font-bold shadow-md shadow-blue-500/10'
+                              ? 'border-blue-500 bg-blue-950/40 text-blue-300 font-bold shadow-neu-in-sm'
+                              : 'border-blue-500 bg-blue-50 text-blue-700 font-bold shadow-neu-in-sm'
                             : isDark
-                              ? 'border-gray-700 bg-gray-900/40 text-gray-400 hover:border-gray-600'
-                              : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+                              ? 'border-transparent bg-surface shadow-neu-sm text-gray-400'
+                              : 'border-transparent bg-surface shadow-neu-sm text-gray-600'
                         }`}
                       >
                         <GoogleBasicSubjectIcon size={22} />
@@ -1307,11 +1305,11 @@ export default function ProfilePage() {
                         className={`p-3 rounded-2xl border-2 flex items-center justify-center gap-2.5 transition-all ${
                           newSubjectData.subjectType === 'elective'
                             ? isDark
-                              ? 'border-amber-500 bg-amber-950/40 text-amber-300 font-bold shadow-md shadow-amber-500/10'
-                              : 'border-amber-500 bg-amber-50 text-amber-800 font-bold shadow-md shadow-amber-500/10'
+                              ? 'border-amber-500 bg-amber-950/40 text-amber-300 font-bold shadow-neu-in-sm'
+                              : 'border-amber-500 bg-amber-50 text-amber-800 font-bold shadow-neu-in-sm'
                             : isDark
-                              ? 'border-gray-700 bg-gray-900/40 text-gray-400 hover:border-gray-600'
-                              : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+                              ? 'border-transparent bg-surface shadow-neu-sm text-gray-400'
+                              : 'border-transparent bg-surface shadow-neu-sm text-gray-600'
                         }`}
                       >
                         <GoogleElectiveSubjectIcon size={22} />
@@ -1330,7 +1328,7 @@ export default function ProfilePage() {
                         value={newSubjectData.classroom}
                         onChange={(e) => setNewSubjectData({ ...newSubjectData, classroom: e.target.value })}
                         className={`w-full p-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-red-500 ${
-                          isDark ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                          isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                         }`}
                       >
                         <option value="">-- เลือกห้องเรียน --</option>
@@ -1367,7 +1365,7 @@ export default function ProfilePage() {
                         value={newSubjectData.classroom}
                         onChange={(e) => setNewSubjectData({ ...newSubjectData, classroom: e.target.value })}
                         className={`w-full p-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-red-500 ${
-                          isDark ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                          isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                         }`}
                       />
                     </div>
@@ -1385,7 +1383,7 @@ export default function ProfilePage() {
                       value={newSubjectData.room}
                       onChange={(e) => setNewSubjectData({ ...newSubjectData, room: e.target.value })}
                       className={`w-full p-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-red-500 ${
-                        isDark ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                        isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                       }`}
                     />
                     <p className={`mt-1 text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>เว้นว่างไว้เพื่อใช้ห้องประจำจากข้อมูลส่วนตัว</p>
@@ -1396,9 +1394,7 @@ export default function ProfilePage() {
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
-                      className={`p-3.5 rounded-2xl border ${
-                        isDark ? 'bg-gray-900/60 border-gray-700' : 'bg-gray-50 border-gray-200'
-                      }`}
+                      className={`p-3.5 rounded-2xl border border-transparent bg-surface shadow-neu-in-sm`}
                     >
                       <div className="flex items-center justify-between mb-2">
                         <label className={`text-xs font-bold ${isDark ? 'text-amber-400' : 'text-amber-700'}`}>
@@ -1430,7 +1426,7 @@ export default function ProfilePage() {
                             value={studentClassFilter}
                             onChange={(e) => setStudentClassFilter(e.target.value)}
                             className={`w-full p-2 rounded-lg border text-xs ${
-                              isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                              isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                             }`}
                           >
                             <option value="all">ทุกห้องเรียน ({allStudents.length} คน)</option>
@@ -1450,7 +1446,7 @@ export default function ProfilePage() {
                             value={studentSearchQuery}
                             onChange={(e) => setStudentSearchQuery(e.target.value)}
                             className={`w-full pl-8 pr-3 py-2 rounded-lg border text-xs ${
-                              isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                              isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                             }`}
                           />
                         </div>
@@ -1471,7 +1467,7 @@ export default function ProfilePage() {
                                 className={`flex items-center gap-2.5 p-2 rounded-xl cursor-pointer text-xs transition-colors ${
                                   isChecked
                                     ? isDark ? 'bg-amber-950/40 text-amber-300' : 'bg-amber-100/70 text-amber-900'
-                                    : isDark ? 'hover:bg-gray-800/80' : 'hover:bg-gray-100'
+                                    : isDark ? 'hover:bg-white/5' : 'hover:bg-black/5'
                                 }`}
                               >
                                 <input
@@ -1481,7 +1477,7 @@ export default function ProfilePage() {
                                   className="w-4 h-4 rounded text-red-600 focus:ring-red-500"
                                 />
                                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
-                                  isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
+                                  isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'
                                 }`}>
                                   {student.class || '-'}
                                 </span>
@@ -1500,7 +1496,7 @@ export default function ProfilePage() {
                   )}
 
                   {/* Day, Time, and Duration combined with multi-day support (up to 3 days) */}
-                  <div className="space-y-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+                  <div className="space-y-3 pt-2 border-t border-gray-300/60 dark:border-white/10">
                     <div className="flex items-center justify-between">
                       <label className={`text-xs font-bold flex items-center gap-1.5 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
                         <Calendar size={14} className="text-red-500" />
@@ -1521,9 +1517,7 @@ export default function ProfilePage() {
                     {newSubjectData.schedules.map((slot, index) => (
                       <div
                         key={index}
-                        className={`p-3.5 rounded-2xl border transition-all ${
-                          isDark ? 'bg-gray-900/60 border-gray-700' : 'bg-gray-50 border-gray-200'
-                        }`}
+                        className={`p-3.5 rounded-2xl border transition-all border-transparent bg-surface shadow-neu-in-sm`}
                       >
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-xs font-bold text-red-500 dark:text-red-400">
@@ -1551,7 +1545,7 @@ export default function ProfilePage() {
                               value={slot.day}
                               onChange={(e) => handleUpdateScheduleSlot(index, 'day', e.target.value)}
                               className={`w-full p-2.5 rounded-xl border text-xs transition-all focus:outline-none focus:ring-2 focus:ring-red-500 ${
-                                isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                                isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                               }`}
                             >
                               <option value="จันทร์">จันทร์</option>
@@ -1575,7 +1569,7 @@ export default function ProfilePage() {
                               value={slot.time}
                               onChange={(e) => handleUpdateScheduleSlot(index, 'time', e.target.value)}
                               className={`w-full p-2.5 rounded-xl border text-xs transition-all focus:outline-none focus:ring-2 focus:ring-red-500 ${
-                                isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                                isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                               }`}
                             />
                           </div>
@@ -1589,7 +1583,7 @@ export default function ProfilePage() {
                               value={slot.duration || '1'}
                               onChange={(e) => handleUpdateScheduleSlot(index, 'duration', e.target.value)}
                               className={`w-full p-2.5 rounded-xl border text-xs transition-all focus:outline-none focus:ring-2 focus:ring-red-500 ${
-                                isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                                isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                               }`}
                             >
                               <option value="1">1 คาบ</option>
@@ -1608,8 +1602,8 @@ export default function ProfilePage() {
                         onClick={handleAddScheduleSlot}
                         className={`w-full py-2.5 px-3 rounded-xl border border-dashed text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
                           isDark
-                            ? 'border-gray-700 text-gray-400 hover:border-red-500 hover:text-red-400 bg-gray-900/40'
-                            : 'border-gray-300 text-gray-600 hover:border-red-500 hover:text-red-600 bg-gray-50'
+                            ? 'border-gray-600 text-gray-400 hover:border-red-500 hover:text-red-400'
+                            : 'border-gray-400 text-gray-600 hover:border-red-500 hover:text-red-700'
                         }`}
                       >
                         <Plus size={14} />
@@ -1620,14 +1614,14 @@ export default function ProfilePage() {
                 </div>
 
                 {/* Modal Actions */}
-                <div className="flex gap-3 mt-5 pt-3 border-t border-gray-200 dark:border-gray-700">
+                <div className="flex gap-3 mt-5 pt-3 border-t border-gray-300/60 dark:border-white/10">
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={closeSubjectEditor}
                     disabled={isSavingSubject}
                     className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all ${
-                      isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'
                     }`}
                   >
                     ยกเลิก
@@ -1637,7 +1631,7 @@ export default function ProfilePage() {
                     whileTap={{ scale: 0.98 }}
                     onClick={() => handleAddSubject()}
                     disabled={isSavingSubject}
-                    className="flex-1 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-md shadow-red-500/20 transition-all disabled:opacity-50"
+                    className="flex-1 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-neu-sm transition-all disabled:opacity-50"
                   >
                     {isSavingSubject && <Loader2 size={16} className="animate-spin" />}
                     {isSavingSubject ? 'กำลังบันทึก...' : editingSubject ? 'บันทึกการแก้ไข' : 'บันทึกวิชาเรียน'}
@@ -1656,7 +1650,7 @@ export default function ProfilePage() {
                   <button
                     onClick={() => setRemovalConfirm(null)}
                     disabled={isSavingSubject}
-                    className={`flex-1 py-3 rounded-xl text-sm font-semibold ${isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-700'}`}
+                    className={`flex-1 py-3 rounded-xl text-sm font-semibold ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-200' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
                   >
                     ยกเลิก
                   </button>
@@ -1685,7 +1679,7 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
-                <div className={`p-4 rounded-2xl mb-4 ${isDark ? 'bg-gray-900/60' : 'bg-gray-50'}`}>
+                <div className={`p-4 rounded-2xl mb-4 shadow-neu-in-sm`}>
                   <p className="font-bold text-base mb-1">{subjectToDelete.subjectName}</p>
                   <p className="text-sm opacity-70">ห้อง: {subjectToDelete.classroom}</p>
                   {subjectToDelete.day && <p className="text-xs opacity-60 mt-1">วัน/เวลา: {subjectToDelete.day} {subjectToDelete.time}</p>}
@@ -1705,7 +1699,7 @@ export default function ProfilePage() {
                     }}
                     disabled={isDeletingSubject}
                     className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all ${
-                      isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'
                     }`}
                   >
                     ยกเลิก
@@ -1715,7 +1709,7 @@ export default function ProfilePage() {
                     whileTap={{ scale: 0.98 }}
                     onClick={confirmDeleteSubject}
                     disabled={isDeletingSubject}
-                    className="flex-1 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-md shadow-red-500/20 transition-all disabled:opacity-50"
+                    className="flex-1 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-neu-sm transition-all disabled:opacity-50"
                   >
                     {isDeletingSubject && <Loader2 size={16} className="animate-spin" />}
                     {isDeletingSubject ? 'กำลังลบ...' : 'ยืนยันการลบ'}

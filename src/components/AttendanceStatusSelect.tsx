@@ -18,7 +18,7 @@ export const ATTENDANCE_STATUSES: { value: Exclude<Status, ''>; chip: string; do
   { value: 'หนี', chip: 'bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-200', dot: 'bg-orange-500' },
 ];
 
-const EMPTY_CHIP = 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300';
+const EMPTY_CHIP = 'bg-surface text-gray-600 dark:text-gray-300';
 
 interface AttendanceStatusSelectProps {
   value: Status;
@@ -80,7 +80,7 @@ export default function AttendanceStatusSelect({ value, onChange, label }: Atten
         aria-controls={listId}
         aria-label={`สถานะของ ${label}: ${value || 'ยังไม่เลือก'}`}
         whileTap={reduce ? undefined : { scale: 0.94 }}
-        className={`flex h-10 min-w-[104px] items-center justify-between gap-1.5 rounded-full pl-3.5 pr-2.5 text-sm font-semibold transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${current?.chip ?? EMPTY_CHIP}`}
+        className={`flex h-10 min-w-[104px] items-center justify-between gap-1.5 rounded-full pl-3.5 pr-2.5 text-sm font-semibold transition-[color,background-color,box-shadow] duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${open ? 'shadow-neu-in-sm' : 'shadow-neu-sm'} ${current?.chip ?? EMPTY_CHIP}`}
       >
         <AnimatePresence mode="popLayout" initial={false}>
           <motion.span
@@ -111,7 +111,7 @@ export default function AttendanceStatusSelect({ value, onChange, label }: Atten
             exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.95, y: up ? 6 : -6 }}
             transition={{ duration: 0.16, ease: [0.2, 0.8, 0.2, 1] }}
             style={{ transformOrigin: up ? 'bottom right' : 'top right' }}
-            className={`absolute right-0 z-30 w-44 rounded-2xl bg-white p-1.5 shadow-[0_16px_40px_-12px_rgb(17_24_39/0.28),0_0_0_1px_rgb(17_24_39/0.06)] dark:bg-gray-800 dark:shadow-[0_16px_40px_-12px_rgb(0_0_0/0.6),0_0_0_1px_rgb(255_255_255/0.08)] ${up ? 'bottom-full mb-2' : 'top-full mt-2'}`}
+            className={`absolute right-0 z-30 w-44 rounded-2xl bg-surface p-1.5 shadow-neu-lg ${up ? 'bottom-full mb-2' : 'top-full mt-2'}`}
           >
             {ATTENDANCE_STATUSES.map((s, i) => (
               <motion.li
@@ -123,7 +123,7 @@ export default function AttendanceStatusSelect({ value, onChange, label }: Atten
                 transition={{ delay: i * 0.02, duration: 0.18 }}
                 onPointerEnter={() => setActive(i)}
                 onClick={() => choose(s.value)}
-                className={`flex h-11 cursor-pointer items-center gap-2.5 rounded-xl px-3 text-sm font-semibold text-gray-900 dark:text-gray-50 ${i === active ? 'bg-gray-100 dark:bg-gray-700' : ''}`}
+                className={`flex h-11 cursor-pointer items-center gap-2.5 rounded-xl px-3 text-sm font-semibold text-gray-900 dark:text-gray-50 ${i === active ? 'shadow-neu-in-sm' : ''}`}
               >
                 <span className={`h-2.5 w-2.5 flex-none rounded-full ${s.dot}`} />
                 <span className="flex-1">{s.value}</span>

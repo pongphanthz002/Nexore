@@ -184,7 +184,7 @@ function FirebaseSetupGuideContent() {
   };
 
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center p-4 relative">
+    <div className="min-h-screen soft-light bg-surface flex items-center justify-center p-4 relative">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -206,7 +206,7 @@ function FirebaseSetupGuideContent() {
         </motion.button>
 
         {/* Content */}
-        <div className="bg-white rounded-2xl p-8 shadow-lg">
+        <div className="bg-surface rounded-2xl p-8 shadow-neu-lg">
           <h1 className="text-3xl font-bold text-black mb-8">{t.title}</h1>
 
           <div className="space-y-8 text-gray-700">
@@ -268,7 +268,7 @@ function FirebaseSetupGuideContent() {
               </pre>
             </div>
 
-            <div className="bg-gray-50 p-4 rounded-lg">
+            <div className="shadow-neu-in-sm p-4 rounded-lg">
               <h2 className="text-lg font-bold text-black mb-3">{t.notes.title}</h2>
               <ul className="list-disc list-inside space-y-1 text-sm">
                 {t.notes.items.map((item, index) => (
@@ -294,7 +294,7 @@ function FirebaseSetupGuideContent() {
 
 export default function FirebaseSetupGuide() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-white flex items-center justify-center">Loading...</div>}>
+    <Suspense fallback={<div className="min-h-screen soft-light bg-surface flex items-center justify-center">Loading...</div>}>
       <FirebaseSetupGuideContent />
     </Suspense>
   );

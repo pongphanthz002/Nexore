@@ -108,7 +108,7 @@ function mix(a: string, b: string, t: number): string {
 export function hueVars(hue: SubjectHue, isDark: boolean): React.CSSProperties {
   const c = HUES[hue];
   const vars = isDark
-    ? { '--sb': mix(c[2], '#1f2937', 0.24), '--sbar': c[2], '--st': c[1], '--sbig': '#ffffff', '--smeta': 'rgb(255 255 255 / 0.72)' }
+    ? { '--sb': mix(c[2], '#262a33', 0.24), '--sbar': c[2], '--st': c[1], '--sbig': '#ffffff', '--smeta': 'rgb(255 255 255 / 0.72)' }
     : { '--sb': c[0], '--sbar': c[2], '--st': c[3], '--sbig': c[4], '--smeta': '#4b5563' };
   return vars as React.CSSProperties;
 }

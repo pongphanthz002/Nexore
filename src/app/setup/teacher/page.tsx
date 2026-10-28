@@ -195,7 +195,7 @@ function TeacherSetupContent() {
   };
 
   return (
-    <div className="min-h-screen bg-white relative p-4 pt-8 overflow-y-auto flex items-center justify-center">
+    <div className="min-h-screen soft-light bg-surface relative p-4 pt-8 overflow-y-auto flex items-center justify-center">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -241,7 +241,7 @@ function TeacherSetupContent() {
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="bg-white rounded-2xl p-6 shadow-lg"
+            className="bg-surface rounded-2xl p-6 shadow-neu-lg"
           >
             <p className="text-gray-500 mb-6">
               กรุณากรอก School ID
@@ -254,7 +254,7 @@ function TeacherSetupContent() {
                   value={schoolId}
                   onChange={(e) => setSchoolId(e.target.value)}
                   placeholder="ใส่ School ID ของโรงเรียน"
-                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors pr-10"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors pr-10"
                 />
                 <button
                   type="button"
@@ -299,7 +299,7 @@ function TeacherSetupContent() {
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="bg-white rounded-2xl p-6 shadow-lg"
+            className="bg-surface rounded-2xl p-6 shadow-neu-lg"
           >
             <h2 className="text-2xl font-bold text-black mb-6">
               ID Verification
@@ -315,7 +315,7 @@ function TeacherSetupContent() {
                   type="text"
                   value={teacherId}
                   onChange={(e) => setTeacherId(e.target.value)}
-                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   placeholder="เช่น T001"
                   required
                 />
@@ -337,7 +337,7 @@ function TeacherSetupContent() {
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="bg-white rounded-2xl p-6 shadow-lg"
+            className="bg-surface rounded-2xl p-6 shadow-neu-lg"
           >
             <h2 className="text-2xl font-bold text-black mb-6">
               SET UP with Firebase
@@ -363,7 +363,7 @@ function TeacherSetupContent() {
                   type="text"
                   value={teacherFirebaseConfig.apiKey}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, apiKey: e.target.value})}
-                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -374,7 +374,7 @@ function TeacherSetupContent() {
                   type="text"
                   value={teacherFirebaseConfig.authDomain}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, authDomain: e.target.value})}
-                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -385,7 +385,7 @@ function TeacherSetupContent() {
                   type="text"
                   value={teacherFirebaseConfig.projectId}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, projectId: e.target.value})}
-                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -396,7 +396,7 @@ function TeacherSetupContent() {
                   type="text"
                   value={teacherFirebaseConfig.storageBucket}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, storageBucket: e.target.value})}
-                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -407,7 +407,7 @@ function TeacherSetupContent() {
                   type="text"
                   value={teacherFirebaseConfig.messagingSenderId}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, messagingSenderId: e.target.value})}
-                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -418,7 +418,7 @@ function TeacherSetupContent() {
                   type="text"
                   value={teacherFirebaseConfig.appId}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, appId: e.target.value})}
-                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -450,7 +450,7 @@ function TeacherSetupContent() {
 
 export default function TeacherSetup() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-white flex items-center justify-center">Loading...</div>}>
+    <Suspense fallback={<div className="min-h-screen soft-light bg-surface flex items-center justify-center">Loading...</div>}>
       <TeacherSetupContent />
     </Suspense>
   );

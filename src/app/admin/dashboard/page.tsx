@@ -114,27 +114,27 @@ export default function AdminDashboard() {
       <div className="p-6">
         <div className="max-w-7xl mx-auto">
           {/* Skeleton: PIE Charts */}
-          <div className={`rounded-2xl p-8 mb-8 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg animate-pulse`}>
-            <div className={`h-6 w-32 rounded-lg mb-6 ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+          <div className={`rounded-2xl p-8 mb-8 bg-surface shadow-neu-lg animate-pulse`}>
+            <div className={`h-6 w-32 rounded-lg mb-6 ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
             <div className="flex justify-center gap-12">
               <div className="flex flex-col items-center gap-3">
-                <div className={`w-28 h-28 rounded-full ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
-                <div className={`h-4 w-16 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                <div className={`w-28 h-28 rounded-full ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
+                <div className={`h-4 w-16 rounded ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
               </div>
               <div className="flex flex-col items-center gap-3">
-                <div className={`w-28 h-28 rounded-full ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
-                <div className={`h-4 w-20 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                <div className={`w-28 h-28 rounded-full ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
+                <div className={`h-4 w-20 rounded ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
               </div>
             </div>
           </div>
           {/* Skeleton: School ID */}
-          <div className={`rounded-2xl p-6 mb-8 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg animate-pulse`}>
-            <div className={`h-6 w-24 rounded-lg mb-4 ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
-            <div className={`h-12 rounded-2xl ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`} />
+          <div className={`rounded-2xl p-6 mb-8 bg-surface shadow-neu-lg animate-pulse`}>
+            <div className={`h-6 w-24 rounded-lg mb-4 ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
+            <div className={`h-12 rounded-2xl ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
           </div>
           {/* Skeleton: Action Card */}
-          <div className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg animate-pulse`}>
-            <div className={`h-6 w-28 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+          <div className={`rounded-2xl p-6 bg-surface shadow-neu-lg animate-pulse`}>
+            <div className={`h-6 w-28 rounded-lg ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
           </div>
         </div>
       </div>
@@ -152,7 +152,7 @@ export default function AdminDashboard() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", stiffness: 300, damping: 30, delay: 0.2 }}
           whileHover={{ scale: 1.01, y: -3 }}
-          className={`rounded-2xl p-8 mb-8 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
+          className={`rounded-2xl p-8 mb-8 bg-surface shadow-neu-lg`}
         >
           <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-6`}>สถิติผู้ใช้</h2>
           <div className="flex justify-center gap-12">
@@ -183,13 +183,13 @@ export default function AdminDashboard() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", stiffness: 300, damping: 30, delay: 0.3 }}
           whileHover={{ scale: 1.01, y: -3 }}
-          className={`rounded-2xl p-6 mb-8 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
+          className={`rounded-2xl p-6 mb-8 bg-surface shadow-neu-lg`}
         >
           <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
             School ID
           </h2>
           {schoolId && (
-            <div className="relative p-4 rounded-2xl bg-gray-100 dark:bg-gray-700 font-mono text-sm">
+            <div className="relative p-4 rounded-2xl shadow-neu-in-sm font-mono text-sm">
               <div className="flex items-center justify-between">
                 <p className="text-gray-800 dark:text-white">{getHighlightedSchoolId()}</p>
                 <motion.button
@@ -213,7 +213,7 @@ export default function AdminDashboard() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 50, scale: 0.9 }}
             transition={{ type: "spring", stiffness: 400, damping: 25 }}
-            className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded-2xl shadow-lg z-50 backdrop-blur-[20px] saturate-[180%]"
+            className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded-2xl shadow-neu z-50"
             style={{
               boxShadow: '0 8px 32px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.3)',
             }}
@@ -230,7 +230,7 @@ export default function AdminDashboard() {
           whileHover={{ scale: 1.02, y: -5 }}
           whileTap={{ scale: 0.98 }}
           onClick={() => router.push('/admin/dashboard/users')}
-          className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg cursor-pointer`}
+          className={`rounded-2xl p-6 bg-surface shadow-neu-lg cursor-pointer`}
         >
           <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
             จัดการข้อมูล

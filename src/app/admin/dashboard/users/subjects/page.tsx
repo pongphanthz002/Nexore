@@ -652,17 +652,17 @@ export default function SubjectsManagement() {
 
   if (loading && subjects.length === 0 && !uploadProgress) {
     return (
-      <div className={`min-h-screen p-6 pb-24 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+      <div className={`min-h-screen p-6 pb-24 bg-surface`}>
         <h1 className={`text-3xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-800'}`}>จัดการวิชาเรียน</h1>
         <div className="animate-pulse space-y-4">
-          <div className={`h-12 rounded-2xl ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`} />
-          <div className={`h-10 w-48 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+          <div className={`h-12 rounded-2xl bg-surface shadow-neu-lg`} />
+          <div className={`h-10 w-48 rounded-lg ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
           {[...Array(5)].map((_, i) => (
-            <div key={i} className={`rounded-2xl p-4 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}>
+            <div key={i} className={`rounded-2xl p-4 bg-surface shadow-neu-lg`}>
               <div className="space-y-2">
-                <div className={`h-4 w-40 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
-                <div className={`h-3 w-28 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
-                <div className={`h-3 w-20 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                <div className={`h-4 w-40 rounded ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
+                <div className={`h-3 w-28 rounded ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
+                <div className={`h-3 w-20 rounded ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
               </div>
             </div>
           ))}
@@ -673,7 +673,7 @@ export default function SubjectsManagement() {
 
   return (
     <div
-      className={`min-h-screen p-6 pb-24 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}
+      className={`min-h-screen p-6 pb-24 bg-surface`}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -709,13 +709,13 @@ export default function SubjectsManagement() {
         </h1>
 
         {/* Teacher Dropdown */}
-        <div className={`flex items-center gap-3 p-4 rounded-2xl shadow-sm ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+        <div className={`flex items-center gap-3 p-4 rounded-2xl bg-surface shadow-neu-in-sm`}>
           {/* Back Button */}
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => router.push('/admin/dashboard/users')}
-            className={`p-2 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
+            className={`p-2 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
           >
             <ArrowLeft size={20} />
           </motion.button>
@@ -724,7 +724,7 @@ export default function SubjectsManagement() {
           <div className="flex-1 relative">
             <div
               onClick={() => setShowTeacherDropdown(!showTeacherDropdown)}
-              className={`w-full px-4 py-2 rounded-xl cursor-pointer flex items-center justify-between ${isDark ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-700'}`}
+              className={`w-full px-4 py-2 rounded-xl cursor-pointer flex items-center justify-between bg-surface shadow-neu-sm active:shadow-neu-in-sm ${isDark ? 'text-white' : 'text-gray-700'}`}
             >
               <span>{selectedTeacher ? selectedTeacher.name : 'เลือกครู'}</span>
               <motion.span
@@ -740,13 +740,13 @@ export default function SubjectsManagement() {
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className={`absolute top-full left-0 right-0 mt-2 rounded-xl shadow-lg z-50 max-h-64 overflow-y-auto ${isDark ? 'bg-gray-800' : 'bg-white'}`}
+                className={`absolute top-full left-0 right-0 mt-2 rounded-xl shadow-neu-lg z-50 max-h-64 overflow-y-auto bg-surface`}
               >
                 {teachers.map((teacher) => (
                   <div
                     key={teacher.teacherId}
                     onClick={() => handleTeacherSelect(teacher.teacherId)}
-                    className={`p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${isDark ? 'text-white' : 'text-gray-800'}`}
+                    className={`p-3 cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 ${isDark ? 'text-white' : 'text-gray-800'}`}
                   >
                     <div className="font-medium">{teacher.name}</div>
                     <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -765,7 +765,7 @@ export default function SubjectsManagement() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
-        className={`rounded-2xl p-6 shadow-lg ${isDark ? 'bg-gray-800' : 'bg-white'}`}
+        className={`rounded-2xl p-6 bg-surface shadow-neu-lg`}
       >
         <div className="flex items-center justify-between mb-4">
           <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
@@ -811,7 +811,7 @@ export default function SubjectsManagement() {
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3 + dayIndex * 0.1 }}
-                    className={`rounded-2xl p-4 ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}
+                    className={`rounded-2xl p-4 shadow-neu-in-sm`}
                   >
                     <h3 className={`text-lg font-semibold mb-3 ${isDark ? 'text-white' : 'text-gray-800'}`}>
                       {convertDayToEnglish(day)}
@@ -842,7 +842,7 @@ export default function SubjectsManagement() {
                               onTouchStart={() => handleSubjectTouchStart(subject.subjectId)}
                               onTouchEnd={handleSubjectTouchEnd}
                               onTouchMove={handleSubjectTouchMove}
-                              className={`rounded-xl p-3 cursor-pointer transition-all ${selectedSubjects.has(subject.subjectId) ? 'bg-red-100 border-2 border-red-500' : isDark ? 'bg-gray-600 hover:bg-gray-500' : 'bg-white hover:bg-blue-50'}`}
+                              className={`rounded-xl p-3 cursor-pointer transition-all ${selectedSubjects.has(subject.subjectId) ? 'bg-red-100 border-2 border-red-500' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm'}`}
                             >
                               <div className="flex items-center justify-between">
                                 <div className="flex-1 min-w-0">
@@ -891,14 +891,14 @@ export default function SubjectsManagement() {
         animate={{ y: 0 }}
         className="fixed bottom-0 left-0 right-0 z-40"
       >
-        <div className={`dock-container relative px-6 py-3 shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+        <div className={`dock-container relative px-6 py-3 bg-surface shadow-neu-lg`}>
           <div className="flex items-center justify-center gap-6 max-w-4xl mx-auto">
             {/* Download Button */}
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={handleDownload}
-              className={`flex items-center justify-center p-4 rounded-xl transition-colors w-24 ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+              className={`flex items-center justify-center p-4 rounded-xl transition-colors w-24 ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
             >
               <Download size={28} />
             </motion.button>
@@ -908,16 +908,16 @@ export default function SubjectsManagement() {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => setShowAddModal(true)}
-              className="hero-action-button relative z-50 flex items-center justify-center p-5 rounded-3xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg transition-all w-32"
+              className="hero-action-button relative z-50 flex items-center justify-center p-5 rounded-3xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white transition-all w-32"
               style={{
-                boxShadow: '0 8px 20px rgba(59, 130, 246, 0.4)'
+                boxShadow: 'var(--neu-raised)'
               }}
             >
               <Plus size={32} />
             </motion.button>
 
             {/* Upload Button */}
-            <div className={`relative p-4 rounded-xl transition-colors w-24 flex items-center justify-center ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
+            <div className={`relative p-4 rounded-xl transition-colors w-24 flex items-center justify-center ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}>
               <input
                 type="file"
                 accept=".xlsx"
@@ -1007,7 +1007,7 @@ export default function SubjectsManagement() {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => setPendingUpload(null)}
-                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'}`}
+                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
               >
                 ยกเลิก
               </motion.button>
@@ -1026,7 +1026,7 @@ export default function SubjectsManagement() {
       {/* Add Subject Modal */}
       <Modal open={showAddModal} onClose={() => setShowAddModal(false)} size="lg" closeOnBackdrop={false} className="flex flex-col p-6">
               {/* Modal Header */}
-              <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-300/60 dark:border-white/10">
                 <div className="flex items-center gap-2">
                   <div className={`p-2.5 rounded-xl ${isDark ? 'bg-blue-950/40 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>
                     <BookOpen size={22} />
@@ -1035,7 +1035,7 @@ export default function SubjectsManagement() {
                 </div>
                 <button
                   onClick={() => setShowAddModal(false)}
-                  className={`p-2 rounded-xl transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}
+                  className={`p-2 rounded-xl transition-colors ${isDark ? 'hover:bg-white/5 text-gray-400' : 'hover:bg-black/5 text-gray-500'}`}
                 >
                   <X size={20} />
                 </button>
@@ -1051,7 +1051,7 @@ export default function SubjectsManagement() {
                   <select
                     value={newSubject.teacherId}
                     onChange={(e) => setNewSubject({ ...newSubject, teacherId: e.target.value })}
-                    className={`w-full p-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                    className={`w-full p-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                       }`}
                   >
                     <option value="">เลือกครู</option>
@@ -1073,7 +1073,7 @@ export default function SubjectsManagement() {
                     placeholder="เช่น คณิตศาสตร์พื้นฐาน, วิทยาการคำนวณ"
                     value={newSubject.subjectName}
                     onChange={(e) => setNewSubject({ ...newSubject, subjectName: e.target.value })}
-                    className={`w-full p-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                    className={`w-full p-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                       }`}
                   />
                 </div>
@@ -1090,11 +1090,11 @@ export default function SubjectsManagement() {
                       className={`p-3 rounded-2xl border-2 flex items-center justify-center gap-2.5 transition-all ${
                         newSubject.subjectType === 'basic'
                           ? isDark
-                            ? 'border-blue-500 bg-blue-950/40 text-blue-300 font-bold shadow-md shadow-blue-500/10'
-                            : 'border-blue-500 bg-blue-50 text-blue-700 font-bold shadow-md shadow-blue-500/10'
+                            ? 'border-blue-500 bg-blue-950/40 text-blue-300 font-bold shadow-neu-in-sm'
+                            : 'border-blue-500 bg-blue-50 text-blue-700 font-bold shadow-neu-in-sm'
                           : isDark
-                            ? 'border-gray-700 bg-gray-900/40 text-gray-400 hover:border-gray-600'
-                            : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+                            ? 'border-transparent bg-surface shadow-neu-sm text-gray-400'
+                            : 'border-transparent bg-surface shadow-neu-sm text-gray-600'
                       }`}
                     >
                       <GoogleBasicSubjectIcon size={22} />
@@ -1107,11 +1107,11 @@ export default function SubjectsManagement() {
                       className={`p-3 rounded-2xl border-2 flex items-center justify-center gap-2.5 transition-all ${
                         newSubject.subjectType === 'elective'
                           ? isDark
-                            ? 'border-amber-500 bg-amber-950/40 text-amber-300 font-bold shadow-md shadow-amber-500/10'
-                            : 'border-amber-500 bg-amber-50 text-amber-800 font-bold shadow-md shadow-amber-500/10'
+                            ? 'border-amber-500 bg-amber-950/40 text-amber-300 font-bold shadow-neu-in-sm'
+                            : 'border-amber-500 bg-amber-50 text-amber-800 font-bold shadow-neu-in-sm'
                           : isDark
-                            ? 'border-gray-700 bg-gray-900/40 text-gray-400 hover:border-gray-600'
-                            : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+                            ? 'border-transparent bg-surface shadow-neu-sm text-gray-400'
+                            : 'border-transparent bg-surface shadow-neu-sm text-gray-600'
                       }`}
                     >
                       <GoogleElectiveSubjectIcon size={22} />
@@ -1130,7 +1130,7 @@ export default function SubjectsManagement() {
                       value={newSubject.classroom}
                       onChange={(e) => setNewSubject({ ...newSubject, classroom: e.target.value })}
                       className={`w-full p-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        isDark ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                        isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                       }`}
                     >
                       <option value="">-- เลือกห้องเรียน --</option>
@@ -1167,7 +1167,7 @@ export default function SubjectsManagement() {
                       value={newSubject.classroom}
                       onChange={(e) => setNewSubject({ ...newSubject, classroom: e.target.value })}
                       className={`w-full p-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        isDark ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                        isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                       }`}
                     />
                   </div>
@@ -1178,9 +1178,7 @@ export default function SubjectsManagement() {
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
-                    className={`p-3.5 rounded-2xl border ${
-                      isDark ? 'bg-gray-900/60 border-gray-700' : 'bg-gray-50 border-gray-200'
-                    }`}
+                    className={`p-3.5 rounded-2xl border border-transparent bg-surface shadow-neu-in-sm`}
                   >
                     <div className="flex items-center justify-between mb-2">
                       <label className={`text-xs font-bold ${isDark ? 'text-amber-400' : 'text-amber-700'}`}>
@@ -1212,7 +1210,7 @@ export default function SubjectsManagement() {
                           value={studentClassFilter}
                           onChange={(e) => setStudentClassFilter(e.target.value)}
                           className={`w-full p-2 rounded-lg border text-xs ${
-                            isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                            isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                           }`}
                         >
                           <option value="all">ทุกห้องเรียน ({allStudents.length} คน)</option>
@@ -1232,7 +1230,7 @@ export default function SubjectsManagement() {
                           value={studentSearchQuery}
                           onChange={(e) => setStudentSearchQuery(e.target.value)}
                           className={`w-full pl-8 pr-3 py-2 rounded-lg border text-xs ${
-                            isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                            isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                           }`}
                         />
                       </div>
@@ -1253,7 +1251,7 @@ export default function SubjectsManagement() {
                               className={`flex items-center gap-2.5 p-2 rounded-xl cursor-pointer text-xs transition-colors ${
                                 isChecked
                                   ? isDark ? 'bg-amber-950/40 text-amber-300' : 'bg-amber-100/70 text-amber-900'
-                                  : isDark ? 'hover:bg-gray-800/80' : 'hover:bg-gray-100'
+                                  : isDark ? 'hover:bg-white/5' : 'hover:bg-black/5'
                               }`}
                             >
                               <input
@@ -1263,7 +1261,7 @@ export default function SubjectsManagement() {
                                 className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
                               />
                               <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
-                                isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
+                                isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'
                               }`}>
                                 {student.class || '-'}
                               </span>
@@ -1282,7 +1280,7 @@ export default function SubjectsManagement() {
                 )}
 
                 {/* Day, Time, and Duration combined with multi-day support (up to 3 days) */}
-                <div className="space-y-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+                <div className="space-y-3 pt-2 border-t border-gray-300/60 dark:border-white/10">
                   <div className="flex items-center justify-between">
                     <label className={`text-xs font-bold flex items-center gap-1.5 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
                       <Calendar size={14} className="text-blue-500" />
@@ -1303,9 +1301,7 @@ export default function SubjectsManagement() {
                   {newSubject.schedules.map((slot, index) => (
                     <div
                       key={index}
-                      className={`p-3.5 rounded-2xl border transition-all ${
-                        isDark ? 'bg-gray-900/60 border-gray-700' : 'bg-gray-50 border-gray-200'
-                      }`}
+                      className={`p-3.5 rounded-2xl border transition-all border-transparent bg-surface shadow-neu-in-sm`}
                     >
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-bold text-blue-500 dark:text-blue-400">
@@ -1333,7 +1329,7 @@ export default function SubjectsManagement() {
                             value={slot.day}
                             onChange={(e) => handleUpdateScheduleSlot(index, 'day', e.target.value)}
                             className={`w-full p-2.5 rounded-xl border text-xs transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                              isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                              isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                             }`}
                           >
                             <option value="จันทร์">จันทร์</option>
@@ -1357,7 +1353,7 @@ export default function SubjectsManagement() {
                             value={slot.time}
                             onChange={(e) => handleUpdateScheduleSlot(index, 'time', e.target.value)}
                             className={`w-full p-2.5 rounded-xl border text-xs transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                              isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                              isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                             }`}
                           />
                         </div>
@@ -1371,7 +1367,7 @@ export default function SubjectsManagement() {
                             value={slot.duration || '1'}
                             onChange={(e) => handleUpdateScheduleSlot(index, 'duration', e.target.value)}
                             className={`w-full p-2.5 rounded-xl border text-xs transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                              isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                              isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                             }`}
                           >
                             <option value="1">1 คาบ</option>
@@ -1390,8 +1386,8 @@ export default function SubjectsManagement() {
                       onClick={handleAddScheduleSlot}
                       className={`w-full py-2.5 px-3 rounded-xl border border-dashed text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
                         isDark
-                          ? 'border-gray-700 text-gray-400 hover:border-blue-500 hover:text-blue-400 bg-gray-900/40'
-                          : 'border-gray-300 text-gray-600 hover:border-blue-500 hover:text-blue-600 bg-gray-50'
+                          ? 'border-gray-600 text-gray-400 hover:border-blue-500 hover:text-blue-400'
+                          : 'border-gray-400 text-gray-600 hover:border-blue-500 hover:text-blue-700'
                       }`}
                     >
                       <Plus size={14} />
@@ -1402,13 +1398,13 @@ export default function SubjectsManagement() {
               </div>
 
               {/* Modal Actions */}
-              <div className="flex gap-3 mt-5 pt-3 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex gap-3 mt-5 pt-3 border-t border-gray-300/60 dark:border-white/10">
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setShowAddModal(false)}
                   disabled={isSavingSubject}
-                  className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all ${isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'
                     }`}
                 >
                   ยกเลิก
@@ -1418,7 +1414,7 @@ export default function SubjectsManagement() {
                   whileTap={{ scale: 0.98 }}
                   onClick={handleAddSubject}
                   disabled={isSavingSubject}
-                  className="flex-1 py-3 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 transition-all disabled:opacity-50"
+                  className="flex-1 py-3 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-neu-sm transition-all disabled:opacity-50"
                 >
                   {isSavingSubject && <Loader2 size={16} className="animate-spin" />}
                   {isSavingSubject ? 'กำลังบันทึก...' : 'บันทึกวิชาเรียน'}

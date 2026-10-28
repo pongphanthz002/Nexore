@@ -639,9 +639,10 @@ export default function ScoreGrid(props: ScoreGridProps) {
 
   // ---------------------------------------------------------------- styles
 
-  const border = isDark ? 'border-gray-700' : 'border-gray-200';
-  const surface = isDark ? 'bg-gray-800' : 'bg-white';
-  const headBg = isDark ? 'bg-gray-900' : 'bg-gray-50';
+  // Flat sheet on the soft-UI surface; sticky cells need opaque backgrounds
+  const border = isDark ? 'border-gray-700' : 'border-gray-300';
+  const surface = 'bg-surface';
+  const headBg = isDark ? 'bg-[#2f343e]' : 'bg-[#dde1e8]';
   const groupBg = isDark ? 'bg-purple-950' : 'bg-purple-50';
   const muted = isDark ? 'text-gray-400' : 'text-gray-500';
   const thBase = `border-b border-r ${border} px-2 text-xs font-bold whitespace-nowrap select-none [-webkit-touch-callout:none]`;
@@ -683,7 +684,7 @@ export default function ScoreGrid(props: ScoreGridProps) {
                 if (e.key === 'Escape') { setRenaming(null); focusGrid(); }
               }}
               onBlur={() => setRenaming(null)}
-              className={`w-28 h-6 px-1 rounded border text-xs ${isDark ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-300'}`}
+              className="w-28 h-6 px-1 rounded border border-transparent bg-surface text-xs shadow-neu-in-xs"
             />
           ) : (
             <span className="truncate max-w-[120px]">{a.title}</span>
@@ -857,7 +858,7 @@ export default function ScoreGrid(props: ScoreGridProps) {
     <div className="relative">
       <div
         ref={containerRef}
-        className={`overflow-auto max-h-[calc(100vh-260px)] min-h-[240px] rounded-xl border ${border} ${isDark ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`}
+        className={`overflow-auto max-h-[calc(100vh-260px)] min-h-[240px] rounded-xl border ${border} bg-surface ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
       >
         <div ref={tableWrapRef} className="relative min-w-full w-max">
         <input
@@ -873,7 +874,7 @@ export default function ScoreGrid(props: ScoreGridProps) {
           onBlur={() => finishEditing()}
           style={editorBox ?? { left: 0, top: 0, width: 0, height: 0 }}
           className={`absolute z-[5] p-0 border-0 text-center text-sm tabular-nums outline-none ${editing
-            ? `${isDark ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'} ring-2 ring-inset ring-blue-500`
+            ? `bg-surface ${isDark ? 'text-white' : 'text-gray-900'} ring-2 ring-inset ring-blue-500`
             : 'opacity-0 pointer-events-none'}`}
         />
         <table className="border-separate border-spacing-0 min-w-full">
@@ -939,7 +940,7 @@ export default function ScoreGrid(props: ScoreGridProps) {
       {menu && (
         <div
           style={{ left: Math.min(menu.x, window.innerWidth - 240), top: Math.min(menu.y, window.innerHeight - 260) }}
-          className={`fixed z-[80] w-56 rounded-xl border shadow-xl p-1 text-sm ${isDark ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-white border-gray-200 text-gray-800'}`}
+          className={`fixed z-[80] w-56 rounded-xl bg-surface shadow-neu-lg p-1 text-sm ${isDark ? 'text-gray-100' : 'text-gray-800'}`}
           onClick={e => e.stopPropagation()}
         >
           <ContextMenuItems
@@ -999,7 +1000,7 @@ function ContextMenuItems({ target, isDark, selected, close, onGroup, onEditGrou
   onExamMax: (exam: 'midterm' | 'final') => void;
   actions: ScoreGridActions;
 }) {
-  const item = `w-full text-left px-3 py-2 rounded-lg ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`;
+  const item = `w-full text-left px-3 py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5`;
   const run = (fn: () => void) => () => { close(); fn(); };
 
   if (target.type === 'exam') {
@@ -1045,7 +1046,7 @@ function ContextMenuItems({ target, isDark, selected, close, onGroup, onEditGrou
       {!many && a.groupId && (
         <button type="button" className={item} onClick={run(() => actions.removeFromGroup(a))}>เอาออกจากกลุ่ม</button>
       )}
-      <div className={`my-1 border-t ${isDark ? 'border-gray-700' : 'border-gray-100'}`} />
+      <div className={`my-1 border-t ${isDark ? 'border-white/10' : 'border-gray-300/70'}`} />
       <button type="button" className={`${item} text-red-500`} onClick={run(() => actions.deleteAssignments(ids))}>ลบ{count || 'งาน'}</button>
     </Fragment>
   );
@@ -1074,7 +1075,7 @@ function GroupDialog({ isDark, group, members, defaultName, onClose, onSubmit }:
   const total = members.filter(m => m.isVisible).reduce((s, m) => s + (m.maxScore || 0), 0);
   const parsed = parseScore(raw);
   const valid = name.trim() !== '' && parsed.ok && parsed.value !== null && parsed.value > 0;
-  const input = `w-full h-11 px-3 rounded-xl border text-base ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-gray-200'} focus:outline-none focus:ring-2 focus:ring-purple-500/30`;
+  const input = `w-full h-11 px-3 rounded-xl border text-base border-transparent bg-surface shadow-neu-in-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30`;
 
   return (
     <DialogShell isDark={isDark} title={group ? 'แก้ไขกลุ่มคะแนน' : 'ปรับคะแนน'} onClose={onClose}>
@@ -1122,7 +1123,7 @@ function ExamMaxDialog({ isDark, exam, current, proportion, onClose, onSubmit }:
           inputMode="decimal"
           value={text}
           onChange={e => setText(e.target.value)}
-          className={`w-full h-11 px-3 rounded-xl border text-base ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-gray-200'} focus:outline-none focus:ring-2 focus:ring-indigo-500/30`}
+          className={`w-full h-11 px-3 rounded-xl border text-base border-transparent bg-surface shadow-neu-in-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30`}
         />
         <p className="text-sm opacity-70">
           ครูกรอกคะแนนจากข้อสอบเต็ม {valid ? formatScore((parsed as { value: number }).value) : '?'} แล้วระบบทอนให้เหลือ {formatScore(proportion)} คะแนนตามสัดส่วน{label}

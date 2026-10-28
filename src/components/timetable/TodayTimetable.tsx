@@ -99,7 +99,7 @@ export default function TodayTimetable({ role, studentInfo }: TodayTimetableProp
   const openAttendance = (entry: TimetableEntry) => router.push(attendanceHref(entry));
 
   if (loading) {
-    return <div className="h-64 w-full animate-pulse rounded-[22px] bg-white dark:bg-gray-800" aria-label="กำลังโหลดตาราง" />;
+    return <div className="h-64 w-full animate-pulse rounded-[24px] bg-surface shadow-neu-lg" aria-label="กำลังโหลดตาราง" />;
   }
 
   return (

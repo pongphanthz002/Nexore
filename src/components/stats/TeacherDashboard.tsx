@@ -12,6 +12,7 @@ import {
   type AttendanceKind, type AttendanceRange, type PendingRange, type SubjectStatsInput,
 } from '@/lib/class-stats';
 import { allowAction } from '@/lib/firestore-helpers';
+import { THEME_COLORS } from '@/config/theme';
 
 /**
  * Teacher home dashboard over every subject the teacher teaches: the top three scores (podium),
@@ -21,7 +22,7 @@ import { allowAction } from '@/lib/firestore-helpers';
  */
 
 const EASE = [0.2, 0.8, 0.2, 1] as const;
-const CARD = 'rounded-[24px] border border-gray-200 bg-white p-5 text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-50 sm:p-6';
+const CARD = 'rounded-[24px] bg-surface p-5 text-gray-900 shadow-neu-lg dark:text-gray-50 sm:p-6';
 const META = 'text-gray-600 dark:text-gray-400';
 
 /** Pastel series, checked for colour-blind separation between every pair on the light surface. */
@@ -104,15 +105,15 @@ export default function TeacherDashboard() {
       return (
         <section className={CARD}>
           <p className="font-medium">โหลดแดชบอร์ดไม่สำเร็จ</p>
-          <button type="button" onClick={() => load(true)} className="mt-3 h-11 rounded-full bg-gray-100 px-5 font-semibold dark:bg-gray-700">ลองอีกครั้ง</button>
+          <button type="button" onClick={() => load(true)} className="mt-3 h-11 rounded-full bg-surface px-5 font-semibold shadow-neu-sm active:shadow-neu-in-sm">ลองอีกครั้ง</button>
         </section>
       );
     }
     return (
       <div className="grid gap-4 lg:grid-cols-12" aria-label="กำลังโหลดแดชบอร์ด">
-        <div className="h-80 animate-pulse rounded-[24px] bg-white dark:bg-gray-800 lg:col-span-5" />
-        <div className="h-80 animate-pulse rounded-[24px] bg-white dark:bg-gray-800 lg:col-span-7" />
-        <div className="h-72 animate-pulse rounded-[24px] bg-white dark:bg-gray-800 lg:col-span-12" />
+        <div className="h-80 animate-pulse rounded-[24px] bg-surface shadow-neu-lg lg:col-span-5" />
+        <div className="h-80 animate-pulse rounded-[24px] bg-surface shadow-neu-lg lg:col-span-7" />
+        <div className="h-72 animate-pulse rounded-[24px] bg-surface shadow-neu-lg lg:col-span-12" />
       </div>
     );
   }
@@ -141,7 +142,7 @@ export function TeacherDashboardView({ inputs, savedAt, refreshing, onRefresh }:
           type="button"
           onClick={onRefresh}
           aria-label="โหลดข้อมูลแดชบอร์ดใหม่"
-          className="grid h-11 w-11 flex-none place-items-center rounded-full text-gray-600 transition-colors hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-gray-700"
+          className="grid h-11 w-11 flex-none place-items-center rounded-full bg-surface text-gray-600 shadow-neu-sm transition-shadow active:shadow-neu-in-sm dark:text-gray-300"
         >
           <RefreshCw size={20} className={refreshing ? 'animate-spin motion-reduce:animate-none' : ''} />
         </button>
@@ -167,7 +168,7 @@ function Segmented<T extends string>({ options, value, onChange, label }: {
 }) {
   const id = useId();
   return (
-    <div role="tablist" aria-label={label} className="flex flex-none rounded-full bg-gray-100 p-[3px] dark:bg-gray-700/70">
+    <div role="tablist" aria-label={label} className="flex flex-none rounded-full p-1 shadow-neu-in-sm">
       {options.map(([key, text]) => {
         const active = key === value;
         return (
@@ -177,12 +178,12 @@ function Segmented<T extends string>({ options, value, onChange, label }: {
             role="tab"
             aria-selected={active}
             onClick={() => onChange(key)}
-            className={`relative h-9 rounded-full px-3 text-[13px] font-semibold transition-colors ${active ? 'text-white dark:text-gray-900' : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white'}`}
+            className={`relative h-9 rounded-full px-3 text-[13px] font-semibold transition-colors ${active ? 'text-gray-900 dark:text-gray-50' : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}`}
           >
             {active && (
               <motion.span
                 layoutId={`seg-${id}`}
-                className="absolute inset-0 rounded-full bg-gray-900 dark:bg-white"
+                className="absolute inset-0 rounded-full bg-surface shadow-neu-sm"
                 transition={{ type: 'spring', stiffness: 500, damping: 38 }}
               />
             )}
@@ -243,14 +244,14 @@ function PodiumCard({ inputs }: { inputs: SubjectStatsInput[] }) {
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.45, delay: 0.55 + delay, ease: [0.2, 0.8, 0.3, 1.25] }}
                 >
-                  <span className={`grid place-items-center rounded-full font-semibold ${avatar} ${tone} ${place === 1 ? 'ring-4 ring-white ring-offset-2 ring-offset-indigo-100 dark:ring-gray-800 dark:ring-offset-indigo-500/30' : ''}`}>
+                  <span className={`grid place-items-center rounded-full font-semibold ${avatar} ${tone} ${place === 1 ? 'shadow-neu' : 'shadow-neu-sm'}`}>
                     {initials(s.name)}
                   </span>
                   <span className="mt-2.5 line-clamp-2 w-full text-center text-sm font-semibold leading-snug">{s.name}</span>
                   <span className={`mt-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${tone}`}>{classLabel(s.classroom)}</span>
                 </motion.div>
                 <motion.div
-                  className={`mt-3 flex w-full origin-bottom justify-center rounded-b-md rounded-t-2xl pt-3 text-3xl font-bold ${block} ${tone}`}
+                  className={`mt-3 flex w-full origin-bottom justify-center rounded-b-md rounded-t-2xl pt-3 text-3xl font-bold ${block} ${tone} ${place === 1 ? 'shadow-neu' : 'shadow-neu-in-sm'}`}
                   initial={reduce ? false : { scaleY: 0 }}
                   animate={{ scaleY: 1 }}
                   transition={{ duration: 0.8, delay, ease: EASE }}
@@ -273,7 +274,7 @@ function PendingCard({ inputs }: { inputs: SubjectStatsInput[] }) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const data = useMemo(() => pendingTimeline(inputs, range, new Date()), [inputs, range]);
   const colors = [isDark ? '#F9FAFB' : '#111827', PASTEL.lavender, PASTEL.pink, PASTEL.sky, PASTEL.amber];
-  const surface = isDark ? '#1F2937' : '#FFFFFF';
+  const surface = isDark ? THEME_COLORS.dark : THEME_COLORS.light;
 
   const H = 160, top = 14, bottom = 146, padL = 6, padR = 10;
   const yMax = data.max <= 4 ? 4 : Math.ceil(data.max / 4) * 4;
@@ -292,11 +293,12 @@ function PendingCard({ inputs }: { inputs: SubjectStatsInput[] }) {
         <p className={`py-12 text-center text-sm ${META}`}>ไม่มีงานค้าง</p>
       ) : (
         <div className="mt-4 lg:flex lg:items-center lg:gap-6">
-          <div ref={ref} className="relative min-w-0 lg:flex-[1.4]">
+          <div className="min-w-0 rounded-[20px] px-3 pb-2 pt-3 shadow-neu-in-sm lg:flex-[1.4]">
+          <div ref={ref} className="relative min-w-0">
             {width > 0 && (
               <svg key={range} width={width} height={H} role="img" aria-label={`กราฟเส้นงานค้างสะสมของนักเรียน ${data.rows.length} อันดับ`} className="block overflow-visible">
                 {[top, (top + bottom) / 2, bottom].map(gy => (
-                  <line key={gy} x1={0} x2={width} y1={gy} y2={gy} className="stroke-gray-200 dark:stroke-gray-700" strokeWidth={1} />
+                  <line key={gy} x1={0} x2={width} y1={gy} y2={gy} className="stroke-gray-300/70 dark:stroke-white/10" strokeWidth={1} />
                 ))}
                 <motion.path
                   d={`${path(data.rows[0].counts)} L${xs[n - 1]} ${bottom} L${xs[0]} ${bottom} Z`}
@@ -342,7 +344,7 @@ function PendingCard({ inputs }: { inputs: SubjectStatsInput[] }) {
                 })}
               </svg>
             )}
-            <span className={`absolute left-0 top-0 bg-white pr-1 text-[11px] dark:bg-gray-800 ${META}`}>{yMax} งาน</span>
+            <span className={`absolute left-0 top-0 bg-surface pr-1 text-[11px] ${META}`}>{yMax} งาน</span>
             <div className={`relative mt-1.5 h-5 text-xs ${META}`} aria-hidden>
               {width > 0 && data.labels.map((label, i) => (
                 <span
@@ -355,19 +357,20 @@ function PendingCard({ inputs }: { inputs: SubjectStatsInput[] }) {
               ))}
             </div>
           </div>
+          </div>
           <ol className="mt-3 lg:mt-0 lg:flex-1">
             {data.rows.map((row, i) => (
               <motion.li
                 key={row.studentId}
-                className="flex items-center gap-3 border-t border-gray-100 py-2 first:border-t-0 dark:border-gray-700/70 lg:first:border-t"
+                className="flex items-center gap-3 border-t border-gray-300/50 py-2 first:border-t-0 dark:border-white/5"
                 initial={reduce ? false : { opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.35, delay: 0.3 + i * 0.06, ease: EASE }}
               >
                 <span className={`w-4 flex-none text-center text-[13px] font-semibold ${META}`}>{i + 1}</span>
                 <span
-                  className="grid h-9 w-9 flex-none place-items-center rounded-full bg-gray-100 text-[13px] font-semibold dark:bg-gray-700"
-                  style={{ boxShadow: `inset 0 0 0 2px ${colors[i]}` }}
+                  className="grid h-9 w-9 flex-none place-items-center rounded-full bg-surface text-[13px] font-semibold"
+                  style={{ boxShadow: `inset 0 0 0 2px ${colors[i]}, var(--neu-raised-sm)` }}
                 >
                   {initials(row.name)}
                 </span>
@@ -375,7 +378,7 @@ function PendingCard({ inputs }: { inputs: SubjectStatsInput[] }) {
                   <span className="block truncate text-[15px] font-medium">{row.name}</span>
                   <span className={`block text-xs ${META}`}>{classLabel(row.classroom)}</span>
                 </span>
-                <span className="flex-none rounded-full bg-gray-100 px-3 py-1 text-[13px] font-semibold tabular-nums dark:bg-gray-700">
+                <span className="flex-none rounded-full px-3 py-1 text-[13px] font-semibold tabular-nums shadow-neu-in-sm">
                   {row.counts[n - 1]} งาน
                 </span>
               </motion.li>
@@ -404,7 +407,7 @@ function AttendanceCard({ inputs }: { inputs: SubjectStatsInput[] }) {
   const [range, setRange] = useState<AttendanceRange>('term');
   const [ref, width] = useWidth<HTMLDivElement>();
   const data = useMemo(() => attendanceByRoom(inputs, range, new Date()), [inputs, range]);
-  const surface = isDark ? '#1F2937' : '#FFFFFF';
+  const surface = isDark ? THEME_COLORS.dark : THEME_COLORS.light;
 
   const H = 220, top = 16, bottom = 208;
   const count = data.rooms.length;
@@ -448,7 +451,7 @@ function AttendanceCard({ inputs }: { inputs: SubjectStatsInput[] }) {
             {width > 0 && (
               <svg key={range} width={width} height={H} role="img" aria-label={`กราฟพื้นที่สถิติการเข้าเรียน เทียบ ${count} ห้อง`} className="block overflow-visible">
                 {[top, (top + bottom) / 2, bottom].map(gy => (
-                  <line key={gy} x1={0} x2={width} y1={gy} y2={gy} className="stroke-gray-200 dark:stroke-gray-700" strokeWidth={1} />
+                  <line key={gy} x1={0} x2={width} y1={gy} y2={gy} className="stroke-gray-300/70 dark:stroke-white/10" strokeWidth={1} />
                 ))}
                 {curves.map((c, i) => (
                   <motion.g
@@ -483,7 +486,7 @@ function AttendanceCard({ inputs }: { inputs: SubjectStatsInput[] }) {
             {width > 0 && peaks.map(p => (
               <motion.span
                 key={`${range}-${p.kind}`}
-                className="absolute flex items-center gap-1 whitespace-nowrap rounded-full bg-white px-2 py-1 text-[11px] font-semibold leading-none text-gray-900 shadow-[0_0_0_1px_rgb(229_231_235)] dark:bg-gray-800 dark:text-gray-50 dark:shadow-[0_0_0_1px_rgb(55_65_81)]"
+                className="absolute flex items-center gap-1 whitespace-nowrap rounded-full bg-surface px-2 py-1 text-[11px] font-semibold leading-none text-gray-900 shadow-neu-sm dark:text-gray-50"
                 style={{ left: Math.max(48, Math.min(width - 48, p.x)), top: labelTop.get(p.kind), translateX: '-50%', translateY: '-100%' }}
                 initial={reduce ? false : { opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -495,9 +498,9 @@ function AttendanceCard({ inputs }: { inputs: SubjectStatsInput[] }) {
             ))}
           </div>
 
-          <ul className="mt-4 grid grid-cols-4 gap-2 border-t border-gray-100 pt-4 dark:border-gray-700/70 lg:mt-0 lg:flex-1 lg:grid-cols-2 lg:gap-3 lg:border-0 lg:pt-0">
+          <ul className="mt-5 grid grid-cols-4 gap-2 lg:mt-0 lg:flex-1 lg:grid-cols-2 lg:gap-3">
             {KINDS.map(k => (
-              <li key={k.kind} className="lg:rounded-2xl lg:bg-gray-50 lg:p-4 lg:dark:bg-gray-700/40">
+              <li key={k.kind} className="rounded-2xl p-2.5 shadow-neu-in-sm lg:p-4">
                 <span className="block h-1.5 w-[18px] rounded-full" style={{ backgroundColor: k.color }} />
                 <p className={`mt-1.5 text-xs ${META}`}>{k.label} เฉลี่ย</p>
                 <p className="text-xl font-semibold leading-tight lg:text-2xl">{fmt(data.overall[k.kind])}%</p>

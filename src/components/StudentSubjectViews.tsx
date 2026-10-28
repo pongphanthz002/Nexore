@@ -16,7 +16,9 @@ import Modal from '@/components/Modal';
  */
 
 export const EASE = [0.2, 0.8, 0.2, 1] as const;
-const CARD = 'rounded-[22px] border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800';
+/** Soft UI: big cards rise from the page, small ones (tiles, history entries) sink into it */
+const CARD = 'rounded-[22px] bg-surface shadow-neu';
+const WELL = 'rounded-[22px] shadow-neu-in-sm';
 const META = 'text-gray-600 dark:text-gray-400';
 const HISTORY_PREVIEW = 12;
 
@@ -90,7 +92,7 @@ export function SubjectList({ subjects, gradeOf, attendanceOf, error, partialFai
           {!error && (
             <p className={`mt-1 text-[15px] ${META}`}>
               {subjects.length} วิชา
-              {pending > 0 && <> · <span className="font-medium text-red-600 dark:text-red-400">งานค้าง {pending} งาน</span></>}
+              {pending > 0 && <> · <span className="font-medium text-red-700 dark:text-red-400">งานค้าง {pending} งาน</span></>}
             </p>
           )}
         </div>
@@ -100,7 +102,7 @@ export function SubjectList({ subjects, gradeOf, attendanceOf, error, partialFai
           disabled={refreshing}
           aria-label="รีเฟรชคะแนนและเวลาเรียน"
           title="รีเฟรช"
-          className="-mr-2 grid h-11 w-11 flex-none place-items-center rounded-full text-gray-600 transition-colors hover:bg-gray-200/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 active:bg-gray-300/70 disabled:text-gray-400 dark:text-gray-300 dark:hover:bg-gray-800 dark:active:bg-gray-700"
+          className="grid h-11 w-11 flex-none place-items-center rounded-full bg-surface text-gray-600 shadow-neu-sm transition-shadow focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 active:shadow-neu-in-sm disabled:text-gray-400 dark:text-gray-300"
         >
           <RefreshCw size={22} className={refreshing ? 'animate-spin motion-reduce:animate-none' : ''} />
         </button>
@@ -109,7 +111,7 @@ export function SubjectList({ subjects, gradeOf, attendanceOf, error, partialFai
       {error && (
         <div className={`${CARD} p-5`}>
           <p className="text-[15px] font-medium">{error}</p>
-          <button type="button" onClick={onRetry} disabled={refreshing} className="mt-2 h-10 text-[15px] font-semibold text-blue-600 disabled:opacity-50 dark:text-blue-400">
+          <button type="button" onClick={onRetry} disabled={refreshing} className="mt-2 h-10 text-[15px] font-semibold text-blue-700 disabled:opacity-50 dark:text-blue-400">
             {refreshing ? 'กำลังโหลด…' : 'ลองใหม่'}
           </button>
         </div>
@@ -132,7 +134,7 @@ export function SubjectList({ subjects, gradeOf, attendanceOf, error, partialFai
       )}
 
       {subjects.length > 0 && (
-        <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {subjects.map((subject, i) => {
             const grade = gradeOf(subject.subjectId);
             const stats = attendanceOf(subject.subjectId)?.stats;
@@ -149,8 +151,8 @@ export function SubjectList({ subjects, gradeOf, attendanceOf, error, partialFai
                   type="button"
                   onClick={() => onOpen(subject.subjectId)}
                   style={hueVars(subject.hue, isDark)}
-                  className={`${CARD} flex h-full w-full flex-col gap-3 p-4 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 active:bg-gray-50 dark:active:bg-gray-700/40 ${
-                    grade?.unsent ? '!border-red-300 bg-red-50/60 hover:!border-red-400 dark:!border-red-900 dark:bg-red-950/30' : 'hover:border-gray-300 dark:hover:border-gray-600'
+                  className={`flex h-full w-full flex-col gap-3 rounded-[22px] p-4 text-left transition-shadow focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 active:shadow-neu-in-sm ${
+                    grade?.unsent ? 'bg-red-50/70 shadow-[inset_0_0_0_1.5px_rgb(248_113_113/0.55),var(--neu-raised)] dark:bg-red-950/30' : 'bg-surface shadow-neu'
                   }`}
                 >
                   <span className="flex w-full items-start gap-3">
@@ -182,7 +184,7 @@ export function SubjectList({ subjects, gradeOf, attendanceOf, error, partialFai
                     )}
                   </span>
                   {alerts.length > 0 && (
-                    <span className="text-sm font-medium text-red-600 dark:text-red-400">{alerts.join(' · ')}</span>
+                    <span className="text-sm font-medium text-red-700 dark:text-red-400">{alerts.join(' · ')}</span>
                   )}
                 </button>
               </motion.li>
@@ -199,20 +201,20 @@ export function ListSkeleton() {
     <div className="space-y-4" aria-busy="true" aria-label="กำลังโหลดวิชาเรียน">
       <div>
         <h1 className="text-2xl font-semibold leading-tight">วิชาเรียน</h1>
-        <div className="mt-2 h-4 w-24 rounded-full bg-gray-200 dark:bg-gray-700" />
+        <div className="mt-2 h-4 w-24 rounded-full bg-gray-300/60 dark:bg-white/10" />
       </div>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {[0, 1, 2, 3, 4, 5].map(i => (
           <div key={i} className={`${CARD} space-y-4 p-4`}>
             <div className="flex items-start gap-3">
-              <span className="h-11 w-1.5 rounded-full bg-gray-200 dark:bg-gray-700" />
+              <span className="h-11 w-1.5 rounded-full bg-gray-300/60 dark:bg-white/10" />
               <span className="flex-1 space-y-2">
-                <span className="block h-4 w-2/5 rounded-full bg-gray-200 dark:bg-gray-700" />
-                <span className="block h-3 w-1/3 rounded-full bg-gray-100 dark:bg-gray-700/60" />
+                <span className="block h-4 w-2/5 rounded-full bg-gray-300/60 dark:bg-white/10" />
+                <span className="block h-3 w-1/3 rounded-full bg-gray-300/40 dark:bg-white/5" />
               </span>
-              <span className="h-7 w-8 rounded-md bg-gray-200 dark:bg-gray-700" />
+              <span className="h-7 w-8 rounded-md bg-gray-300/60 dark:bg-white/10" />
             </div>
-            <span className="block h-2 rounded-full bg-gray-100 dark:bg-gray-700" />
+            <span className="block h-2 rounded-full shadow-neu-in-xs" />
           </div>
         ))}
       </div>
@@ -227,7 +229,7 @@ export function ListSkeleton() {
 export function SubjectHeader({ subject, isDark }: { subject: StudentSubjectInfo; isDark: boolean }) {
   const slots = scheduleLines(subject);
   return (
-    <section style={hueVars(subject.hue, isDark)} className="rounded-[22px] bg-[var(--sb)] p-5 lg:flex lg:items-end lg:justify-between lg:gap-8 lg:p-6">
+    <section style={hueVars(subject.hue, isDark)} className="rounded-[22px] bg-[var(--sb)] p-5 shadow-neu lg:flex lg:items-end lg:justify-between lg:gap-8 lg:p-6">
       <div>
         {subject.subjectCode && <p className="text-sm font-medium text-[var(--st)]">{subject.subjectCode}</p>}
         <h1 className="text-2xl font-semibold leading-tight text-[var(--sbig)] lg:text-[28px]">{subject.subjectName}</h1>
@@ -245,7 +247,7 @@ function Bar({ value, max, className, thick = false }: { value: number; max: num
   const reduce = useReducedMotion();
   const ratio = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
   return (
-    <span className={`block overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700 ${thick ? 'h-2.5' : 'h-2'}`}>
+    <span className={`block overflow-hidden rounded-full shadow-neu-in-xs ${thick ? 'h-2.5' : 'h-2'}`}>
       <motion.span
         className={`block h-full origin-left rounded-full ${className}`}
         initial={reduce ? false : { scaleX: 0 }}
@@ -287,7 +289,7 @@ function GradeLadder({ grade }: { grade: StudentGradeInfo }) {
 function StatTile({ label, value, max, entered = true }: { label: string; value: number; max: number; entered?: boolean }) {
   const pct = max > 0 ? Math.round((value / max) * 100) : 0;
   return (
-    <div className={`${CARD} flex flex-col p-3.5 sm:p-5`}>
+    <div className={`${WELL} flex flex-col p-3.5 sm:p-5`}>
       <p className={`text-sm ${META}`}>{label}</p>
       <p className="mt-1.5 tabular-nums sm:mt-2">
         {entered
@@ -322,8 +324,8 @@ export function GradesView({ grade, subject, isDark, onOpen }: {
   const scored = grade.details.filter(d => d.score !== null).length;
 
   return (
-    <div style={hueVars(subject.hue, isDark)} className="grid gap-3 lg:grid-cols-12 lg:gap-4">
-      <section aria-label="เกรดและคะแนนรวม" className="rounded-[22px] bg-[var(--sb)] p-5 lg:col-span-5 lg:row-span-2 lg:flex lg:flex-col lg:p-6">
+    <div style={hueVars(subject.hue, isDark)} className="grid gap-4 lg:grid-cols-12 lg:gap-5">
+      <section aria-label="เกรดและคะแนนรวม" className="rounded-[22px] bg-[var(--sb)] p-5 shadow-neu lg:col-span-5 lg:row-span-2 lg:flex lg:flex-col lg:p-6">
         <div className="flex items-end justify-between gap-4">
           <div>
             <p className="text-sm text-[var(--smeta)]">เกรดตอนนี้</p>
@@ -352,7 +354,7 @@ export function GradesView({ grade, subject, isDark, onOpen }: {
         <div className="flex items-baseline justify-between gap-3">
           <p className="text-[15px]">ได้คะแนนแล้ว <span className="font-semibold tabular-nums">{scored}</span> จาก {grade.details.length} งาน</p>
           {grade.unsent > 0
-            ? <p className="text-[15px] font-medium text-red-600 dark:text-red-400">งานค้าง {grade.unsent} งาน</p>
+            ? <p className="text-[15px] font-medium text-red-700 dark:text-red-400">งานค้าง {grade.unsent} งาน</p>
             : grade.details.length > 0 && <p className="text-[15px] text-emerald-700 dark:text-emerald-400">ไม่มีงานค้าง</p>}
         </div>
         <div className="mt-3">
@@ -365,7 +367,7 @@ export function GradesView({ grade, subject, isDark, onOpen }: {
         {grade.details.length === 0 ? (
           <div className={`${CARD} p-5 text-[15px] ${META}`}>ครูยังไม่ได้เพิ่มงานในวิชานี้</div>
         ) : (
-          <ul className={`${CARD} divide-y divide-gray-100 overflow-hidden dark:divide-gray-700/70`}>
+          <ul className={`${CARD} divide-y divide-gray-300/50 overflow-hidden dark:divide-white/5`}>
             {grade.rows.map((row, i) => row.kind === 'assignment' ? (
               <li key={`a-${i}`}><AssignmentRow item={row.item} onOpen={onOpen} /></li>
             ) : (
@@ -381,7 +383,7 @@ export function GradesView({ grade, subject, isDark, onOpen }: {
                     <span className="text-sm text-[var(--smeta)]"> / {fmt(row.max)}</span>
                   </span>
                 </div>
-                <ul className="divide-y divide-gray-100 dark:divide-gray-700/70">
+                <ul className="divide-y divide-gray-300/50 dark:divide-white/5">
                   {row.items.map((item, j) => (
                     <li key={`${row.id}-${j}`}><AssignmentRow item={item} onOpen={onOpen} nested /></li>
                   ))}
@@ -399,13 +401,13 @@ export function GradesView({ grade, subject, isDark, onOpen }: {
 function AssignmentRow({ item, onOpen, nested = false }: { item: StudentGradeDetail; onOpen: (item: StudentGradeDetail) => void; nested?: boolean }) {
   const due = deadlineText(item);
   const missing = item.score === null;
-  const red = 'text-red-600 dark:text-red-400';
+  const red = 'text-red-700 dark:text-red-400';
   const sub = [missing && !due?.urgent ? 'ยังไม่มีคะแนน' : '', due?.text].filter(Boolean).join(' · ');
   return (
     <button
       type="button"
       onClick={() => onOpen(item)}
-      className={`grid w-full grid-cols-[1fr_auto] items-center gap-x-4 py-3 pr-4 text-left transition-colors hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none active:bg-gray-100 dark:hover:bg-gray-700/40 dark:focus-visible:bg-gray-700/40 md:grid-cols-[1fr_260px_120px] md:pr-5 ${
+      className={`grid w-full grid-cols-[1fr_auto] items-center gap-x-4 py-3 pr-4 text-left transition-colors hover:bg-black/[0.03] focus-visible:bg-black/[0.03] focus-visible:outline-none active:bg-black/[0.06] dark:hover:bg-white/[0.04] dark:focus-visible:bg-white/[0.04] dark:active:bg-white/[0.07] md:grid-cols-[1fr_260px_120px] md:pr-5 ${
         nested ? 'min-h-[52px] pl-4 md:pl-5' : 'min-h-[60px] pl-4 md:pl-5'
       }`}
     >
@@ -447,23 +449,23 @@ export function AttendanceView({ info }: { info: StudentAttendanceInfo | null })
   const history = showAll ? stats.history : stats.history.slice(0, HISTORY_PREVIEW);
 
   return (
-    <div className="grid gap-3 md:grid-cols-12 lg:gap-4">
+    <div className="grid gap-4 md:grid-cols-12 lg:gap-5">
       <section className={`${CARD} p-5 lg:p-6 ${maxMissed > 0 ? 'md:col-span-7' : 'md:col-span-12'}`} aria-label="สรุปเวลาเรียน">
         <div className="flex items-end justify-between gap-4">
           <div>
             <p className={`text-sm ${META}`}>มาเรียน</p>
-            <p className={`mt-1 text-5xl font-semibold leading-none tabular-nums lg:text-6xl ${passing ? '' : 'text-red-600 dark:text-red-400'}`}>{fmt(pct)}%</p>
+            <p className={`mt-1 text-5xl font-semibold leading-none tabular-nums lg:text-6xl ${passing ? '' : 'text-red-700 dark:text-red-400'}`}>{fmt(pct)}%</p>
           </div>
           <p className={`pb-0.5 text-right text-[15px] ${META}`}>
             {fmt(stats.presentHours)} จาก {fmt(stats.totalHours)} ชั่วโมง
           </p>
         </div>
-        <p className={`mt-3 text-[15px] ${passing ? 'text-emerald-700 dark:text-emerald-400' : 'font-medium text-red-600 dark:text-red-400'}`}>
+        <p className={`mt-3 text-[15px] ${passing ? 'text-emerald-700 dark:text-emerald-400' : 'font-medium text-red-700 dark:text-red-400'}`}>
           {passing ? `ผ่านเกณฑ์ ${ATTENDANCE_THRESHOLD}% มีสิทธิ์สอบ` : `ต่ำกว่าเกณฑ์ ${ATTENDANCE_THRESHOLD}% อาจหมดสิทธิ์สอบ`}
         </p>
 
         <div className="relative mt-4">
-          <div className="flex h-3 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700" aria-hidden>
+          <div className="flex h-3 overflow-hidden rounded-full shadow-neu-in-xs" aria-hidden>
             {used.map(s => (
               <div key={s} className={statusStyle(s)?.dot} style={{ width: `${(stats.hours[s] / stats.totalHours) * 100}%` }} />
             ))}
@@ -491,7 +493,7 @@ export function AttendanceView({ info }: { info: StudentAttendanceInfo | null })
               return (
                 <div key={d} className="flex flex-col items-center gap-1.5">
                   <span className="text-sm font-medium tabular-nums">{h > 0 ? fmt(h) : ''}</span>
-                  <div className="flex h-24 w-full max-w-[48px] items-end overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-700">
+                  <div className="flex h-24 w-full max-w-[48px] items-end overflow-hidden rounded-lg shadow-neu-in-sm">
                     <div className={`w-full rounded-lg ${h === maxMissed ? 'bg-red-500 dark:bg-red-400' : 'bg-gray-400 dark:bg-gray-500'}`} style={{ height: `${(h / maxMissed) * 100}%` }} />
                   </div>
                   <span className={`text-sm ${META}`}>{THAI_DAYS_SHORT[i + 1]}.</span>
@@ -509,7 +511,7 @@ export function AttendanceView({ info }: { info: StudentAttendanceInfo | null })
         </div>
         <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {history.map((h, i) => (
-            <li key={`${h.date}-${i}`} className={`${CARD} flex min-h-[52px] items-center justify-between gap-3 rounded-2xl px-4`}>
+            <li key={`${h.date}-${i}`} className={`${WELL} flex min-h-[52px] items-center justify-between gap-3 rounded-2xl px-4`}>
               <span className="text-[15px]">
                 {sessionDateLabel(h.date)}
                 {h.hours > 1 && <span className={META}> · {h.hours} ชม.</span>}
@@ -522,7 +524,7 @@ export function AttendanceView({ info }: { info: StudentAttendanceInfo | null })
           <button
             type="button"
             onClick={() => setShowAll(v => !v)}
-            className="h-11 w-full rounded-full text-[15px] font-semibold text-gray-700 transition-colors hover:bg-gray-200/70 dark:text-gray-300 dark:hover:bg-gray-800"
+            className="h-11 w-full rounded-full bg-surface text-[15px] font-semibold text-gray-700 shadow-neu-sm transition-shadow active:shadow-neu-in-sm dark:text-gray-300"
           >
             {showAll ? 'ย่อ' : `ดูทั้งหมด ${stats.history.length} ครั้ง`}
           </button>
@@ -549,7 +551,7 @@ export function AssignmentSheet({ item, onClose }: { item: StudentGradeDetail | 
                 onClick={onClose}
                 aria-label="ปิด"
                 data-autofocus
-                className="grid h-11 w-11 flex-none place-items-center rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                className="grid h-11 w-11 flex-none place-items-center rounded-full bg-surface text-gray-600 shadow-neu-sm transition-shadow active:shadow-neu-in-sm dark:text-gray-300"
               >
                 <X size={20} />
               </button>
@@ -565,7 +567,7 @@ export function AssignmentSheet({ item, onClose }: { item: StudentGradeDetail | 
                 <span className={`ml-1 text-lg ${META}`}>/ {fmt(item.max)} คะแนน</span>
               </p>
             )}
-            {due && <p className={`mt-2 text-[15px] ${due.urgent ? 'font-medium text-red-600 dark:text-red-400' : META}`}>{due.text}</p>}
+            {due && <p className={`mt-2 text-[15px] ${due.urgent ? 'font-medium text-red-700 dark:text-red-400' : META}`}>{due.text}</p>}
             <p className={`mt-4 whitespace-pre-line text-[15px] leading-relaxed ${item.description ? '' : META}`}>
               {item.description || 'ครูไม่ได้ใส่รายละเอียดงานนี้'}
             </p>

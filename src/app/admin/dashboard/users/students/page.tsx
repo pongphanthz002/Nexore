@@ -565,18 +565,18 @@ export default function StudentsManagement() {
 
   if (loading && students.length === 0 && !uploadProgress) {
     return (
-      <div className={`min-h-screen p-6 pb-24 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+      <div className={`min-h-screen p-6 pb-24 bg-surface`}>
         <h1 className={`text-3xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-800'}`}>จัดการข้อมูลนักเรียน</h1>
         <div className="animate-pulse space-y-4">
-          <div className={`h-12 rounded-2xl ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`} />
-          <div className={`h-10 w-48 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+          <div className={`h-12 rounded-2xl bg-surface shadow-neu-lg`} />
+          <div className={`h-10 w-48 rounded-lg ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
           {[...Array(6)].map((_, i) => (
-            <div key={i} className={`rounded-2xl p-4 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}>
+            <div key={i} className={`rounded-2xl p-4 bg-surface shadow-neu-lg`}>
               <div className="flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-full ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                <div className={`w-10 h-10 rounded-full ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
                 <div className="flex-1 space-y-2">
-                  <div className={`h-4 w-32 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
-                  <div className={`h-3 w-24 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                  <div className={`h-4 w-32 rounded ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
+                  <div className={`h-3 w-24 rounded ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
                 </div>
               </div>
             </div>
@@ -588,7 +588,7 @@ export default function StudentsManagement() {
 
   return (
     <div 
-      className={`min-h-screen p-6 pb-24 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}
+      className={`min-h-screen p-6 pb-24 bg-surface`}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -624,13 +624,13 @@ export default function StudentsManagement() {
         </h1>
         
         {/* Search Header */}
-        <div className={`flex items-center gap-3 p-4 rounded-2xl shadow-sm ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+        <div className={`flex items-center gap-3 p-4 rounded-2xl bg-surface shadow-neu-in-sm`}>
           {/* Back Button */}
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => router.push('/admin/dashboard/users')}
-            className={`p-2 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
+            className={`p-2 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
           >
             <ArrowLeft size={20} />
           </motion.button>
@@ -642,7 +642,7 @@ export default function StudentsManagement() {
               placeholder="ค้นหานักเรียน..."
               value={searchQuery}
               onChange={(e) => handleSearch(e.target.value)}
-              className={`w-full px-4 py-2 rounded-xl outline-none ${isDark ? 'bg-gray-700 text-white placeholder-gray-400' : 'bg-gray-100 text-gray-700 placeholder-gray-400'}`}
+              className={`w-full px-4 py-2 rounded-xl outline-none ${isDark ? 'bg-surface shadow-neu-in-sm text-white placeholder-gray-400' : 'bg-surface shadow-neu-in-sm text-gray-700 placeholder-gray-500'}`}
             />
           </div>
         </div>
@@ -653,7 +653,7 @@ export default function StudentsManagement() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
-        className={`rounded-2xl p-6 shadow-lg ${isDark ? 'bg-gray-800' : 'bg-white'}`}
+        className={`rounded-2xl p-6 bg-surface shadow-neu-lg`}
       >
         <div className="flex items-center justify-between mb-4">
           <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
@@ -664,7 +664,7 @@ export default function StudentsManagement() {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={handleBackToClasses}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
             >
               <ArrowLeft size={16} />
               <span>กลับ</span>
@@ -701,7 +701,7 @@ export default function StudentsManagement() {
                 onTouchEnd={handleStudentTouchEnd}
                 onTouchMove={handleStudentTouchMove}
                 onClick={() => selectedStudents.size > 0 ? toggleStudentSelection(student.studentId) : handleStudentClick(student)}
-                className={`rounded-2xl p-4 cursor-pointer transition-all ${selectedStudents.has(student.studentId) ? 'bg-red-100 border-2 border-red-500' : isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-50 hover:bg-blue-50'}`}
+                className={`rounded-2xl p-4 cursor-pointer transition-all ${selectedStudents.has(student.studentId) ? 'bg-red-100 border-2 border-red-500' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm'}`}
               >
                 <div className="flex items-center justify-between">
                   <div>
@@ -743,7 +743,7 @@ export default function StudentsManagement() {
                   onTouchEnd={handleStudentTouchEnd}
                   onTouchMove={handleStudentTouchMove}
                   onClick={() => selectedStudents.size > 0 ? toggleStudentSelection(student.studentId) : handleStudentClick(student)}
-                  className={`rounded-2xl p-4 cursor-pointer transition-all ${selectedStudents.has(student.studentId) ? 'bg-red-100 border-2 border-red-500' : isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-50 hover:bg-blue-50'}`}
+                  className={`rounded-2xl p-4 cursor-pointer transition-all ${selectedStudents.has(student.studentId) ? 'bg-red-100 border-2 border-red-500' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm'}`}
                 >
                   <div className="flex items-center justify-between">
                     <div>
@@ -777,7 +777,7 @@ export default function StudentsManagement() {
                       whileHover={{ scale: 1.02, y: -5 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={() => handleClassClick(className)}
-                      className={`rounded-2xl p-4 cursor-pointer transition-all shadow-md ${isDark ? 'bg-gray-800 hover:bg-gray-700' : 'bg-white hover:bg-blue-50'}`}
+                      className={`rounded-2xl p-4 cursor-pointer transition-all bg-surface shadow-neu-sm active:shadow-neu-in-sm`}
                     >
                       <h4 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
                         ชั้น {className}
@@ -800,14 +800,14 @@ export default function StudentsManagement() {
         animate={{ y: 0 }}
         className="fixed bottom-0 left-0 right-0 z-40"
       >
-        <div className={`dock-container relative px-6 py-3 shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+        <div className={`dock-container relative px-6 py-3 bg-surface shadow-neu-lg`}>
           <div className="flex items-center justify-center gap-6 max-w-4xl mx-auto">
             {/* Download Button */}
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={handleDownload}
-              className={`flex items-center justify-center p-4 rounded-xl transition-colors w-24 ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+              className={`flex items-center justify-center p-4 rounded-xl transition-colors w-24 ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
             >
               <Download size={28} />
             </motion.button>
@@ -817,16 +817,16 @@ export default function StudentsManagement() {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => setShowAddModal(true)}
-              className="hero-action-button relative z-50 flex items-center justify-center p-5 rounded-3xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg transition-all w-32"
+              className="hero-action-button relative z-50 flex items-center justify-center p-5 rounded-3xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white transition-all w-32"
               style={{
-                boxShadow: '0 8px 20px rgba(59, 130, 246, 0.4)'
+                boxShadow: 'var(--neu-raised)'
               }}
             >
               <Plus size={32} />
             </motion.button>
 
             {/* Upload Button */}
-            <div className={`relative p-4 rounded-xl transition-colors w-24 flex items-center justify-center ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
+            <div className={`relative p-4 rounded-xl transition-colors w-24 flex items-center justify-center ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}>
               <input
                 type="file"
                 accept=".xlsx"
@@ -848,7 +848,7 @@ export default function StudentsManagement() {
               </h3>
               <button
                 onClick={() => setShowPopup(false)}
-                className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-100 text-gray-400 hover:text-gray-600'}`}
+                className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-white/5 text-gray-400 hover:text-gray-200' : 'hover:bg-black/5 text-gray-500 hover:text-gray-700'}`}
               >
                 <X size={24} />
               </button>
@@ -880,7 +880,7 @@ export default function StudentsManagement() {
                     <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>UID</p>
                     <button
                       onClick={() => setShowUID(!showUID)}
-                      className={`p-1 rounded ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                      className={`p-1 rounded hover:bg-black/5 dark:hover:bg-white/5`}
                     >
                       {showUID ? <EyeOff size={16} className={isDark ? 'text-gray-400' : 'text-gray-500'} /> : <Eye size={16} className={isDark ? 'text-gray-400' : 'text-gray-500'} />}
                     </button>
@@ -948,7 +948,7 @@ export default function StudentsManagement() {
                   type="text"
                   value={editStudentData.studentId}
                   onChange={(e) => setEditStudentData({ ...editStudentData, studentId: e.target.value })}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-800'}`}
                 />
               </div>
               <div>
@@ -959,7 +959,7 @@ export default function StudentsManagement() {
                   type="text"
                   value={editStudentData.name}
                   onChange={(e) => setEditStudentData({ ...editStudentData, name: e.target.value })}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-800'}`}
                 />
               </div>
               <div>
@@ -970,7 +970,7 @@ export default function StudentsManagement() {
                   type="text"
                   value={editStudentData.class}
                   onChange={(e) => setEditStudentData({ ...editStudentData, class: e.target.value })}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-800'}`}
                 />
               </div>
               <div>
@@ -981,7 +981,7 @@ export default function StudentsManagement() {
                   type="text"
                   value={editStudentData.number}
                   onChange={(e) => setEditStudentData({ ...editStudentData, number: e.target.value })}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-800'}`}
                 />
               </div>
             </div>
@@ -990,7 +990,7 @@ export default function StudentsManagement() {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => setShowEditModal(false)}
-                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'}`}
+                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
               >
                 ยกเลิก
               </motion.button>
@@ -1062,7 +1062,7 @@ export default function StudentsManagement() {
                   setStudentsToAdd([]);
                   setPendingStudentsData([]);
                 }}
-                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'}`}
+                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
               >
                 ยกเลิก
               </motion.button>
@@ -1101,7 +1101,7 @@ export default function StudentsManagement() {
                   type="text"
                   value={newStudentData.studentId}
                   onChange={(e) => setNewStudentData({ ...newStudentData, studentId: e.target.value })}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-800'}`}
                   placeholder="เช่น S001"
                 />
               </div>
@@ -1113,7 +1113,7 @@ export default function StudentsManagement() {
                   type="text"
                   value={newStudentData.name}
                   onChange={(e) => setNewStudentData({ ...newStudentData, name: e.target.value })}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-800'}`}
                   placeholder="ชื่อ-สกุล"
                 />
               </div>
@@ -1125,7 +1125,7 @@ export default function StudentsManagement() {
                   type="text"
                   value={newStudentData.class}
                   onChange={(e) => setNewStudentData({ ...newStudentData, class: e.target.value })}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-800'}`}
                   placeholder="เช่น M.1"
                 />
               </div>
@@ -1137,7 +1137,7 @@ export default function StudentsManagement() {
                   type="text"
                   value={newStudentData.number}
                   onChange={(e) => setNewStudentData({ ...newStudentData, number: e.target.value })}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-800'}`}
                   placeholder="เช่น 1"
                 />
               </div>
@@ -1149,7 +1149,7 @@ export default function StudentsManagement() {
                   type="email"
                   value={newStudentData.email}
                   onChange={(e) => setNewStudentData({ ...newStudentData, email: e.target.value })}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-800'}`}
                   placeholder="email@example.com"
                 />
               </div>
@@ -1159,7 +1159,7 @@ export default function StudentsManagement() {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => setShowAddModal(false)}
-                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'}`}
+                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
               >
                 ยกเลิก
               </motion.button>

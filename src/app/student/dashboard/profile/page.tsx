@@ -92,7 +92,7 @@ export default function StudentProfilePage() {
 
   if (loading) {
     return (
-      <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'} font-sans`}>
+      <div className="min-h-screen bg-surface font-sans">
         <StudentHeader isDark={isDarkMode} toggleTheme={toggleTheme} />
         <ProfileSkeleton isDark={isDarkMode} />
         <StudentFooter isDark={isDarkMode} />
@@ -100,7 +100,7 @@ export default function StudentProfilePage() {
     );
   }
 
-  const darkClass = isDarkMode ? 'dark bg-gray-900 text-slate-100' : 'bg-gray-50 text-slate-900';
+  const darkClass = isDarkMode ? 'dark bg-surface text-slate-100' : 'bg-surface text-slate-900';
 
   const heroGradient = isDarkMode
     ? 'bg-gradient-to-br from-red-950 via-slate-900 to-red-950 border border-red-900/30'
@@ -117,7 +117,7 @@ export default function StudentProfilePage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          className={`${heroGradient} rounded-[2.5rem] p-7 text-white shadow-xl relative overflow-hidden`}
+          className={`${heroGradient} rounded-[2.5rem] p-7 text-white shadow-neu-lg relative overflow-hidden`}
         >
           {/* Subtle Ambient Glows */}
           <div className="absolute top-0 right-0 w-44 h-44 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
@@ -158,10 +158,8 @@ export default function StudentProfilePage() {
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1, duration: 0.4 }}
-          className={`${
-            isDarkMode ? 'bg-[#1E293B] border-[#334155]' : 'bg-white border-slate-100'
-          } border rounded-[2rem] p-4 shadow-sm grid grid-cols-3 divide-x ${
-            isDarkMode ? 'divide-slate-800' : 'divide-slate-100'
+          className={`bg-surface rounded-[2rem] p-4 shadow-neu grid grid-cols-3 divide-x ${
+            isDarkMode ? 'divide-white/5' : 'divide-slate-300/50'
           }`}
         >
           {/* Class */}
@@ -169,7 +167,7 @@ export default function StudentProfilePage() {
             <div className="w-8 h-8 rounded-xl bg-red-500/10 text-red-500 flex items-center justify-center mb-1.5">
               <GraduationCap className="w-4 h-4" />
             </div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ห้องเรียน</p>
+            <p className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">ห้องเรียน</p>
             <p className={`text-base font-black ${isDarkMode ? 'text-white' : 'text-slate-900'} mt-0.5`}>
               {studentInfo?.class || '-'}
             </p>
@@ -180,7 +178,7 @@ export default function StudentProfilePage() {
             <div className="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center mb-1.5">
               <Hash className="w-4 h-4" />
             </div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">เลขที่</p>
+            <p className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">เลขที่</p>
             <p className={`text-base font-black ${isDarkMode ? 'text-white' : 'text-slate-900'} mt-0.5`}>
               {studentInfo?.number || '-'}
             </p>
@@ -191,7 +189,7 @@ export default function StudentProfilePage() {
             <div className="w-8 h-8 rounded-xl bg-red-600/10 text-red-600 flex items-center justify-center mb-1.5">
               <BookOpen className="w-4 h-4" />
             </div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">วิชาเรียน</p>
+            <p className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">วิชาเรียน</p>
             <p className={`text-base font-black ${isDarkMode ? 'text-white' : 'text-slate-900'} mt-0.5`}>
               {subjectCount} วิชา
             </p>
@@ -206,22 +204,20 @@ export default function StudentProfilePage() {
           className="space-y-3"
         >
           <div className="px-2">
-            <h3 className={`text-xs font-black uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+            <h3 className={`text-xs font-black uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
               ข้อมูลบัญชีผู้ใช้งาน
             </h3>
           </div>
 
           {/* Email Tile */}
           <div
-            className={`${
-              isDarkMode ? 'bg-[#1E293B] border-[#334155]' : 'bg-white border-slate-100'
-            } border rounded-2xl p-4 shadow-sm flex items-center gap-4 transition-all hover:border-red-300`}
+            className="rounded-2xl p-4 shadow-neu-in-sm flex items-center gap-4"
           >
             <div className={`w-12 h-12 rounded-2xl ${isDarkMode ? 'bg-red-950/40 text-red-400' : 'bg-red-50 text-red-500'} flex items-center justify-center shrink-0`}>
               <Mail className="w-6 h-6" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">อีเมลของระบบ</p>
+              <p className="text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">อีเมลของระบบ</p>
               <p className={`font-bold text-sm sm:text-base leading-tight truncate ${isDarkMode ? 'text-slate-100' : 'text-slate-800'} mt-0.5`}>
                 {userAccount?.email || '-'}
               </p>
@@ -230,15 +226,13 @@ export default function StudentProfilePage() {
 
           {/* Student ID Tile */}
           <div
-            className={`${
-              isDarkMode ? 'bg-[#1E293B] border-[#334155]' : 'bg-white border-slate-100'
-            } border rounded-2xl p-4 shadow-sm flex items-center gap-4 transition-all hover:border-red-300`}
+            className="rounded-2xl p-4 shadow-neu-in-sm flex items-center gap-4"
           >
             <div className={`w-12 h-12 rounded-2xl ${isDarkMode ? 'bg-rose-950/40 text-rose-400' : 'bg-rose-50 text-rose-500'} flex items-center justify-center shrink-0`}>
               <Award className="w-6 h-6" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">รหัสประจำตัวนักเรียน</p>
+              <p className="text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">รหัสประจำตัวนักเรียน</p>
               <p className={`font-black text-lg leading-tight ${isDarkMode ? 'text-slate-100' : 'text-slate-800'} mt-0.5`}>
                 {studentInfo?.studentId || '-'}
               </p>
@@ -247,15 +241,13 @@ export default function StudentProfilePage() {
 
           {/* Academic Status Tile */}
           <div
-            className={`${
-              isDarkMode ? 'bg-[#1E293B] border-[#334155]' : 'bg-white border-slate-100'
-            } border rounded-2xl p-4 shadow-sm flex items-center gap-4 transition-all hover:border-red-300`}
+            className="rounded-2xl p-4 shadow-neu-in-sm flex items-center gap-4"
           >
             <div className={`w-12 h-12 rounded-2xl ${isDarkMode ? 'bg-emerald-950/40 text-emerald-400' : 'bg-emerald-50 text-emerald-600'} flex items-center justify-center shrink-0`}>
               <ShieldCheck className="w-6 h-6" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">สถานะการศึกษา</p>
+              <p className="text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">สถานะการศึกษา</p>
               <p className={`font-bold text-sm sm:text-base leading-tight ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'} mt-0.5 flex items-center gap-1.5`}>
                 <CheckCircle2 className="w-4 h-4" /> กำลังศึกษา (Active)
               </p>

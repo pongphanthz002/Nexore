@@ -46,7 +46,7 @@ export function CardBlock({ entry, role, state, isDark, top, height, index }: Ca
       <div className="flex items-center gap-2">
         <span className="min-w-0 text-sm font-semibold leading-tight text-[var(--st)]">{entry.subjectName}</span>
         {state === 'current' && (
-          <span className="h-5 flex-none rounded-full bg-white px-2 text-xs font-semibold leading-5 text-[var(--st)] dark:bg-gray-800">
+          <span className="h-5 flex-none rounded-full bg-surface px-2 text-xs font-semibold leading-5 text-[var(--st)] shadow-neu-sm">
             {teacher ? 'กำลังสอน' : 'กำลังเรียน'}
           </span>
         )}
@@ -100,7 +100,7 @@ export function TallBlock({ entry, role, state, isDark, left, width, large, onCh
           type="button"
           onClick={onCheck}
           aria-label={`เช็คชื่อ ${entry.subjectName} ${entry.classrooms.join(', ')}`}
-          className="mt-2 flex h-8 w-full items-center justify-center gap-1 rounded-[10px] bg-gray-900 px-1 text-[13px] font-semibold text-white transition-transform active:scale-95 dark:bg-gray-50 dark:text-gray-900"
+          className="mt-2 flex h-8 w-full items-center justify-center gap-1 rounded-[10px] bg-gray-900 px-1 text-[13px] font-semibold text-white shadow-neu-sm transition-transform active:scale-95 dark:bg-gray-50 dark:text-gray-900"
         >
           <Check size={16} className="flex-none" />
           {large ? 'เช็คชื่อ' : 'เช็ค'}
