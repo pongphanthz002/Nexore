@@ -8,6 +8,7 @@ import { CheckCircle, Clock } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { schoolDatabaseService } from '@/services/school-database.service';
 import { teacherDatabaseService, AttendanceData } from '@/services/teacher-database.service';
+import { useTheme } from '@/contexts/ThemeContext';
 
 interface SubjectData {
   subjectId: string;
@@ -58,26 +59,11 @@ function isTimeInRange(time: string, minutesBefore: number = 15, minutesAfter: n
 }
 
 export default function TeacherDashboard() {
-  const [isDark, setIsDark] = useState(false);
+  const { isDark } = useTheme();
   const [currentSubjects, setCurrentSubjects] = useState<SubjectData[]>([]);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const { userAccount } = useAuth();
-
-  useEffect(() => {
-    setIsDark(document.documentElement.classList.contains('dark'));
-
-    const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains('dark'));
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     loadCurrentSubjects();

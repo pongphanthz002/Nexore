@@ -83,4 +83,6 @@ Student reads fan out: `student-database.service.ts` loads the student's subject
 
 ## UI
 
+**Theme (dark/light)** is the app's own setting, independent of the phone's dark mode. `ThemeProvider`/`useTheme()` (`src/contexts/ThemeContext.tsx`) owns it: `isDark`, `toggleTheme`, `setTheme`, saved in `STORAGE_KEYS.THEME` (default light), applied as `html.dark`, synced across tabs, and updating `<meta name="theme-color">`. `themeInitScript` (`src/config/theme.ts`, kept outside the client module so the server layout gets the real string) sets the class in `<head>` before first paint. Tailwind uses `darkMode: 'class'`, so `dark:` variants and `isDark ? … : …` both follow the toggle. Never use `prefers-color-scheme` or a per-page theme state. `globals.css` pins `color-scheme: light` and keeps body text dark (pages set their own dark-mode text colours); only the body backdrop turns dark under `html.dark`. Login/setup pages are light-only.
+
 `SKILLS.md` is a "Liquid Glass" UI guide (glassmorphism via backdrop-blur, spring animations with Framer Motion). Recent commits moved the student UI to a red/white minimal style with one subject per row, so check the surrounding screens before applying it. The app is a PWA used on phones (iOS Safari edge-swipe-back is suppressed globally in `AuthContext`), so keep layouts mobile-first.

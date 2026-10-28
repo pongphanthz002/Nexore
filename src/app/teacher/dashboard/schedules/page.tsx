@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import GoogleSheetsIcon from '@/components/GoogleSheetsIcon';
+import { useTheme } from '@/contexts/ThemeContext';
 
 // Parse "08:30-09:30" → { startMinutes, endMinutes }
 function parseTimeRange(time: string): { startMinutes: number; endMinutes: number } | null {
@@ -146,7 +147,7 @@ function SchedulesContent() {
   const { userAccount } = useAuth();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [isDark, setIsDark] = useState(false);
+  const { isDark } = useTheme();
   const [subjects, setSubjects] = useState<SubjectData[]>([]);
   const [students, setStudents] = useState<StudentData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -198,15 +199,6 @@ function SchedulesContent() {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [isDownloading, setIsDownloading] = useState(false);
-
-  useEffect(() => {
-    setIsDark(document.documentElement.classList.contains('dark'));
-    const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains('dark'));
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
 
   // Update current time every 30 seconds
   useEffect(() => {

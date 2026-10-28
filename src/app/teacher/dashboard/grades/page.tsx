@@ -25,6 +25,7 @@ import { useScoreAutosave, type QueuedScoreCell } from '@/hooks/useScoreAutosave
 import ScoreGrid, { formatScore, type CellEdit, type ScoreGridActions } from '@/components/ScoreGrid';
 import MobileScoreEntry from '@/components/MobileScoreEntry';
 import GoogleSheetsIcon from '@/components/GoogleSheetsIcon';
+import { useTheme } from '@/contexts/ThemeContext';
 
 // --- CountUp Component ---
 const CountUp = ({ value, duration = 1.0 }: { value: string | number, duration?: number }) => {
@@ -106,7 +107,7 @@ function normalizeStructure(nextAssignments: Assignment[], nextGroups: Assignmen
 
 export default function GradesPage() {
   const { userAccount } = useAuth();
-  const [isDark, setIsDark] = useState(false);
+  const { isDark } = useTheme();
   const [subjects, setSubjects] = useState<SubjectData[]>([]);
   const [students, setStudents] = useState<StudentData[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<SubjectData | null>(null);
@@ -178,15 +179,6 @@ export default function GradesPage() {
     const t = setTimeout(() => setToast(null), 4000);
     return () => clearTimeout(t);
   }, [toast]);
-
-  useEffect(() => {
-    setIsDark(document.documentElement.classList.contains('dark'));
-    const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains('dark'));
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     async function loadData() {

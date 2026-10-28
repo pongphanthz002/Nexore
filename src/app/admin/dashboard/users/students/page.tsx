@@ -11,6 +11,7 @@ import { runPool } from '@/lib/firestore-helpers';
 import UploadProgressModal, { UploadProgress } from '@/components/UploadProgressModal';
 import * as XLSX from 'xlsx';
 import { Download, Upload, Trash2, Edit, Eye, EyeOff, RefreshCw, Plus, ArrowLeft, Search, X } from 'lucide-react';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function StudentsManagement() {
   const router = useRouter();
@@ -23,7 +24,7 @@ export default function StudentsManagement() {
   const [studentsToAdd, setStudentsToAdd] = useState<any[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [pendingStudentsData, setPendingStudentsData] = useState<any[]>([]);
-  const [isDark, setIsDark] = useState(false);
+  const { isDark } = useTheme();
   const [openClass, setOpenClass] = useState<string | null>(null);
   const [showUID, setShowUID] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -50,21 +51,6 @@ export default function StudentsManagement() {
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const lastLoadedConfigRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    setIsDark(document.documentElement.classList.contains('dark'));
-
-    const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains('dark'));
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     loadStudents();

@@ -11,6 +11,7 @@ import { runPool } from '@/lib/firestore-helpers';
 import UploadProgressModal, { UploadProgress } from '@/components/UploadProgressModal';
 import * as XLSX from 'xlsx';
 import { Eye, EyeOff, Edit, RefreshCw, Trash2, Download, Upload, Plus, ArrowLeft, Search, X } from 'lucide-react';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function TeachersManagement() {
   const router = useRouter();
@@ -24,7 +25,7 @@ export default function TeachersManagement() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [pendingTeachersData, setPendingTeachersData] = useState<any[]>([]);
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
-  const [isDark, setIsDark] = useState(false);
+  const { isDark } = useTheme();
   const [showUID, setShowUID] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editTeacherData, setEditTeacherData] = useState({
@@ -44,21 +45,6 @@ export default function TeachersManagement() {
   });
   const [searchQuery, setSearchQuery] = useState('');
   const lastLoadedConfigRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    setIsDark(document.documentElement.classList.contains('dark'));
-
-    const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains('dark'));
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     loadTeachers();

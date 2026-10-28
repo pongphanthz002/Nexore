@@ -9,6 +9,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import PieChart from '@/components/PieChart';
 import { Files } from 'lucide-react';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -17,24 +18,8 @@ export default function AdminDashboard() {
   const [schoolId, setSchoolId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
-  const [isDark, setIsDark] = useState(false);
+  const { isDark } = useTheme();
   const lastLoadedSchoolIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    setIsDark(document.documentElement.classList.contains('dark'));
-
-    // Listen for theme changes
-    const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains('dark'));
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     async function loadData() {

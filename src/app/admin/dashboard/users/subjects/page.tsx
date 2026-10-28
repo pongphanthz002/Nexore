@@ -11,6 +11,7 @@ import UploadProgressModal, { UploadProgress } from '@/components/UploadProgress
 import * as XLSX from 'xlsx';
 import { Download, Upload, Trash2, Plus, ArrowLeft, Search, BookOpen, Calendar, Clock, Loader2, X } from 'lucide-react';
 import { GoogleBasicSubjectIcon, GoogleElectiveSubjectIcon } from '@/components/GoogleSubjectIcons';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function SubjectsManagement() {
   const router = useRouter();
@@ -25,7 +26,7 @@ export default function SubjectsManagement() {
   const [swipeProgress, setSwipeProgress] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
   const [touchStartX, setTouchStartX] = useState(0);
-  const [isDark, setIsDark] = useState(false);
+  const { isDark } = useTheme();
   const [isSavingSubject, setIsSavingSubject] = useState(false);
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
   const [studentClassFilter, setStudentClassFilter] = useState<string>('all');
@@ -54,25 +55,9 @@ export default function SubjectsManagement() {
     schedules: [{ day: 'จันทร์', time: '08:30-09:30', duration: '1' }]
   });
 
-
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>('');
   const [showTeacherDropdown, setShowTeacherDropdown] = useState(false);
   const lastLoadedConfigRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    setIsDark(document.documentElement.classList.contains('dark'));
-
-    const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains('dark'));
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     loadData();

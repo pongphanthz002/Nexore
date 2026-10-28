@@ -11,6 +11,7 @@ import {
   Calendar, Clock, BookOpen, RefreshCw, 
   Sparkles, Sun, Moon
 } from 'lucide-react';
+import { useTheme } from '@/contexts/ThemeContext';
 
 const DAYS_ORDER = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์'];
 
@@ -26,32 +27,12 @@ interface ScheduleItem {
 
 export default function StudentSchedulePage() {
   const { userAccount } = useAuth();
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const { isDark: isDarkMode, toggleTheme } = useTheme();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
   const [studentInfo, setStudentInfo] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const toggleTheme = () => {
-    setIsDarkMode(!isDarkMode);
-    document.documentElement.classList.toggle('dark');
-  };
-
-  useEffect(() => {
-    setIsDarkMode(document.documentElement.classList.contains('dark'));
-
-    const observer = new MutationObserver(() => {
-      setIsDarkMode(document.documentElement.classList.contains('dark'));
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-
-    return () => observer.disconnect();
-  }, []);
 
   const fetchSchedule = async (force = false) => {
     if (!force) setLoading(true);

@@ -11,10 +11,11 @@ import { doc, updateDoc } from 'firebase/firestore';
 import type { FirebaseConfig } from '@/types/firebase.types';
 import { Edit, Save, X, Settings, Files, Eye, EyeOff, AlertTriangle, Loader2, BookOpen, Plus, Trash2, Clock, Calendar, Users, GraduationCap, ChevronRight, Search, CheckSquare, Square } from 'lucide-react';
 import { GoogleBasicSubjectIcon, GoogleElectiveSubjectIcon } from '@/components/GoogleSubjectIcons';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function ProfilePage() {
   const { userAccount, setUserAccount, invalidateCache, user } = useAuth();
-  const [isDark, setIsDark] = useState(false);
+  const { isDark } = useTheme();
   const [isEditing, setIsEditing] = useState(false);
   const [showConfigPopup, setShowConfigPopup] = useState(false);
   const [showConfigValues, setShowConfigValues] = useState(false);
@@ -59,7 +60,6 @@ export default function ProfilePage() {
     schedules: [{ day: 'จันทร์', time: '08:30-09:30', duration: '1' }]
   });
 
-
   const [formData, setFormData] = useState({ name: '' });
   const [configFormData, setConfigFormData] = useState({
     apiKey: '',
@@ -69,15 +69,6 @@ export default function ProfilePage() {
     messagingSenderId: '',
     appId: '',
   });
-
-  useEffect(() => {
-    setIsDark(document.documentElement.classList.contains('dark'));
-    const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains('dark'));
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     if (userAccount) {

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
+import { THEME_COLORS, themeInitScript } from "@/config/theme";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -18,8 +20,7 @@ export const metadata: Metadata = {
       { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
     ],
   },
-  themeColor: "#0ea5e9",
-  viewport: "width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content, theme-color=#0ea5e9",
+  viewport: "width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content",
 };
 
 export default function RootLayout({
@@ -28,8 +29,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="th">
+    <html lang="th" suppressHydrationWarning>
       <head>
+        {/* Applies the saved theme before first paint (see ThemeContext) */}
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <link rel="icon" href="/icon-192.png" />
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -37,10 +40,12 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Nexore" />
         <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="theme-color" content="#0ea5e9" />
+        <meta name="theme-color" content={THEME_COLORS.light} />
       </head>
       <body className={inter.className}>
-        <AuthProvider>{children}</AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

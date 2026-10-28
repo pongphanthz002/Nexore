@@ -11,6 +11,7 @@ import {
   BookOpen, Sparkles, User, GraduationCap, Mail, 
   Award, ShieldCheck, Hash, Layers, CheckCircle2
 } from 'lucide-react';
+import { useTheme } from '@/contexts/ThemeContext';
 
 // Loading skeleton
 function ProfileSkeleton({ isDark }: { isDark: boolean }) {
@@ -57,24 +58,10 @@ function ProfileSkeleton({ isDark }: { isDark: boolean }) {
 
 export default function StudentProfilePage() {
   const { userAccount } = useAuth();
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const { isDark: isDarkMode, toggleTheme } = useTheme();
   const [studentInfo, setStudentInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [subjectCount, setSubjectCount] = useState(0);
-
-  const toggleTheme = () => {
-    setIsDarkMode(!isDarkMode);
-    document.documentElement.classList.toggle('dark');
-  };
-
-  useEffect(() => {
-    setIsDarkMode(document.documentElement.classList.contains('dark'));
-    const observer = new MutationObserver(() => {
-      setIsDarkMode(document.documentElement.classList.contains('dark'));
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
 
   const fetchStudentInfo = async () => {
     setLoading(true);

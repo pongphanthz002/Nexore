@@ -28,6 +28,7 @@ import {
   Filler,
   ChartOptions
 } from 'chart.js';
+import { useTheme } from '@/contexts/ThemeContext';
 
 ChartJS.register(
   ArcElement,
@@ -110,7 +111,7 @@ const DetailModal = ({ item, onClose, isDark }: { item: any, onClose: () => void
 
 export default function StudentSubjectsPage() {
   const { userAccount } = useAuth();
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const { isDark: isDarkMode, toggleTheme } = useTheme();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [partialFailure, setPartialFailure] = useState(false);
@@ -125,26 +126,6 @@ export default function StudentSubjectsPage() {
   const [expandedChapters, setExpandedChapters] = useState<Record<string, boolean>>({});
   const [detailModalItem, setDetailModalItem] = useState<any>(null);
   const [viewMode, setViewMode] = useState<'list' | 'grades' | 'attendance'>('grades');
-
-  const toggleTheme = () => {
-    setIsDarkMode(!isDarkMode);
-    document.documentElement.classList.toggle('dark');
-  };
-
-  useEffect(() => {
-    setIsDarkMode(document.documentElement.classList.contains('dark'));
-
-    const observer = new MutationObserver(() => {
-      setIsDarkMode(document.documentElement.classList.contains('dark'));
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-
-    return () => observer.disconnect();
-  }, []);
 
   const toggleChapter = (chapter: string) => {
     setExpandedChapters(prev => ({ ...prev, [chapter]: !prev[chapter] }));

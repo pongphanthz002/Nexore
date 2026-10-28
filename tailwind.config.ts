@@ -1,6 +1,8 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  // dark: variants follow the in-app toggle (html.dark), not the phone setting
+  darkMode: "class",
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",

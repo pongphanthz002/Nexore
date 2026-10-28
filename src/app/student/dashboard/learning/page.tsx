@@ -10,32 +10,13 @@ import {
   BookOpen, Sparkles, Clock, 
   Lightbulb, GraduationCap, Rocket, Zap, Sun, Moon
 } from 'lucide-react';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function StudentLearningPage() {
   const { userAccount } = useAuth();
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const { isDark: isDarkMode, toggleTheme } = useTheme();
   const [studentInfo, setStudentInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-
-  const toggleTheme = () => {
-    setIsDarkMode(!isDarkMode);
-    document.documentElement.classList.toggle('dark');
-  };
-
-  useEffect(() => {
-    setIsDarkMode(document.documentElement.classList.contains('dark'));
-
-    const observer = new MutationObserver(() => {
-      setIsDarkMode(document.documentElement.classList.contains('dark'));
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-
-    return () => observer.disconnect();
-  }, []);
 
   const fetchStudentInfo = async () => {
     setLoading(true);
