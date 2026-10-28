@@ -17,12 +17,12 @@ export interface CellEdit {
 
 export interface ScoreGridActions {
   editAssignment: (a: Assignment) => void;
-  toggleVisibility: (a: Assignment) => void;
+  setVisibility: (ids: string[], visible: boolean) => void;
   groupAssignments: (ids: string[], name: string, rawScore: number) => void;
   editGroup: (group: AssignmentGroup, name: string, rawScore: number) => void;
   removeFromGroup: (a: Assignment) => void;
   ungroup: (group: AssignmentGroup) => void;
-  deleteAssignment: (a: Assignment) => void;
+  deleteAssignments: (ids: string[]) => void;
   renameAssignment: (a: Assignment, title: string) => void;
   /** Open the new-assignment popup */
   addAssignment: () => void;
@@ -67,6 +67,7 @@ type Dialog =
   | { type: 'exam'; exam: 'midterm' | 'final' };
 
 const SCALED = '__scaled';
+const LONG_PRESS_MS = 450;
 const cellKey = (studentId: string, field: ScoreField) => `${studentId}|${field}`;
 
 export function formatScore(n: number | undefined): string {
@@ -106,7 +107,13 @@ export default function ScoreGrid(props: ScoreGridProps) {
   const [renaming, setRenaming] = useState<{ id: string; text: string } | null>(null);
   const [dragSource, setDragSource] = useState<DragSource | null>(null);
   const [dropHint, setDropHint] = useState<{ key: string; side: 'left' | 'right' } | null>(null);
-  const longPress = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectedHeadersRef = useRef(selectedHeaders);
+  selectedHeadersRef.current = selectedHeaders;
+  const touchState = useRef<{ timer: ReturnType<typeof setTimeout> | null; startX: number; startY: number; selecting: boolean }>(
+    { timer: null, startX: 0, startY: 0, selecting: false },
+  );
+  const lastTouchAt = useRef(0);
+  const menuOpenedAt = useRef(0);
 
   // View mode starts with groups folded to their scaled column; edit mode shows everything
   useEffect(() => {
@@ -401,31 +408,111 @@ export default function ScoreGrid(props: ScoreGridProps) {
 
   const openMenu = (x: number, y: number, target: MenuTarget) => {
     if (!editable) return;
-    if (target.type === 'assignment' && !selectedHeaders.includes(target.assignment.id)) {
+    if (target.type === 'assignment' && !selectedHeadersRef.current.includes(target.assignment.id)) {
       setSelectedHeaders([target.assignment.id]);
     }
+    menuOpenedAt.current = Date.now();
     setMenu({ x, y, target });
   };
 
-  const menuHandlers = (target: MenuTarget) => ({
-    onContextMenu: (e: React.MouseEvent) => {
-      if (!editable) return;
+  /**
+   * Header gestures. Mouse: click / Shift / Ctrl select, drag across headers, right-click menu.
+   * Touch (tablets): tap selects one column; press-and-hold then slide selects a range
+   * (like a mouse drag); press-and-hold on an already selected column, or a two-finger
+   * tap, opens the menu. Emulated mouse events that follow a touch are ignored.
+   */
+  const headerHandlers = (target: MenuTarget) => {
+    const id = target.type === 'assignment' ? target.assignment.id : null;
+    const fromTouch = () => Date.now() - lastTouchAt.current < 800;
+    return {
+      onMouseDown: (e: React.MouseEvent) => {
+        if (!editable || !id || e.button !== 0 || fromTouch()) return;
+        selectHeader(id, e);
+      },
+      onMouseEnter: () => { if (editable && id && !fromTouch()) extendHeaderDrag(id); },
+      onContextMenu: (e: React.MouseEvent) => {
+        if (!editable) return;
+        e.preventDefault();
+        if (!fromTouch()) openMenu(e.clientX, e.clientY, target);
+      },
+      onTouchStart: (e: React.TouchEvent) => {
+        if (!editable) return;
+        lastTouchAt.current = Date.now();
+        const ts = touchState.current;
+        if (ts.timer) clearTimeout(ts.timer);
+        ts.timer = null;
+        ts.selecting = false;
+        if (e.touches.length === 2) {
+          const [a, b] = [e.touches[0], e.touches[1]];
+          openMenu((a.clientX + b.clientX) / 2, (a.clientY + b.clientY) / 2, target);
+          return;
+        }
+        if (e.touches.length !== 1) return;
+        ts.startX = e.touches[0].clientX;
+        ts.startY = e.touches[0].clientY;
+        ts.timer = setTimeout(() => {
+          ts.timer = null;
+          if (id && !selectedHeadersRef.current.includes(id)) {
+            ts.selecting = true;
+            setSelectedHeaders([id]);
+            headerDragStart.current = id;
+            lastHeaderClick.current = id;
+            navigator.vibrate?.(15);
+          } else {
+            openMenu(ts.startX, ts.startY, target);
+          }
+        }, LONG_PRESS_MS);
+      },
+      onTouchMove: (e: React.TouchEvent) => {
+        const ts = touchState.current;
+        if (!ts.timer) return;
+        const t = e.touches[0];
+        if (Math.abs(t.clientX - ts.startX) > 10 || Math.abs(t.clientY - ts.startY) > 10) {
+          clearTimeout(ts.timer);
+          ts.timer = null;
+        }
+      },
+      onTouchEnd: () => {
+        lastTouchAt.current = Date.now();
+        const ts = touchState.current;
+        if (ts.timer) {
+          // Short tap: select just this column
+          clearTimeout(ts.timer);
+          ts.timer = null;
+          if (id) { setSelectedHeaders([id]); lastHeaderClick.current = id; }
+        }
+        ts.selecting = false;
+        headerDragStart.current = null;
+      },
+    };
+  };
+
+  // While a press-and-hold selection is active, sliding the finger extends it instead of scrolling
+  // (needs a non-passive listener to call preventDefault).
+  const extendHeaderDragRef = useRef(extendHeaderDrag);
+  extendHeaderDragRef.current = extendHeaderDrag;
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onMove = (e: TouchEvent) => {
+      if (!touchState.current.selecting) return;
       e.preventDefault();
-      openMenu(e.clientX, e.clientY, target);
-    },
-    onTouchStart: (e: React.TouchEvent) => {
-      if (!editable) return;
       const t = e.touches[0];
-      const { clientX, clientY } = t;
-      longPress.current = setTimeout(() => openMenu(clientX, clientY, target), 500);
-    },
-    onTouchEnd: () => { if (longPress.current) clearTimeout(longPress.current); },
-    onTouchMove: () => { if (longPress.current) clearTimeout(longPress.current); },
-  });
+      const rect = el.getBoundingClientRect();
+      if (t.clientX > rect.right - 40) el.scrollLeft += 16;
+      else if (t.clientX < rect.left + 260) el.scrollLeft -= 16;
+      const th = (document.elementFromPoint(t.clientX, t.clientY) as HTMLElement | null)?.closest('[data-header-id]');
+      const headerId = th?.getAttribute('data-header-id');
+      if (headerId) extendHeaderDragRef.current(headerId);
+    };
+    el.addEventListener('touchmove', onMove, { passive: false });
+    return () => el.removeEventListener('touchmove', onMove);
+  }, []);
 
   useEffect(() => {
     if (!menu) return;
-    const close = () => setMenu(null);
+    // A click right after a touch gesture opened the menu is part of that gesture, not a dismissal
+    const close = () => { if (Date.now() - menuOpenedAt.current > 400) setMenu(null); };
     window.addEventListener('click', close);
     window.addEventListener('scroll', close, true);
     return () => {
@@ -572,11 +659,10 @@ export default function ScoreGrid(props: ScoreGridProps) {
         rowSpan={rowSpan}
         data-colkey={col.key}
         className={`${thBase} ${headerBg(a.id)} sticky ${rowSpan === 2 ? 'top-0' : 'top-9'} z-20 min-w-[84px] max-w-[160px] ${editable ? 'cursor-pointer' : ''} ${!a.isVisible ? 'opacity-50' : ''} ${dropClass(col.key)}`}
-        onMouseDown={e => { if (editable && e.button === 0) selectHeader(a.id, e); }}
-        onMouseEnter={() => editable && extendHeaderDrag(a.id)}
+        data-header-id={a.id}
         onDoubleClick={() => editable && setRenaming({ id: a.id, text: a.title })}
         title={[a.title, a.description, a.deadline ? `กำหนดส่ง ${a.deadline}` : ''].filter(Boolean).join('\n')}
-        {...menuHandlers({ type: 'assignment', assignment: a })}
+        {...headerHandlers({ type: 'assignment', assignment: a })}
         {...dropProps(col.key)}
       >
         <div className="flex items-center justify-center gap-1">
@@ -614,7 +700,7 @@ export default function ScoreGrid(props: ScoreGridProps) {
       rowSpan={rowSpan}
       data-colkey={col.key}
       className={`${thBase} ${groupBg} sticky ${rowSpan === 2 ? 'top-0' : 'top-9'} z-20 min-w-[84px] text-purple-600 dark:text-purple-300 ${dropClass(col.key)}`}
-      {...menuHandlers({ type: 'group', group: col.group })}
+      {...headerHandlers({ type: 'group', group: col.group })}
       {...dropProps(col.key)}
     >
       <div className="flex items-center justify-center gap-1">
@@ -639,7 +725,7 @@ export default function ScoreGrid(props: ScoreGridProps) {
         key={col.key}
         rowSpan={2}
         className={`${thBase} ${isDark ? 'bg-indigo-950' : 'bg-indigo-50'} sticky top-0 z-20 min-w-[92px] text-indigo-600 dark:text-indigo-300`}
-        {...menuHandlers({ type: 'exam', exam: col.field })}
+        {...headerHandlers({ type: 'exam', exam: col.field })}
       >
         <div>{col.field === 'midterm' ? 'กลางภาค' : 'ปลายภาค'}</div>
         <div className="text-[10px] font-medium opacity-70">
@@ -675,7 +761,7 @@ export default function ScoreGrid(props: ScoreGridProps) {
         key={`group:${gid}`}
         colSpan={span}
         className={`${thBase} ${groupBg} sticky top-0 z-20 h-9 text-purple-700 dark:text-purple-300 ${dropClass(`group:${gid}`)}`}
-        {...menuHandlers({ type: 'group', group })}
+        {...headerHandlers({ type: 'group', group })}
         {...dropProps(`group:${gid}`)}
       >
         <div className="flex items-center justify-center gap-1">
@@ -858,7 +944,7 @@ export default function ScoreGrid(props: ScoreGridProps) {
           <ContextMenuItems
             target={menu.target}
             isDark={isDark}
-            selectedCount={selectedHeaders.length}
+            selected={selectedHeaders.map(id => assignments.find(a => a.id === id)).filter((a): a is Assignment => !!a)}
             close={() => setMenu(null)}
             onGroup={() => setDialog({ type: 'group', ids: selectedHeaders.length ? selectedHeaders : [(menu.target as { assignment: Assignment }).assignment.id] })}
             onEditGroup={g => setDialog({ type: 'group', ids: [], group: g })}
@@ -901,10 +987,11 @@ export default function ScoreGrid(props: ScoreGridProps) {
   );
 }
 
-function ContextMenuItems({ target, isDark, selectedCount, close, onGroup, onEditGroup, onExamMax, actions }: {
+function ContextMenuItems({ target, isDark, selected, close, onGroup, onEditGroup, onExamMax, actions }: {
   target: MenuTarget;
   isDark: boolean;
-  selectedCount: number;
+  /** Assignments whose headers are selected */
+  selected: Assignment[];
   close: () => void;
   onGroup: () => void;
   onEditGroup: (g: AssignmentGroup) => void;
@@ -932,20 +1019,33 @@ function ContextMenuItems({ target, isDark, selectedCount, close, onGroup, onEdi
     );
   }
   const a = target.assignment;
+  // Actions apply to every selected column when the clicked one is part of the selection
+  const targets = selected.some(x => x.id === a.id) ? selected : [a];
+  const ids = targets.map(x => x.id);
+  const many = targets.length > 1;
+  const count = many ? ` ${targets.length} งาน` : '';
+  const anyVisible = targets.some(x => x.isVisible);
+  const anyHidden = targets.some(x => !x.isVisible);
   return (
     <Fragment>
+      {many && <div className="px-3 py-1 text-[11px] font-bold opacity-50">เลือกอยู่ {targets.length} งาน</div>}
       <button type="button" className={`${item} font-bold text-purple-600 dark:text-purple-300`} onClick={run(onGroup)}>
-        ปรับคะแนน{selectedCount > 1 ? ` (${selectedCount} งาน)` : ''}…
+        ปรับคะแนน{many ? ` (${targets.length} งาน)` : ''}…
       </button>
-      <button type="button" className={item} onClick={run(() => actions.editAssignment(a))}>แก้ไขงาน (ชื่อ / คะแนนเต็ม / กำหนดส่ง)</button>
-      <button type="button" className={item} onClick={run(() => actions.toggleVisibility(a))}>
-        {a.isVisible ? 'ซ่อนจากนักเรียน' : 'แสดงให้นักเรียนเห็น'}
-      </button>
-      {a.groupId && (
+      {!many && (
+        <button type="button" className={item} onClick={run(() => actions.editAssignment(a))}>แก้ไขงาน (ชื่อ / คะแนนเต็ม / กำหนดส่ง)</button>
+      )}
+      {anyVisible && (
+        <button type="button" className={item} onClick={run(() => actions.setVisibility(ids, false))}>ซ่อน{count}จากนักเรียน</button>
+      )}
+      {anyHidden && (
+        <button type="button" className={item} onClick={run(() => actions.setVisibility(ids, true))}>แสดง{count}ให้นักเรียนเห็น</button>
+      )}
+      {!many && a.groupId && (
         <button type="button" className={item} onClick={run(() => actions.removeFromGroup(a))}>เอาออกจากกลุ่ม</button>
       )}
       <div className={`my-1 border-t ${isDark ? 'border-gray-700' : 'border-gray-100'}`} />
-      <button type="button" className={`${item} text-red-500`} onClick={run(() => actions.deleteAssignment(a))}>ลบงาน</button>
+      <button type="button" className={`${item} text-red-500`} onClick={run(() => actions.deleteAssignments(ids))}>ลบ{count || 'งาน'}</button>
     </Fragment>
   );
 }

@@ -454,7 +454,7 @@ export default function GradesPage() {
 
   const gridActions: ScoreGridActions = {
     editAssignment: a => { setEditingAssignment(a); setShowAssignmentModal(true); },
-    toggleVisibility: a => { handleToggleVisibility(a); },
+    setVisibility: (ids, visible) => { handleSetVisibility(ids, visible); },
     groupAssignments: (ids, name, rawScore) => {
       if (!selectedSubject || ids.length === 0) return;
       const { assignments: list, groups } = structureRef.current;
@@ -507,19 +507,24 @@ export default function GradesPage() {
         displayOrder(),
       ));
     },
-    deleteAssignment: async a => {
-      if (!gradeDbConfig) return;
-      const scored = scoresRef.current.filter(s => isScored(s.assignmentScores?.[a.id])).length;
-      const detail = scored > 0 ? `\nมีนักเรียนกรอกคะแนนงานนี้แล้ว ${scored} คน คะแนนเหล่านี้จะไม่ถูกนับอีก` : '';
-      if (!confirm(`ลบงาน "${a.title}"?${detail}`)) return;
+    deleteAssignments: async ids => {
+      if (!gradeDbConfig || ids.length === 0) return;
+      const { assignments: list } = structureRef.current;
+      const targets = list.filter(a => ids.includes(a.id));
+      const scored = scoresRef.current.filter(s => targets.some(a => isScored(s.assignmentScores?.[a.id]))).length;
+      const names = targets.length === 1 ? `"${targets[0].title}"` : `${targets.length} งาน (${targets.map(a => a.title).join(', ')})`;
+      const detail = scored > 0 ? `\nมีนักเรียนกรอกคะแนนงานเหล่านี้แล้ว ${scored} คน คะแนนเหล่านี้จะไม่ถูกนับอีก` : '';
+      if (!confirm(`ลบ ${names}?${detail}`)) return;
       try {
-        await teacherDatabaseService.deleteAssignment(gradeDbConfig, a.id);
-        const { assignments: list, groups } = structureRef.current;
-        persistStructure(normalizeStructure(list.filter(x => x.id !== a.id), groups));
+        await Promise.all(targets.map(a => teacherDatabaseService.deleteAssignment(gradeDbConfig, a.id)));
       } catch (error) {
-        console.error('Error deleting assignment:', error);
-        alert('เกิดข้อผิดพลาดในการลบชิ้นงาน');
+        console.error('Error deleting assignments:', error);
+        alert('ลบชิ้นงานไม่สำเร็จบางรายการ กำลังโหลดข้อมูลล่าสุด');
+        if (selectedSubject) handleOpenGrades(selectedSubject);
+        return;
       }
+      const { assignments: current, groups } = structureRef.current;
+      persistStructure(normalizeStructure(current.filter(a => !ids.includes(a.id)), groups));
     },
     renameAssignment: async (a, title) => {
       if (!gradeDbConfig) return;
@@ -570,14 +575,15 @@ export default function GradesPage() {
     }
   };
 
-  const handleToggleVisibility = async (assignment: Assignment) => {
+  const handleSetVisibility = async (ids: string[], isVisible: boolean) => {
     if (!gradeDbConfig) return;
+    setAssignments(prev => prev.map(a => (ids.includes(a.id) ? { ...a, isVisible, updatedAt: new Date() } : a)));
     try {
-      const updated = { ...assignment, isVisible: !assignment.isVisible, updatedAt: new Date() };
-      setAssignments(prev => prev.map(a => a.id === assignment.id ? updated : a));
-      await teacherDatabaseService.updateAssignments(gradeDbConfig, [{ id: assignment.id, fields: { isVisible: updated.isVisible } }]);
+      await teacherDatabaseService.updateAssignments(gradeDbConfig, ids.map(id => ({ id, fields: { isVisible } })));
     } catch (error) {
-      console.error('Error toggling visibility:', error);
+      console.error('Error changing visibility:', error);
+      alert('เปลี่ยนการมองเห็นไม่สำเร็จ');
+      if (selectedSubject) handleOpenGrades(selectedSubject);
     }
   };
 
@@ -992,7 +998,7 @@ export default function GradesPage() {
                   </div>
                   <div className="pt-4 flex gap-3">
                     {editingAssignment && (
-                      <button type="button" onClick={() => { setShowAssignmentModal(false); gridActions.deleteAssignment(editingAssignment); }} className="h-14 flex-1 rounded-2xl bg-red-500/10 text-red-500 font-bold hover:bg-red-500/20 transition-all">ลบชิ้นงาน</button>
+                      <button type="button" onClick={() => { setShowAssignmentModal(false); gridActions.deleteAssignments([editingAssignment.id]); }} className="h-14 flex-1 rounded-2xl bg-red-500/10 text-red-500 font-bold hover:bg-red-500/20 transition-all">ลบชิ้นงาน</button>
                     )}
                     <button type="submit" className="h-14 flex-[2] rounded-2xl bg-red-500 text-white font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-500/20">บันทึกข้อมูล</button>
                   </div>
