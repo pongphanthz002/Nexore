@@ -8,6 +8,7 @@ import { schoolDatabaseService } from '@/services/school-database.service';
 import { firestoreService } from '@/services/firestore.service';
 import { Users, GraduationCap, Book, ArrowLeft, AlertTriangle, X } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
+import Modal from '@/components/Modal';
 
 export default function AdminUsers() {
   const router = useRouter();
@@ -299,21 +300,7 @@ export default function AdminUsers() {
       </div>
 
       {/* Main Modal */}
-      {showMainModal && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-          onClick={() => setShowMainModal(false)}
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            onClick={(e) => e.stopPropagation()}
-            className={`rounded-2xl p-6 max-w-md w-full shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
-          >
+      <Modal open={showMainModal} onClose={() => setShowMainModal(false)}>
             <div className="flex items-center justify-end mb-4">
               <button
                 onClick={() => setShowMainModal(false)}
@@ -350,26 +337,10 @@ export default function AdminUsers() {
                 <div className="text-sm opacity-70">Delete Data</div>
               </motion.button>
             </div>
-          </motion.div>
-        </motion.div>
-      )}
+      </Modal>
 
       {/* Reset Data Confirmation Modal */}
-      {showResetModal && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-          onClick={() => setShowResetModal(false)}
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            onClick={(e) => e.stopPropagation()}
-            className={`rounded-2xl p-6 max-w-md w-full shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
-          >
+      <Modal open={showResetModal} onClose={() => setShowResetModal(false)}>
             <div className="flex items-center justify-between mb-4">
               <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
                 ยืนยันการรีเซ็ตข้อมูล
@@ -438,26 +409,10 @@ export default function AdminUsers() {
                 </motion.button>
               </div>
             </div>
-          </motion.div>
-        </motion.div>
-      )}
+      </Modal>
 
       {/* Delete Data Confirmation Modal */}
-      {showDeleteModal && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-          onClick={() => setShowDeleteModal(false)}
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            onClick={(e) => e.stopPropagation()}
-            className={`rounded-2xl p-6 max-w-md w-full shadow-2xl border-2 border-red-500 ${isDark ? 'bg-gray-800' : 'bg-white'}`}
-          >
+      <Modal open={showDeleteModal} onClose={() => setShowDeleteModal(false)}>
             <div className="flex items-center justify-between mb-4">
               <h3 className={`text-xl font-bold text-red-500`}>
                 ยืนยันการลบข้อมูล
@@ -526,9 +481,7 @@ export default function AdminUsers() {
                 </motion.button>
               </div>
             </div>
-          </motion.div>
-        </motion.div>
-      )}
+      </Modal>
     </div>
   );
 }

@@ -113,6 +113,11 @@ export function hueVars(hue: SubjectHue, isDark: boolean): React.CSSProperties {
   return vars as React.CSSProperties;
 }
 
+/** A subject's colour for chart marks (the 500 step). */
+export function hueColor(hue: SubjectHue): string {
+  return HUES[hue][2];
+}
+
 export function buildHueMap(subjects: { subjectName: string }[]): Map<string, SubjectHue> {
   const map = new Map<string, SubjectHue>();
   for (const s of subjects) {

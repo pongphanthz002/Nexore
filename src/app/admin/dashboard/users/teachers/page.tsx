@@ -12,6 +12,7 @@ import UploadProgressModal, { UploadProgress } from '@/components/UploadProgress
 import * as XLSX from 'xlsx';
 import { Eye, EyeOff, Edit, RefreshCw, Trash2, Download, Upload, Plus, ArrowLeft, Search, X } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
+import Modal from '@/components/Modal';
 
 export default function TeachersManagement() {
   const router = useRouter();
@@ -702,23 +703,8 @@ export default function TeachersManagement() {
       </motion.div>
 
       {/* Popup */}
-      {showPopup && selectedTeacher && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-          onClick={() => {
-            setShowPopup(false);
-          }}
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            onClick={(e) => e.stopPropagation()}
-            className={`rounded-2xl p-6 max-w-md w-full shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
-          >
+      <Modal open={showPopup && !!selectedTeacher} onClose={() => setShowPopup(false)} closeOnBackdrop={false}>
+        {selectedTeacher && (<>
             <>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
@@ -798,26 +784,11 @@ export default function TeachersManagement() {
                   )}
                 </div>
             </>
-          </motion.div>
-        </motion.div>
-      )}
+        </>)}
+      </Modal>
 
       {/* Edit Modal */}
-      {showEditModal && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-          onClick={() => setShowEditModal(false)}
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            onClick={(e) => e.stopPropagation()}
-            className={`rounded-2xl p-6 max-w-md w-full shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
-          >
+      <Modal open={showEditModal} onClose={() => setShowEditModal(false)}>
             <div className="flex items-center justify-between mb-4">
               <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
                 แก้ไขข้อมูลครู
@@ -871,24 +842,10 @@ export default function TeachersManagement() {
                 บันทึก
               </motion.button>
             </div>
-          </motion.div>
-        </motion.div>
-      )}
+      </Modal>
 
       {/* Delete Confirmation Dialog */}
-      {showDeleteConfirm && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            className={`rounded-2xl p-6 max-w-lg w-full shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
-          >
+      <Modal open={showDeleteConfirm} onClose={() => { setShowDeleteConfirm(false); setTeachersToDelete([]); setTeachersToAdd([]); setPendingTeachersData([]); }} size="lg" closeOnBackdrop={false}>
             <div className="mb-4">
               <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'} mb-2`}>
                 ⚠️ ยืนยันการอัพโหลดรายชื่อครู
@@ -957,28 +914,12 @@ export default function TeachersManagement() {
                 ยืนยันและอัพโหลด
               </motion.button>
             </div>
-          </motion.div>
-        </motion.div>
-      )}
+      </Modal>
 
       <UploadProgressModal progress={uploadProgress} isDark={isDark} />
 
       {/* Add Teacher Modal */}
-      {showAddModal && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-          onClick={() => setShowAddModal(false)}
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            onClick={(e) => e.stopPropagation()}
-            className={`rounded-2xl p-6 max-w-md w-full shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
-          >
+      <Modal open={showAddModal} onClose={() => setShowAddModal(false)}>
             <div className="flex items-center justify-between mb-4">
               <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
                 เพิ่มครู
@@ -1046,9 +987,7 @@ export default function TeachersManagement() {
                 เพิ่ม
               </motion.button>
             </div>
-          </motion.div>
-        </motion.div>
-      )}
+      </Modal>
     </div>
   );
 }

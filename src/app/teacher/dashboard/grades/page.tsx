@@ -11,40 +11,22 @@ import type { FirebaseConfig } from '@/types/firebase.types';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import {
-  ChevronLeft, ClipboardList, Save, X, Plus, Edit2, Settings,
-  TrendingUp, BookOpen, Folder, Users, GraduationCap, Target, Layers, Sparkles,
-  Undo2, Redo2, Check, AlertCircle
+  ChevronLeft, ClipboardList, Save, Plus, Edit2, Settings,
+  TrendingUp, BookOpen, Undo2, Redo2, Check, AlertCircle
 } from 'lucide-react';
-import { animate } from 'framer-motion';
 import {
-  assignmentIdsInOrder, buildColumns, collectedCapacity, computeBreakdown, defaultGradeConfig,
+  assignmentIdsInOrder, buildColumns, collectedCapacity, defaultGradeConfig,
   getFieldValue, isScored, type ScoreField,
 } from '@/lib/grade-calculation';
 import { addSubjectSheet } from '@/lib/grade-export';
+import { buildGradeSummary, gradeSummaryFingerprint } from '@/lib/class-stats';
 import { useScoreAutosave, type QueuedScoreCell } from '@/hooks/useScoreAutosave';
 import ScoreGrid, { formatScore, type CellEdit, type ScoreGridActions } from '@/components/ScoreGrid';
 import MobileScoreEntry from '@/components/MobileScoreEntry';
 import GoogleSheetsIcon from '@/components/GoogleSheetsIcon';
+import Modal, { ModalHeader } from '@/components/Modal';
+import StudentGradeSheet from '@/components/StudentGradeSheet';
 import { useTheme } from '@/contexts/ThemeContext';
-
-// --- CountUp Component ---
-const CountUp = ({ value, duration = 1.0 }: { value: string | number, duration?: number }) => {
-  const [count, setCount] = useState(0);
-
-  useEffect(() => {
-    const num = parseFloat(value.toString()) || 0;
-    const controls = animate(0, num, {
-      duration: duration,
-      ease: "easeOut",
-      onUpdate(value) {
-        setCount(value);
-      }
-    });
-    return () => controls.stop();
-  }, [value, duration]);
-
-  return <span>{count % 1 === 0 ? count : count.toFixed(1)}</span>;
-};
 
 type HistoryEntry = { studentId: string; field: ScoreField; before: number | null; after: number | null };
 const MAX_UNDO = 50;
@@ -144,6 +126,8 @@ export default function GradesPage() {
   const structureRef = useRef({ assignments, groups: assignmentGroups });
   structureRef.current = { assignments, groups: assignmentGroups };
   const undoStack = useRef<HistoryEntry[][]>([]);
+  /** What `gradeSummaries/{subjectId}` holds, so unchanged summaries are never rewritten */
+  const summaryFingerprint = useRef<{ subjectId: string; fp: string } | null>(null);
   const redoStack = useRef<HistoryEntry[][]>([]);
 
   const gradeDbConfig: FirebaseConfig | undefined = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
@@ -288,12 +272,14 @@ export default function GradesPage() {
     redoStack.current = [];
     setHistorySize({ undo: 0, redo: 0 });
     try {
-      const [config, assignmentsList, groupsList, scoresList] = await Promise.all([
+      const [config, assignmentsList, groupsList, scoresList, storedSummary] = await Promise.all([
         teacherDatabaseService.getGradeConfig(gradeDbConfig, targetSubject.subjectId),
         teacherDatabaseService.getAssignments(gradeDbConfig, targetSubject.subjectId, targetSubject.classroom),
         teacherDatabaseService.getAssignmentGroups(gradeDbConfig, targetSubject.subjectId, targetSubject.classroom),
-        teacherDatabaseService.getStudentScores(gradeDbConfig, targetSubject.subjectId, targetSubject.classroom)
+        teacherDatabaseService.getStudentScores(gradeDbConfig, targetSubject.subjectId, targetSubject.classroom),
+        teacherDatabaseService.getGradeSummary(gradeDbConfig, targetSubject.subjectId).catch(() => null),
       ]);
+      summaryFingerprint.current = { subjectId: targetSubject.subjectId, fp: gradeSummaryFingerprint(storedSummary) };
 
       setGradeConfig(config || defaultGradeConfig(targetSubject.subjectId));
 
@@ -314,6 +300,26 @@ export default function GradesPage() {
       setLoadingGrades(false);
     }
   };
+
+  // Keep the subject's summary (home statistics) in step with what is on screen: one write per
+  // burst of edits, none when nothing that the summary holds changed.
+  useEffect(() => {
+    if (!selectedSubject || loadingGrades || !gradeDbConfig || !gradeConfig) return;
+    const subject = selectedSubject;
+    const config = gradeDbConfig;
+    const timer = setTimeout(() => {
+      const summary = buildGradeSummary(subject.subjectId, subject.classroom, filteredStudents, assignments, assignmentGroups, gradeConfig, studentScores);
+      const fp = gradeSummaryFingerprint(summary);
+      const last = summaryFingerprint.current;
+      if (last?.subjectId === subject.subjectId && last.fp === fp) return;
+      summaryFingerprint.current = { subjectId: subject.subjectId, fp };
+      teacherDatabaseService.saveGradeSummary(config, summary).catch(err => {
+        console.error('Error saving grade summary:', err);
+        summaryFingerprint.current = null;
+      });
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [selectedSubject, loadingGrades, gradeDbConfig, gradeConfig, filteredStudents, assignments, assignmentGroups, studentScores]);
 
   // ---------------------------------------------------------------- score edits
 
@@ -938,22 +944,9 @@ export default function GradesPage() {
         </AnimatePresence>
 
         {/* Modals for Grade Mode */}
-        <AnimatePresence>
-          {/* Assignment Modal */}
-          {showAssignmentModal && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                className={`w-full max-w-md rounded-3xl p-6 shadow-2xl ${isDark ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'}`}
-              >
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl font-bold">{editingAssignment ? 'แก้ไขชิ้นงาน' : 'เพิ่มชิ้นงานใหม่'}</h3>
-                  <button onClick={() => setShowAssignmentModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full">
-                    <X size={20} />
-                  </button>
-                </div>
+        {/* Assignment Modal */}
+        <Modal open={showAssignmentModal} onClose={() => setShowAssignmentModal(false)} size="md" closeOnBackdrop={false} labelledBy="assignment-modal-title">
+                <ModalHeader id="assignment-modal-title" title={editingAssignment ? 'แก้ไขชิ้นงาน' : 'เพิ่มชิ้นงานใหม่'} onClose={() => setShowAssignmentModal(false)} />
                 <form onSubmit={(e) => {
                   e.preventDefault();
                   const formData = new FormData(e.currentTarget);
@@ -1008,25 +1001,12 @@ export default function GradesPage() {
                     <button type="submit" className="h-14 flex-[2] rounded-2xl bg-red-500 text-white font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-500/20">บันทึกข้อมูล</button>
                   </div>
                 </form>
-              </motion.div>
-            </div>
-          )}
+        </Modal>
 
-          {/* Grade Config Modal */}
-          {showGradeConfigModal && gradeConfig && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                className={`w-full max-w-2xl rounded-3xl p-6 shadow-2xl ${isDark ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'} overflow-y-auto max-h-[90vh]`}
-              >
-                <div className="flex items-center justify-between mb-6 sticky top-0 bg-inherit z-10 py-2">
-                  <h3 className="text-xl font-bold">ตั้งค่าการตัดเกรดและสัดส่วนคะแนน</h3>
-                  <button onClick={() => setShowGradeConfigModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full">
-                    <X size={24} />
-                  </button>
-                </div>
+        {/* Grade Config Modal */}
+        <Modal open={showGradeConfigModal && !!gradeConfig} onClose={() => setShowGradeConfigModal(false)} size="2xl" closeOnBackdrop={false} labelledBy="grade-config-title">
+          {gradeConfig && (<>
+                <ModalHeader id="grade-config-title" title="ตั้งค่าการตัดเกรดและสัดส่วนคะแนน" onClose={() => setShowGradeConfigModal(false)} />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-6">
@@ -1149,208 +1129,25 @@ export default function GradesPage() {
                     บันทึกการตั้งค่าเกรด
                   </button>
                 </div>
-              </motion.div>
-            </div>
-          )}
+          </>)}
+        </Modal>
 
-          {/* Student Detail Modal */}
-          {selectedStudent && (
-            <div className="fixed inset-0 z-[70] flex items-center justify-center p-0 md:p-4 bg-black/60 backdrop-blur-md">
-              <motion.div
-                initial={{ opacity: 0, y: 100 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 100 }}
-                className={`w-full max-w-2xl h-full md:h-auto md:max-h-[90vh] rounded-none md:rounded-[3rem] shadow-2xl overflow-hidden flex flex-col ${isDark ? 'bg-[#0F172A] text-slate-100' : 'bg-[#F8FAFC] text-slate-900'}`}
-              >
-                {/* Modal Header */}
-                <div className={`p-6 flex items-center justify-between sticky top-0 z-10 ${isDark ? 'bg-[#1E293B]/90 border-[#334155]' : 'bg-white/90 border-slate-100'} border-b backdrop-blur-xl`}>
-                  <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isDark ? 'bg-indigo-500/20' : 'bg-indigo-50'}`}>
-                      <Users className="text-indigo-500" size={24} />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-bold leading-tight">{selectedStudent.name}</h3>
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">ข้อมูลคะแนนรายบุคคล</p>
-                    </div>
-                  </div>
-                  <button onClick={() => setSelectedStudent(null)} className={`p-3 rounded-2xl ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'} active:scale-95 transition-all`}>
-                    <X size={24} />
-                  </button>
-                </div>
-
-                {/* Modal Content */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                  {(() => {
-                    const score = scoresById.get(selectedStudent.studentId);
-                    const breakdown = computeBreakdown(score, assignments, assignmentGroups, gradeConfig);
-                    const grade = breakdown.grade;
-                    const unsentCount = breakdown.pending;
-                    const scoreOf = (a: Assignment) => getFieldValue(score, `a:${a.id}`);
-
-                    const mainCardGradient = isDark
-                      ? 'bg-gradient-to-br from-[#111827] via-[#1F2937] to-[#030712]'
-                      : 'bg-gradient-to-br from-[#3730a3] via-[#1e1b4b] to-[#3730a3]';
-
-                    return (
-                      <>
-                        {/* Performance Summary Card */}
-                        <div className={`rounded-[2.5rem] p-8 text-white relative overflow-hidden shadow-2xl ${mainCardGradient} border border-white/5`}>
-                          <div className="relative z-10 flex flex-col items-center text-center py-2">
-                            <p className="font-bold text-xs uppercase mb-4 opacity-70">เกรดเฉลี่ยปัจจุบัน</p>
-                            <div className="relative mb-4">
-                              <div className={`absolute inset-0 ${isDark ? 'bg-slate-500' : 'bg-indigo-500'} blur-[60px] opacity-20`}></div>
-                              <h2 className="text-8xl font-bold leading-none tracking-tighter text-white drop-shadow-2xl">
-                                {grade}
-                              </h2>
-                            </div>
-                            <div className="inline-flex items-center gap-2 bg-white/10 px-4 py-1.5 rounded-full backdrop-blur-md">
-                              <p className="text-slate-200 font-bold text-[10px] uppercase leading-none tracking-wider">Performance Status</p>
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-3 mt-6 pt-6 border-t border-white/10 relative z-10">
-                            <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-4 border border-white/5 text-center">
-                              <p className="text-[10px] font-bold text-indigo-300 mb-1 opacity-70 uppercase">คะแนนรวมทั้งหมด</p>
-                              <p className="text-2xl font-black"><CountUp value={breakdown.total} /></p>
-                            </div>
-                            <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-4 border border-white/5 text-center">
-                              <p className="text-[10px] font-bold text-rose-300 mb-1 opacity-70 uppercase">งานค้าง</p>
-                              <p className="text-2xl font-black text-rose-400"><CountUp value={unsentCount} duration={0.8} /></p>
-                            </div>
-                          </div>
-                          <Sparkles className="absolute top-4 right-4 w-12 h-12 text-white/10" />
-                        </div>
-
-                        {/* Score Breakdown Triplets */}
-                        <div className="grid grid-cols-3 gap-3">
-                          {[
-                            { label: 'คะแนนเก็บ', val: breakdown.collected, icon: Layers, color: 'text-blue-500', bg: isDark ? 'bg-blue-500/10' : 'bg-blue-50', border: isDark ? 'border-blue-500/20' : 'border-blue-100' },
-                            { label: 'กลางภาค', val: breakdown.midterm, icon: Target, color: 'text-indigo-500', bg: isDark ? 'bg-indigo-500/10' : 'bg-indigo-50', border: isDark ? 'border-indigo-500/20' : 'border-indigo-100' },
-                            { label: 'ปลายภาค', val: breakdown.final, icon: GraduationCap, color: 'text-violet-500', bg: isDark ? 'bg-violet-500/10' : 'bg-violet-50', border: isDark ? 'border-violet-500/20' : 'border-violet-100' }
-                          ].map((item, i) => (
-                            <div key={i} className={`p-4 rounded-2xl border ${item.bg} ${item.border} text-center shadow-sm`}>
-                              <p className={`text-2xl font-black ${item.color}`}><CountUp value={item.val} duration={1} /></p>
-                              <p className={`text-[10px] font-bold ${item.color} uppercase mt-1 opacity-70`}>{item.label}</p>
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Detailed Assignments List */}
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-2 px-2">
-                            <ClipboardList className="text-slate-400" size={18} />
-                            <h4 className="font-bold text-lg leading-tight">รายละเอียดชิ้นงาน</h4>
-                          </div>
-
-                          {/* Grouped Assignments */}
-                          {assignmentGroups.map(group => {
-                            const groupAsms = assignments.filter(a => a.groupId === group.id && a.isVisible);
-                            if (groupAsms.length === 0) return null;
-                            const groupScore = breakdown.groups[group.id] ?? 0;
-
-                            return (
-                              <div key={group.id} className={`rounded-3xl border ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-white border-slate-100'} shadow-sm overflow-hidden`}>
-                                <div className={`p-5 flex items-center justify-between ${isDark ? 'bg-indigo-500/5' : 'bg-indigo-50/50'}`}>
-                                  <div className="flex items-center gap-4">
-                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-indigo-500/20' : 'bg-indigo-50'}`}>
-                                      <Folder className="text-indigo-500" size={20} />
-                                    </div>
-                                    <div>
-                                      <h5 className="font-bold">{group.name}</h5>
-                                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                        คะแนนทอน: <span className="text-indigo-500 font-black">{groupScore} / {group.rawScore}</span>
-                                      </p>
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="p-4 space-y-2">
-                                  {groupAsms.map(a => (
-                                    <div key={a.id} className={`p-4 rounded-xl border flex items-center justify-between ${isDark ? 'bg-slate-900/50 border-slate-700' : 'bg-slate-50 border-slate-200/50'}`}>
-                                      <div className="flex-1 min-w-0 pr-4">
-                                        <p className={`font-bold text-sm truncate ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{a.title}</p>
-                                        {scoreOf(a) === undefined && <p className="text-[10px] font-bold text-rose-500 uppercase mt-0.5">งานค้าง</p>}
-                                      </div>
-                                      <div className="text-right shrink-0">
-                                        <span className={`font-black text-lg ${scoreOf(a) !== undefined ? 'text-indigo-500' : 'text-rose-500'}`}>
-                                          {scoreOf(a) !== undefined ? formatScore(scoreOf(a)) : '–'}
-                                        </span>
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase ml-1">/ {a.maxScore}</span>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            );
-                          })}
-
-                          {/* Ungrouped Assignments */}
-                          {assignments.filter(a => !a.groupId && a.isVisible).length > 0 && (
-                            <div className={`rounded-3xl border ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-white border-slate-100'} shadow-sm overflow-hidden`}>
-                              <div className={`p-5 flex items-center justify-between ${isDark ? 'bg-emerald-500/5' : 'bg-emerald-50/50'}`}>
-                                <div className="flex items-center gap-4">
-                                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-emerald-500/20' : 'bg-emerald-50'}`}>
-                                    <Plus className="text-emerald-500" size={20} />
-                                  </div>
-                                  <h5 className="font-bold">งานทั่วไป (รายชิ้น)</h5>
-                                </div>
-                              </div>
-                              <div className="p-4 space-y-2">
-                                {assignments.filter(a => !a.groupId && a.isVisible).map(a => (
-                                  <div key={a.id} className={`p-4 rounded-xl border flex items-center justify-between ${isDark ? 'bg-slate-900/50 border-slate-700' : 'bg-slate-50 border-slate-200/50'}`}>
-                                    <div className="flex-1 min-w-0 pr-4">
-                                      <p className={`font-bold text-sm truncate ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{a.title}</p>
-                                      {scoreOf(a) === undefined && <p className="text-[10px] font-bold text-rose-500 uppercase mt-0.5">งานค้าง</p>}
-                                    </div>
-                                    <div className="text-right shrink-0">
-                                      <span className={`font-black text-lg ${scoreOf(a) !== undefined ? 'text-indigo-500' : 'text-rose-500'}`}>
-                                        {scoreOf(a) !== undefined ? formatScore(scoreOf(a)) : '–'}
-                                      </span>
-                                      <span className="text-[10px] font-bold text-slate-400 uppercase ml-1">/ {a.maxScore}</span>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Footer Info */}
-                        <div className="text-center pt-8 pb-4 opacity-40">
-                          <p className="text-[10px] font-bold uppercase tracking-widest mb-1">Nexore Education System</p>
-                          <p className="text-[10px] font-medium tracking-tight italic">ข้อมูลคะแนน ณ วันที่ {new Date().toLocaleDateString('th-TH')}</p>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
+        {/* Student Detail */}
+        <StudentGradeSheet
+          student={selectedStudent}
+          subject={selectedSubject}
+          roster={filteredStudents}
+          assignments={assignments}
+          groups={assignmentGroups}
+          config={gradeConfig}
+          scores={studentScores}
+          dbConfig={gradeDbConfig}
+          onClose={() => setSelectedStudent(null)}
+        />
 
         {/* Download Modal */}
-        <AnimatePresence>
-          {showDownloadModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                className={`w-full max-w-lg rounded-3xl p-6 shadow-2xl ${isDark ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'}`}
-              >
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-2">
-                    <div className={`p-2 rounded-xl ${isDark ? 'bg-emerald-950/40' : 'bg-emerald-50'}`}>
-                      <GoogleSheetsIcon size={24} />
-                    </div>
-                    <h3 className="text-xl font-bold">ดาวน์โหลดรายงานคะแนน</h3>
-                  </div>
-                  <button 
-                    onClick={() => setShowDownloadModal(false)}
-                    className={`p-2 rounded-xl transition-colors ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
+        <Modal open={showDownloadModal} onClose={() => setShowDownloadModal(false)} size="lg" dismissible={!isDownloading} labelledBy="grades-download-title">
+                <ModalHeader id="grades-download-title" title="ดาวน์โหลดรายงานคะแนน" icon={<GoogleSheetsIcon size={24} />} onClose={() => setShowDownloadModal(false)} />
 
                 <div className="space-y-6">
                   {/* Subject Selection */}
@@ -1436,10 +1233,7 @@ export default function GradesPage() {
                     </button>
                   </div>
                 </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
+        </Modal>
       </div>
     </div>
   );

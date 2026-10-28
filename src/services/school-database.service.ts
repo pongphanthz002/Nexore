@@ -2,7 +2,7 @@ import { firebaseManager } from '@/lib/firebase';
 import { collection, doc, setDoc, getDoc, getDocs, query, where, deleteDoc, writeBatch, WriteBatch, documentId, Firestore, DocumentReference } from 'firebase/firestore';
 import { teacherDatabaseService, GradeConfig, Assignment, AssignmentGroup, StudentScore } from '@/services/teacher-database.service';
 import { firestoreService } from '@/services/firestore.service';
-import { TtlCache, withRetry, chunkArray, runPool, ProgressCallback } from '@/lib/firestore-helpers';
+import { TtlCache, dedupe, withRetry, chunkArray, runPool, ProgressCallback } from '@/lib/firestore-helpers';
 import type { FirebaseConfig } from '@/types/firebase.types';
 
 export interface TeacherFirebaseConfig {
@@ -254,8 +254,11 @@ class SchoolDatabaseService {
    */
   async getTeacherConfig(schoolFirebaseConfig: FirebaseConfig, teacherId: string): Promise<TeacherFirebaseConfig | null> {
     const database = this.getSchoolDB(schoolFirebaseConfig);
-    const teacherSnap = await withRetry(() => getDoc(doc(database, this.teachersCollection, teacherId)));
-    return teacherSnap.exists() ? (teacherSnap.data() as TeacherFirebaseConfig) : null;
+    // The home timetable and statistics ask at the same time: share one read
+    return dedupe(`teacher-config:${schoolFirebaseConfig.projectId}:${teacherId}`, async () => {
+      const teacherSnap = await withRetry(() => getDoc(doc(database, this.teachersCollection, teacherId)));
+      return teacherSnap.exists() ? (teacherSnap.data() as TeacherFirebaseConfig) : null;
+    });
   }
 
   /**

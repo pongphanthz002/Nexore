@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import ThemeToggle from '@/components/ThemeToggle';
+import { ConfirmDialog } from '@/components/Modal';
 import { LogOut, SwitchCamera } from 'lucide-react';
 import { useState } from 'react';
 
@@ -85,95 +86,22 @@ const AdminHeader = ({ isDark, toggleTheme }: AdminHeaderProps) => {
         </div>
       </motion.div>
 
-      {/* Switch Role Confirmation Dialog */}
-      {showSwitchConfirm && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className={`rounded-2xl p-6 max-w-md w-full ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
-          >
-            <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>
-              ยืนยันการเปลี่ยน Role
-            </h3>
-            <p className={isDark ? 'text-gray-300' : 'text-gray-600'}>
-              คุณต้องการเปลี่ยนเป็น Teacher Dashboard ใช่ไหม?
-            </p>
-            <div className="flex gap-3 mt-6">
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                onClick={() => setShowSwitchConfirm(false)}
-                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
-              >
-                ยกเลิก
-              </motion.button>
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                onClick={confirmSwitchRole}
-                className="flex-1 bg-blue-500 text-white py-3 rounded-xl"
-              >
-                ยืนยัน
-              </motion.button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-
-      {/* Logout Confirmation Dialog */}
-      {showLogoutConfirm && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className={`rounded-2xl p-6 max-w-md w-full ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
-          >
-            <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>
-              ยืนยันการออกจากระบบ
-            </h3>
-            <p className={isDark ? 'text-gray-300' : 'text-gray-600'}>
-              คุณต้องการออกจากระบบใช่ไหม?
-            </p>
-            <div className="flex gap-3 mt-6">
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                onClick={() => setShowLogoutConfirm(false)}
-                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
-              >
-                ยกเลิก
-              </motion.button>
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                onClick={confirmLogout}
-                className="flex-1 bg-red-500 text-white py-3 rounded-xl"
-              >
-                ยืนยัน
-              </motion.button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
+      <ConfirmDialog
+        open={showSwitchConfirm}
+        title="ยืนยันการเปลี่ยน Role"
+        message="คุณต้องการเปลี่ยนเป็น Teacher Dashboard ใช่ไหม?"
+        onConfirm={confirmSwitchRole}
+        onClose={() => setShowSwitchConfirm(false)}
+      />
+      <ConfirmDialog
+        open={showLogoutConfirm}
+        title="ยืนยันการออกจากระบบ"
+        message="คุณต้องการออกจากระบบใช่ไหม?"
+        confirmLabel="ออกจากระบบ"
+        tone="danger"
+        onConfirm={confirmLogout}
+        onClose={() => setShowLogoutConfirm(false)}
+      />
     </>
   );
 };

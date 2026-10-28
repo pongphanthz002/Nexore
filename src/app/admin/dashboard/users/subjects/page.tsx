@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { schoolDatabaseService, SubjectData, StudentData, ScheduleSlot, SubjectWhitelistRow } from '@/services/school-database.service';
@@ -13,6 +13,7 @@ import * as XLSX from 'xlsx';
 import { Download, Upload, Trash2, Plus, ArrowLeft, Search, BookOpen, Calendar, Clock, Loader2, X } from 'lucide-react';
 import { GoogleBasicSubjectIcon, GoogleElectiveSubjectIcon } from '@/components/GoogleSubjectIcons';
 import { useTheme } from '@/contexts/ThemeContext';
+import Modal from '@/components/Modal';
 
 export default function SubjectsManagement() {
   const router = useRouter();
@@ -932,17 +933,8 @@ export default function SubjectsManagement() {
       <UploadProgressModal progress={uploadProgress} isDark={isDark} />
 
       {/* Upload Confirmation Dialog */}
-      {pendingUpload && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className={`rounded-2xl p-6 max-w-lg w-full shadow-2xl max-h-[90vh] overflow-y-auto ${isDark ? 'bg-gray-800' : 'bg-white'}`}
-          >
+      <Modal open={!!pendingUpload} onClose={() => setPendingUpload(null)} size="lg" closeOnBackdrop={false}>
+        {pendingUpload && (<>
             <div className="mb-4">
               <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'} mb-2`}>
                 ⚠️ ยืนยันการอัพโหลดวิชาเรียน
@@ -1028,21 +1020,11 @@ export default function SubjectsManagement() {
                 ยืนยันและอัพโหลด
               </motion.button>
             </div>
-          </motion.div>
-        </motion.div>
-      )}
+        </>)}
+      </Modal>
 
       {/* Add Subject Modal */}
-      <AnimatePresence>
-        {showAddModal && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className={`w-full max-w-lg max-h-[90vh] rounded-3xl p-6 shadow-2xl flex flex-col ${isDark ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                }`}
-            >
+      <Modal open={showAddModal} onClose={() => setShowAddModal(false)} size="lg" closeOnBackdrop={false} className="flex flex-col p-6">
               {/* Modal Header */}
               <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200 dark:border-gray-700">
                 <div className="flex items-center gap-2">
@@ -1442,10 +1424,7 @@ export default function SubjectsManagement() {
                   {isSavingSubject ? 'กำลังบันทึก...' : 'บันทึกวิชาเรียน'}
                 </motion.button>
               </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      </Modal>
 
     </div>
   );

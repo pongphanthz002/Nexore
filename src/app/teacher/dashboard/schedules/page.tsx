@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import GoogleSheetsIcon from '@/components/GoogleSheetsIcon';
+import Modal, { ModalHeader } from '@/components/Modal';
 import AttendanceStatusSelect from '@/components/AttendanceStatusSelect';
 import { useTheme } from '@/contexts/ThemeContext';
 
@@ -859,29 +860,8 @@ function SchedulesContent() {
                 </div>
               )}
               {/* Download Modal */}
-              <AnimatePresence>
-                {showDownloadModal && (
-                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                      className={`w-full max-w-lg rounded-3xl p-6 shadow-2xl ${isDark ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'}`}
-                    >
-                      <div className="flex items-center justify-between mb-6">
-                        <div className="flex items-center gap-2">
-                          <div className={`p-2 rounded-xl ${isDark ? 'bg-emerald-950/40' : 'bg-emerald-50'}`}>
-                            <GoogleSheetsIcon size={24} />
-                          </div>
-                          <h3 className="text-xl font-bold">ดาวน์โหลดรายงานเช็คชื่อ</h3>
-                        </div>
-                        <button 
-                          onClick={() => setShowDownloadModal(false)}
-                          className={`p-2 rounded-xl transition-colors ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
-                        >
-                          <X size={20} />
-                        </button>
-                      </div>
+              <Modal open={showDownloadModal} onClose={() => setShowDownloadModal(false)} size="lg" dismissible={!isDownloading} labelledBy="attendance-download-title">
+                      <ModalHeader id="attendance-download-title" title="ดาวน์โหลดรายงานเช็คชื่อ" icon={<GoogleSheetsIcon size={24} />} onClose={() => setShowDownloadModal(false)} />
 
                       <div className="space-y-6">
                         {/* Subject Selection */}
@@ -1006,10 +986,7 @@ function SchedulesContent() {
                           </button>
                         </div>
                       </div>
-                    </motion.div>
-                  </div>
-                )}
-              </AnimatePresence>
+              </Modal>
             </motion.div>
           ) : isAttendanceMode ? (
             <motion.div

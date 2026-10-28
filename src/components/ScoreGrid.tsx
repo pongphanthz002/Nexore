@@ -1,7 +1,8 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, EyeOff, GripVertical, Plus, X } from 'lucide-react';
+import Modal, { ModalHeader } from '@/components/Modal';
 import type { StudentData } from '@/services/school-database.service';
 import type { Assignment, AssignmentGroup, GradeConfig, StudentScore } from '@/services/teacher-database.service';
 import {
@@ -1050,20 +1051,13 @@ function ContextMenuItems({ target, isDark, selected, close, onGroup, onEditGrou
   );
 }
 
-function DialogShell({ isDark, title, children, onClose }: { isDark: boolean; title: string; children: React.ReactNode; onClose: () => void }) {
+function DialogShell({ title, children, onClose }: { isDark: boolean; title: string; children: React.ReactNode; onClose: () => void }) {
+  const id = useId();
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/40" onMouseDown={onClose}>
-      <div
-        className={`w-full max-w-sm rounded-2xl p-5 shadow-2xl ${isDark ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'}`}
-        onMouseDown={e => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold">{title}</h3>
-          <button type="button" onClick={onClose} className="p-1 opacity-60 hover:opacity-100"><X size={18} /></button>
-        </div>
-        {children}
-      </div>
-    </div>
+    <Modal open onClose={onClose} size="sm" labelledBy={id} className="p-5">
+      <ModalHeader id={id} title={title} onClose={onClose} />
+      {children}
+    </Modal>
   );
 }
 

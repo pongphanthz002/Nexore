@@ -12,6 +12,7 @@ import type { FirebaseConfig } from '@/types/firebase.types';
 import { Edit, Save, X, Settings, Files, Eye, EyeOff, AlertTriangle, Loader2, BookOpen, Plus, Trash2, Clock, Calendar, Users, GraduationCap, ChevronRight, Search, CheckSquare, Square, Pencil } from 'lucide-react';
 import { GoogleBasicSubjectIcon, GoogleElectiveSubjectIcon } from '@/components/GoogleSubjectIcons';
 import { useTheme } from '@/contexts/ThemeContext';
+import Modal from '@/components/Modal';
 
 function emptySubjectForm(): {
   subjectName: string;
@@ -815,17 +816,7 @@ export default function ProfilePage() {
         )}
 
         {/* Link Teacher Confirmation Dialog */}
-        {showLinkConfirm && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className={`rounded-2xl p-6 max-w-md w-full ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
-            >
+        <Modal open={showLinkConfirm} onClose={() => setShowLinkConfirm(false)} dismissible={!linkLoading}>
               <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>
                 ยืนยันการผูกข้อมูล
               </h3>
@@ -858,28 +849,10 @@ export default function ProfilePage() {
                   ยืนยัน
                 </motion.button>
               </div>
-            </motion.div>
-          </motion.div>
-        )}
+        </Modal>
 
         {/* Firebase Config Popup */}
-        <AnimatePresence>
-          {showConfigPopup && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-              onClick={() => { if (!isEditingConfig) { setShowConfigPopup(false); } }}
-            >
-              <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.9, opacity: 0 }}
-                transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                className={`rounded-2xl p-6 max-w-lg w-full max-h-[85vh] overflow-y-auto ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
-                onClick={(e) => e.stopPropagation()}
-              >
+        <Modal open={showConfigPopup} onClose={() => setShowConfigPopup(false)} dismissible={!isEditingConfig} size="lg">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
                     Firebase Config
@@ -1001,23 +974,10 @@ export default function ProfilePage() {
                     </motion.button>
                   </div>
                 )}
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        </Modal>
 
         {/* Firebase Config Save Confirmation Dialog */}
-        {showConfigConfirm && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-[60]"
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className={`rounded-2xl p-6 max-w-md w-full ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
-            >
+        <Modal open={showConfigConfirm} onClose={() => { setShowConfigConfirm(false); setConfigConfirmText(''); setConfigError(''); }} dismissible={!configSaving}>
               <div className="flex items-center gap-2 mb-4 text-red-500">
                 <AlertTriangle size={24} />
                 <h3 className="text-xl font-bold">ยืนยันการเปลี่ยนฐานข้อมูลครู</h3>
@@ -1065,22 +1025,10 @@ export default function ProfilePage() {
                   {configSaving ? 'กำลังบันทึก...' : 'บันทึก'}
                 </motion.button>
               </div>
-            </motion.div>
-          </motion.div>
-        )}
+        </Modal>
 
         {/* Manage Subjects Modal */}
-        <AnimatePresence>
-          {showManageSubjectsModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className={`w-full max-w-2xl max-h-[85vh] rounded-3xl p-6 shadow-2xl flex flex-col ${
-                  isDark ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                }`}
-              >
+        <Modal open={showManageSubjectsModal} onClose={() => setShowManageSubjectsModal(false)} size="2xl" className="flex flex-col p-6">
                 {/* Modal Header */}
                 <div className="pb-3 border-b border-gray-200 dark:border-gray-700">
                   <div className="flex items-center justify-between">
@@ -1242,16 +1190,13 @@ export default function ProfilePage() {
                     ปิด
                   </button>
                 </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
+        </Modal>
 
         {/* Subject menu (right-click / long press) */}
         <AnimatePresence>
           {subjectMenu && (
             <>
-              <div className="fixed inset-0 z-[70]" onPointerDown={() => setSubjectMenu(null)} />
+              <div className="fixed inset-0 z-[110]" onPointerDown={() => setSubjectMenu(null)} />
               <motion.div
                 role="menu"
                 initial={{ opacity: 0, scale: 0.96 }}
@@ -1259,8 +1204,8 @@ export default function ProfilePage() {
                 exit={{ opacity: 0, scale: 0.96 }}
                 transition={{ duration: 0.16 }}
                 style={{ left: Math.max(8, subjectMenu.x), top: subjectMenu.y }}
-                onKeyDown={(e) => { if (e.key === 'Escape') setSubjectMenu(null); }}
-                className={`fixed z-[71] w-52 rounded-2xl p-1.5 shadow-xl origin-top-left ${isDark ? 'bg-gray-800 text-white ring-1 ring-white/10' : 'bg-white text-gray-900 ring-1 ring-black/5'}`}
+                onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setSubjectMenu(null); } }}
+                className={`fixed z-[111] w-52 rounded-2xl p-1.5 shadow-xl origin-top-left ${isDark ? 'bg-gray-800 text-white ring-1 ring-white/10' : 'bg-white text-gray-900 ring-1 ring-black/5'}`}
               >
                 <button
                   role="menuitem"
@@ -1283,17 +1228,7 @@ export default function ProfilePage() {
         </AnimatePresence>
 
         {/* Add Subject Modal */}
-        <AnimatePresence>
-          {showAddSubjectModal && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                className={`w-full max-w-lg max-h-[90vh] rounded-3xl p-6 shadow-2xl flex flex-col ${
-                  isDark ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                }`}
-              >
+        <Modal open={showAddSubjectModal} onClose={closeSubjectEditor} size="lg" closeOnBackdrop={false} className="flex flex-col p-6">
                 <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200 dark:border-gray-700">
                   <div className="flex items-center gap-2">
                     <div className={`p-2.5 rounded-xl ${isDark ? 'bg-red-950/40 text-red-400' : 'bg-red-50 text-red-600'}`}>
@@ -1708,24 +1643,11 @@ export default function ProfilePage() {
                     {isSavingSubject ? 'กำลังบันทึก...' : editingSubject ? 'บันทึกการแก้ไข' : 'บันทึกวิชาเรียน'}
                   </motion.button>
                 </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
+        </Modal>
 
         {/* Students leaving an edited subject lose its data: confirm first */}
-        <AnimatePresence>
-          {removalConfirm && (
-            <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50">
-              <motion.div
-                role="alertdialog"
-                aria-modal="true"
-                aria-labelledby="removal-title"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className={`w-full max-w-md rounded-3xl p-6 shadow-2xl ${isDark ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'}`}
-              >
+        <Modal open={!!removalConfirm} onClose={() => setRemovalConfirm(null)} labelledBy="removal-title">
+          {removalConfirm && (<>
                 <h3 id="removal-title" className="text-lg font-bold mb-2">นักเรียน {removalConfirm.count} คนจะไม่อยู่ในวิชานี้แล้ว</h3>
                 <p className={`text-sm leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
                   ข้อมูลการเช็คชื่อและคะแนนของนักเรียนกลุ่มนี้ในวิชา {editingSubject?.subjectName} จะถูกลบถาวร และย้อนกลับไม่ได้
@@ -1747,21 +1669,12 @@ export default function ProfilePage() {
                     ลบข้อมูลและบันทึก
                   </button>
                 </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
+          </>)}
+        </Modal>
 
         {/* Delete Subject Confirmation Modal */}
-        <AnimatePresence>
-          {showDeleteSubjectConfirm && subjectToDelete && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                className={`w-full max-w-md rounded-3xl p-6 shadow-2xl ${isDark ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'}`}
-              >
+        <Modal open={showDeleteSubjectConfirm && !!subjectToDelete} onClose={() => { setShowDeleteSubjectConfirm(false); setSubjectToDelete(null); }} dismissible={!isDeletingSubject}>
+          {subjectToDelete && (<>
                 <div className="flex items-center gap-3 mb-4 text-red-500">
                   <div className="p-3 rounded-2xl bg-red-500/10">
                     <Trash2 size={24} />
@@ -1808,10 +1721,8 @@ export default function ProfilePage() {
                     {isDeletingSubject ? 'กำลังลบ...' : 'ยืนยันการลบ'}
                   </motion.button>
                 </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
+          </>)}
+        </Modal>
 
       </div>
     </div>

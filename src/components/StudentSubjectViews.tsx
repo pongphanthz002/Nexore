@@ -1,13 +1,14 @@
 'use client';
 
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
+import { useState, useMemo } from 'react';
 import { RefreshCw, X } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { StudentSubjectInfo, StudentGradeInfo, StudentGradeDetail, StudentAttendanceInfo } from '@/services/student-database.service';
 import { hueVars, parseTimeRange, formatMinutes, roomLabel, THAI_DAYS_SHORT, THAI_MONTHS_SHORT } from '@/lib/timetable';
 import { ATTENDANCE_THRESHOLD, STATUS_ORDER, WEEKDAYS, type AttendanceStats } from '@/lib/attendance';
 import { ATTENDANCE_STATUSES } from '@/components/AttendanceStatusSelect';
+import Modal from '@/components/Modal';
 
 /**
  * Views of the student subjects page: the subject list, a subject's header, its grades and
@@ -536,46 +537,18 @@ export function AttendanceView({ info }: { info: StudentAttendanceInfo | null })
 // ---------------------------------------------------------------------------
 
 export function AssignmentSheet({ item, onClose }: { item: StudentGradeDetail | null; onClose: () => void }) {
-  const reduce = useReducedMotion();
-  const closeRef = useRef<HTMLButtonElement>(null);
   const due = useMemo(() => (item ? deadlineText(item) : null), [item]);
 
-  useEffect(() => {
-    if (!item) return;
-    closeRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [item, onClose]);
-
   return (
-    <AnimatePresence>
-      {item && (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center sm:items-center sm:p-6">
-          <motion.div
-            className="absolute inset-0 bg-black/40"
-            onClick={onClose}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          />
-          <motion.div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="assignment-title"
-            initial={reduce ? { opacity: 0 } : { y: 40, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={reduce ? { opacity: 0 } : { y: 40, opacity: 0 }}
-            transition={{ duration: 0.28, ease: EASE }}
-            className="relative w-full max-w-md rounded-t-[22px] bg-white p-5 pb-[max(2rem,env(safe-area-inset-bottom))] shadow-xl dark:bg-gray-800 sm:rounded-[22px] sm:pb-5"
-          >
+    <Modal open={!!item} onClose={onClose} sheet size="md" labelledBy="assignment-title" className="p-5">
+      {item && (<>
             <div className="flex items-start justify-between gap-3">
               <h2 id="assignment-title" className="pt-1.5 text-xl font-semibold leading-snug">{item.label}</h2>
               <button
-                ref={closeRef}
                 type="button"
                 onClick={onClose}
                 aria-label="ปิด"
+                data-autofocus
                 className="grid h-11 w-11 flex-none place-items-center rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
               >
                 <X size={20} />
@@ -596,9 +569,7 @@ export function AssignmentSheet({ item, onClose }: { item: StudentGradeDetail | 
             <p className={`mt-4 whitespace-pre-line text-[15px] leading-relaxed ${item.description ? '' : META}`}>
               {item.description || 'ครูไม่ได้ใส่รายละเอียดงานนี้'}
             </p>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
+      </>)}
+    </Modal>
   );
 }

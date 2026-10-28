@@ -9,6 +9,8 @@ export const STORAGE_KEYS = {
   HUB_PREFIX: 'NEXORE_HUB_',
   TODAY_ATTENDANCE: 'NEXORE_TODAY_ATTENDANCE',
   THEME: 'nexore-theme',
+  /** Teacher home statistics (per-subject summaries), see src/lib/teacher-stats-cache.ts */
+  TEACHER_STATS: 'NEXORE_TEACHER_STATS',
   // Legacy keys used by storage.service.ts
   USER_IDENTITY: 'nexore_user_identity',
   MASTER_REGISTRY_CONFIG: 'nexore_master_registry_config',
