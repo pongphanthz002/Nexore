@@ -13,7 +13,8 @@ interface SubjectSheetInput {
   config: GradeConfig;
 }
 
-const FONT = 'Sarabun';
+const FONT = 'TH SarabunPSK';
+const FONT_SIZE = 16;
 const BORDER_COLOR = { argb: 'FFCBD5E1' };
 const BORDER: Partial<ExcelJS.Borders> = {
   top: { style: 'thin', color: BORDER_COLOR },
@@ -111,7 +112,7 @@ export function addSubjectSheet(workbook: ExcelJS.Workbook, input: SubjectSheetI
     row.height = r === 1 ? 30 : 30;
     row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
       const tone = colNumber <= 2 ? 'base' : cols[colNumber - 3]?.tone ?? 'base';
-      cell.font = { name: FONT, size: 14, bold: true, color: { argb: 'FF1F2937' } };
+      cell.font = { name: FONT, size: FONT_SIZE, bold: true, color: { argb: 'FF1F2937' } };
       cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
       cell.border = BORDER;
       cell.fill = fill(colNumber <= 2 ? 'FFE2E8F0' : toneFill[tone][0]);
@@ -130,7 +131,7 @@ export function addSubjectSheet(workbook: ExcelJS.Workbook, input: SubjectSheetI
     row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
       const col = cols[colNumber - 3];
       const strong = col?.tone === 'scaled' || col?.tone === 'summary';
-      cell.font = { name: FONT, size: 14, bold: strong, color: { argb: 'FF1F2937' } };
+      cell.font = { name: FONT, size: FONT_SIZE, bold: strong, color: { argb: 'FF1F2937' } };
       cell.alignment = { vertical: 'middle', horizontal: colNumber === 2 ? 'left' : 'center' };
       cell.border = BORDER;
       if (col) cell.fill = fill(toneFill[col.tone][1]);

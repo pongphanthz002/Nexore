@@ -24,7 +24,8 @@ export interface ScoreGridActions {
   ungroup: (group: AssignmentGroup) => void;
   deleteAssignment: (a: Assignment) => void;
   renameAssignment: (a: Assignment, title: string) => void;
-  addAssignment: (title: string, maxScore: number) => void;
+  /** Open the new-assignment popup */
+  addAssignment: () => void;
   setExamMax: (exam: 'midterm' | 'final', max: number) => void;
   /** New assignment order + scaled column position per group (desktop drag) */
   reorder: (idOrder: string[], scaledPositions: Record<string, number>) => void;
@@ -103,7 +104,6 @@ export default function ScoreGrid(props: ScoreGridProps) {
   const [menu, setMenu] = useState<{ x: number; y: number; target: MenuTarget } | null>(null);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; text: string } | null>(null);
-  const [adding, setAdding] = useState<{ title: string; max: string } | null>(null);
   const [dragSource, setDragSource] = useState<DragSource | null>(null);
   const [dropHint, setDropHint] = useState<{ key: string; side: 'left' | 'right' } | null>(null);
   const longPress = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -270,7 +270,7 @@ export default function ScoreGrid(props: ScoreGridProps) {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (dialog || renaming || adding) return;
+    if (dialog || renaming) return;
     const mod = e.metaKey || e.ctrlKey;
 
     if (editing) {
@@ -559,9 +559,7 @@ export default function ScoreGrid(props: ScoreGridProps) {
   const thBase = `border-b border-r ${border} px-2 text-xs font-bold whitespace-nowrap select-none [-webkit-touch-callout:none]`;
   const tdBase = `border-b border-r ${border} h-10 text-center text-sm tabular-nums`;
 
-  const headerSelected = (id: string) => selectedHeaders.includes(id)
-    ? (isDark ? 'bg-blue-900/60 text-blue-200' : 'bg-blue-100 text-blue-800')
-    : '';
+  const headerBg = (id: string) => (selectedHeaders.includes(id) ? 'bg-blue-600 text-white' : headBg);
 
   // ---------------------------------------------------------------- render pieces
 
@@ -573,7 +571,7 @@ export default function ScoreGrid(props: ScoreGridProps) {
         key={col.key}
         rowSpan={rowSpan}
         data-colkey={col.key}
-        className={`${thBase} ${headBg} sticky ${rowSpan === 2 ? 'top-0' : 'top-9'} z-20 min-w-[84px] max-w-[160px] ${editable ? 'cursor-pointer' : ''} ${!a.isVisible ? 'opacity-50' : ''} ${headerSelected(a.id)} ${dropClass(col.key)}`}
+        className={`${thBase} ${headerBg(a.id)} sticky ${rowSpan === 2 ? 'top-0' : 'top-9'} z-20 min-w-[84px] max-w-[160px] ${editable ? 'cursor-pointer' : ''} ${!a.isVisible ? 'opacity-50' : ''} ${dropClass(col.key)}`}
         onMouseDown={e => { if (editable && e.button === 0) selectHeader(a.id, e); }}
         onMouseEnter={() => editable && extendHeaderDrag(a.id)}
         onDoubleClick={() => editable && setRenaming({ id: a.id, text: a.title })}
@@ -605,7 +603,7 @@ export default function ScoreGrid(props: ScoreGridProps) {
           )}
           {!a.isVisible && <EyeOff size={11} className={muted} />}
         </div>
-        <div className={`text-[10px] font-medium ${muted}`}>เต็ม {formatScore(a.maxScore)}</div>
+        <div className={`text-[10px] font-medium ${selectedHeaders.includes(a.id) ? 'text-blue-100' : muted}`}>เต็ม {formatScore(a.maxScore)}</div>
       </th>
     );
   };
@@ -706,45 +704,20 @@ export default function ScoreGrid(props: ScoreGridProps) {
   }
 
   const addColumnHeader = editable ? (
-    <th key="__add" rowSpan={2} className={`${thBase} ${headBg} sticky top-0 z-20 min-w-[120px]`}>
-      {adding ? (
-        <div className="flex flex-col gap-1 py-1" onMouseDown={e => e.stopPropagation()}>
-          <input
-            autoFocus
-            placeholder="ชื่องาน"
-            value={adding.title}
-            onChange={e => setAdding({ ...adding, title: e.target.value })}
-            onKeyDown={e => { if (e.key === 'Escape') setAdding(null); }}
-            className={`h-6 px-1 rounded border text-xs font-normal ${isDark ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-300'}`}
-          />
-          <div className="flex items-center gap-1">
-            <input
-              placeholder="เต็ม"
-              inputMode="decimal"
-              value={adding.max}
-              onChange={e => setAdding({ ...adding, max: e.target.value })}
-              onKeyDown={e => {
-                if (e.key === 'Escape') setAdding(null);
-                if (e.key === 'Enter') {
-                  const max = parseScore(adding.max);
-                  if (!adding.title.trim() || !max.ok || !max.value || max.value <= 0) { notify('กรุณาใส่ชื่องานและคะแนนเต็มที่มากกว่า 0'); return; }
-                  actions.addAssignment(adding.title.trim(), max.value);
-                  setAdding(null);
-                }
-              }}
-              className={`w-14 h-6 px-1 rounded border text-xs font-normal ${isDark ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-300'}`}
-            />
-            <button type="button" onClick={() => setAdding(null)} className={muted}><X size={14} /></button>
-          </div>
-          <div className={`text-[10px] font-normal ${muted}`}>Enter เพื่อสร้าง</div>
-        </div>
-      ) : (
-        <button type="button" onClick={() => setAdding({ title: '', max: '10' })} className="flex items-center gap-1 mx-auto text-red-500 hover:text-red-600">
-          <Plus size={14} /> เพิ่มงาน
-        </button>
-      )}
+    <th key="__add" rowSpan={2} className={`${thBase} ${headBg} sticky top-0 z-20 min-w-[110px]`}>
+      <button type="button" onClick={actions.addAssignment} className="flex items-center gap-1 mx-auto text-red-500 hover:text-red-600">
+        <Plus size={14} /> เพิ่มงาน
+      </button>
     </th>
   ) : null;
+
+  /** One background per cell (Tailwind can't order two bg classes): invalid > selected > selected column > tone. */
+  const cellBg = (base: string, bad: boolean, selected: boolean, columnSelected: boolean) => {
+    if (bad) return isDark ? 'bg-red-900/60 text-red-100' : 'bg-red-100 text-red-700';
+    if (selected) return isDark ? 'bg-blue-700/60 text-white' : 'bg-blue-200 text-blue-950';
+    if (columnSelected) return isDark ? 'bg-blue-900/50' : 'bg-blue-100';
+    return base;
+  };
 
   const renderCell = (r: number, c: number) => {
     const student = students[r];
@@ -756,8 +729,10 @@ export default function ScoreGrid(props: ScoreGridProps) {
     let bad = false;
     let text = cellText(r, c);
     let tone = '';
+    let bg = '';
     if (col.kind === 'groupScaled') {
-      tone = isDark ? 'bg-purple-950/40 text-purple-300 font-bold' : 'bg-purple-50/60 text-purple-700 font-bold';
+      tone = isDark ? 'text-purple-300 font-bold' : 'text-purple-700 font-bold';
+      bg = isDark ? 'bg-purple-950/40' : 'bg-purple-50/60';
     } else {
       const key = cellKey(student.studentId, col.field);
       const value = getFieldValue(scores.get(student.studentId), col.field);
@@ -770,7 +745,7 @@ export default function ScoreGrid(props: ScoreGridProps) {
       <td
         key={col.key}
         data-cell={`${r}:${c}`}
-        className={`${tdBase} relative cursor-cell ${tone} ${bad ? (isDark ? 'bg-red-900/50 text-red-200' : 'bg-red-100 text-red-700') : ''} ${inSel && !isActive ? (isDark ? 'bg-blue-900/30' : 'bg-blue-50') : ''} ${isActive ? 'outline outline-2 -outline-offset-2 outline-blue-500' : ''}`}
+        className={`${tdBase} relative cursor-cell ${tone} ${cellBg(bg, bad, !!inSel && !isActive, col.kind === 'assignment' && selectedHeaders.includes(col.assignment.id))} ${isActive ? 'outline outline-[3px] -outline-offset-[3px] outline-blue-600' : ''}`}
         onMouseDown={e => {
           if (e.button !== 0) return;
           e.preventDefault();

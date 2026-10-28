@@ -532,7 +532,7 @@ export default function GradesPage() {
         alert('เปลี่ยนชื่องานไม่สำเร็จ');
       }
     },
-    addAssignment: (title, maxScore) => { handleSaveAssignment({ title, maxScore }, null); },
+    addAssignment: () => { setEditingAssignment(null); setShowAssignmentModal(true); },
     setExamMax: async (exam, max) => {
       if (!gradeDbConfig || !gradeConfig) return;
       const next: GradeConfig = { ...gradeConfig, [exam === 'midterm' ? 'midtermMax' : 'finalMax']: max };
