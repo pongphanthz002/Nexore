@@ -2,9 +2,9 @@ import { firebaseManager } from '@/lib/firebase';
 import { collection, doc, getDocs, getDoc, query, where, Firestore } from 'firebase/firestore';
 import { schoolDatabaseService, StudentData, SubjectData, TeacherFirebaseConfig } from './school-database.service';
 import { teacherDatabaseService, AttendanceData, AttendanceRecord, StudentScore, Assignment, AssignmentGroup, GradeConfig } from './teacher-database.service';
-import { buildColumns, computeBreakdown, isScored, DEFAULT_THRESHOLDS } from '@/lib/grade-calculation';
 import { TtlCache } from '@/lib/firestore-helpers';
 import { summarizeAttendance, type AttendanceStats } from '@/lib/attendance';
+import { buildStudentGradeInfo } from '@/lib/student-grade-info';
 import { buildHueMap, type SubjectHue } from '@/lib/timetable';
 import { firestoreService } from './firestore.service';
 import type { FirebaseConfig } from '@/types/firebase.types';
@@ -365,44 +365,13 @@ class StudentDatabaseService {
       const groups = groupsSnap.docs.map(d => d.data() as AssignmentGroup).filter(inClassroom);
       const gradeConfig = gradeConfigSnap.exists() ? gradeConfigSnap.data() as GradeConfig : null;
 
-      // Same calculation as the teacher's grade sheet
-      const breakdown = computeBreakdown(scoreData, assignments, groups, gradeConfig);
-      const columns = buildColumns(assignments, groups);
-      const ordered = columns.flatMap(c => (c.kind === 'assignment' ? [c.assignment] : []));
-      const details = this.buildGradeDetails(scoreData, ordered);
-      const detailOf = new Map(ordered.map((a, i) => [a.id, details[i]]));
-      const rows: StudentGradeRow[] = columns.flatMap((c): StudentGradeRow[] => {
-        if (c.kind === 'groupScaled') {
-          return [{
-            kind: 'group', id: c.group.id, name: c.group.name, points: breakdown.groups[c.group.id] ?? 0,
-            max: c.group.rawScore || 0, items: c.members.map(m => detailOf.get(m.id)!).filter(Boolean),
-          }];
-        }
-        return c.group ? [] : [{ kind: 'assignment', item: detailOf.get(c.assignment.id)! }];
-      });
-
-      // Look up subject name from subjects list
+      // Same calculation as the teacher's grade sheet and the teacher's per-student popup
       const subjectInfo = subjects.find(s => s.subjectId === scoreData.subjectId);
-
-      return {
+      return buildStudentGradeInfo(scoreData, assignments, groups, gradeConfig, {
         subjectId: scoreData.subjectId,
         subjectName: subjectInfo?.subjectName || '',
         classroom: scoreData.classroom,
-        collectedScore: breakdown.collected,
-        midtermScore: breakdown.midterm,
-        finalScore: breakdown.final,
-        totalScore: breakdown.total,
-        grade: breakdown.grade,
-        unsent: breakdown.pending,
-        maxima: gradeConfig?.proportions ?? { collected: 60, midterm: 20, final: 20 },
-        midtermEntered: breakdown.midtermRaw !== undefined,
-        finalEntered: breakdown.finalRaw !== undefined,
-        scale: (gradeConfig?.thresholds?.length ? gradeConfig.thresholds : DEFAULT_THRESHOLDS)
-          .map(t => ({ grade: t.grade, minScore: t.minScore }))
-          .sort((a, b) => a.minScore - b.minScore),
-        details,
-        rows,
-      };
+      });
     });
 
     const processedGrades = await Promise.all(scoreProcessPromises);
@@ -507,22 +476,6 @@ class StudentDatabaseService {
    */
   private getTeacherDB(teacherFirebaseConfig: FirebaseConfig): Firestore {
     return firebaseManager.getTeacherDb(teacherFirebaseConfig);
-  }
-
-  /**
-   * Helper: Build grade details array
-   */
-  private buildGradeDetails(scoreData: StudentScore, assignments: Assignment[]): StudentGradeDetail[] {
-    return assignments.map(assignment => {
-      const value = scoreData.assignmentScores?.[assignment.id];
-      return {
-        label: assignment.title,
-        score: isScored(value) ? value : null,
-        max: assignment.maxScore || 0,
-        description: assignment.description || '',
-        deadline: assignment.deadline || '',
-      };
-    });
   }
 
   /**

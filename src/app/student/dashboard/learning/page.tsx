@@ -41,7 +41,7 @@ export default function StudentLearningPage() {
 
   if (loading) {
     return (
-      <div className={`min-h-screen ${isDarkMode ? 'bg-[#0F172A]' : 'bg-[#F8FAFC]'} flex items-center justify-center`}>
+      <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'} flex items-center justify-center`}>
         <div className="text-center">
           <Clock className="w-12 h-12 animate-spin text-red-500 mx-auto mb-4" />
           <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>กำลังโหลด...</p>
@@ -50,7 +50,7 @@ export default function StudentLearningPage() {
     );
   }
 
-  const darkClass = isDarkMode ? "dark bg-[#0F172A] text-slate-100" : "bg-[#F8FAFC] text-slate-900";
+  const darkClass = isDarkMode ? "dark bg-gray-900 text-slate-100" : "bg-gray-50 text-slate-900";
 
   return (
     <div className={`min-h-screen ${darkClass} font-sans transition-colors duration-300 overflow-x-hidden`}>
@@ -63,7 +63,7 @@ export default function StudentLearningPage() {
 
       <StudentHeader isDark={isDarkMode} toggleTheme={toggleTheme} />
 
-      <main className={`max-w-md mx-auto px-6 space-y-6 pt-28 pb-24`}>
+      <main className={`max-w-md mx-auto px-6 space-y-6 pt-28 pb-32`}>
         {/* Coming Soon Card */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}

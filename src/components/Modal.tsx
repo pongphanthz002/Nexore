@@ -55,10 +55,13 @@ export interface ModalProps {
   labelledBy?: string;
   /** Accessible name when there is no visible title */
   label?: string;
+  /** `muted`: the page's grey surface, for content built from cards */
+  surface?: 'default' | 'muted';
 }
 
 export default function Modal({
   open, onClose, children, size = 'md', dismissible = true, closeOnBackdrop = true, sheet = false, className = 'p-6', labelledBy, label,
+  surface = 'default',
 }: ModalProps) {
   const reduce = useReducedMotion();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -124,9 +127,11 @@ export default function Modal({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={enter}
             transition={{ duration: 0.24, ease: EASE }}
-            className={`relative w-full ${SIZES[size]} overflow-y-auto overscroll-contain bg-white text-gray-900 shadow-xl outline-none dark:bg-gray-800 dark:text-gray-50 ${
+            className={`relative w-full ${SIZES[size]} overflow-y-auto overscroll-contain text-gray-900 shadow-xl outline-none dark:text-gray-50 ${
+              surface === 'muted' ? 'bg-gray-50 dark:bg-gray-900' : 'bg-white dark:bg-gray-800'
+            } ${
               sheet
-                ? 'max-h-[92dvh] rounded-t-[22px] pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:max-h-[90dvh] sm:rounded-[22px] sm:pb-0'
+                ? 'max-h-[92dvh] rounded-t-[22px] max-sm:pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:max-h-[90dvh] sm:rounded-[22px]'
                 : 'max-h-[90dvh] rounded-[22px]'
             } ${className}`}
           >

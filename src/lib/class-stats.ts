@@ -4,10 +4,10 @@ import type {
 import {
   assignmentIdsInOrder, buildColumns, computeBreakdown, DEFAULT_THRESHOLDS, getFieldValue, round2,
 } from './grade-calculation';
-import { ATTENDANCE_THRESHOLD } from './attendance';
+import { THAI_MONTHS_SHORT } from './timetable';
 
 /**
- * Class statistics for the teacher home page and the per-student popup.
+ * Class statistics for the teacher home dashboard.
  *
  * Reads are kept low by storing one small summary document per subject in the Teacher DB
  * (`gradeSummaries/{subjectId}`, written by the grades page from the data it already has in
@@ -15,7 +15,7 @@ import { ATTENDANCE_THRESHOLD } from './attendance';
  * document reads per subject, whatever the class size or number of assignments.
  */
 
-export const GRADE_SUMMARY_VERSION = 1;
+export const GRADE_SUMMARY_VERSION = 2;
 
 export interface GradeSummaryStudent {
   name: string;
@@ -25,6 +25,8 @@ export interface GradeSummaryStudent {
   grade: string;
   /** visible assignments with no score */
   pending: number;
+  /** ids of those assignments */
+  pendingIds: string[];
   /** cells with a score (visible assignments + exams) */
   entered: number;
 }
@@ -33,6 +35,8 @@ export interface GradeSummaryAssignment {
   id: string;
   title: string;
   maxScore: number;
+  /** "YYYY-MM-DD": the deadline, else the day the assignment was created; "" when neither is known */
+  due: string;
   /** students with a score */
   submitted: number;
   /** mean of entered scores; null when nobody has one */
@@ -65,6 +69,24 @@ function gradeScale(config: GradeConfig | null | undefined): string[] {
   return [...thresholds].sort((a, b) => b.minScore - a.minScore).map(t => t.grade);
 }
 
+const pad = (n: number) => String(n).padStart(2, '0');
+const isoDay = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+/** An assignment's due day: its deadline when it parses, else its creation day. */
+export function dueDay(a: Pick<Assignment, 'deadline' | 'createdAt'>): string {
+  const deadline = String(a.deadline || '');
+  const m = deadline.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  if (deadline) {
+    const parsed = new Date(deadline);
+    if (!Number.isNaN(parsed.getTime())) return isoDay(parsed);
+  }
+  const created = a.createdAt as unknown;
+  if (created instanceof Date && !Number.isNaN(created.getTime())) return isoDay(created);
+  const ts = created as { toDate?: () => Date } | undefined;
+  return typeof ts?.toDate === 'function' ? isoDay(ts.toDate()) : '';
+}
+
 export function buildGradeSummary(
   subjectId: string,
   classroom: string,
@@ -85,7 +107,8 @@ export function buildGradeSummary(
   for (const s of roster) {
     const score = byId.get(s.studentId);
     const b = computeBreakdown(score, assignments, groups, config);
-    const entered = visible.filter(a => getFieldValue(score, `a:${a.id}`) !== undefined).length
+    const pendingIds = visible.filter(a => getFieldValue(score, `a:${a.id}`) === undefined).map(a => a.id);
+    const entered = visible.length - pendingIds.length
       + (b.midtermRaw !== undefined ? 1 : 0) + (b.finalRaw !== undefined ? 1 : 0);
     if (entered > 0) hasScores = true;
     students[s.studentId] = {
@@ -94,7 +117,8 @@ export function buildGradeSummary(
       classroom: s.class || classroom,
       total: b.total,
       grade: b.grade,
-      pending: b.pending,
+      pending: pendingIds.length,
+      pendingIds,
       entered,
     };
   }
@@ -107,6 +131,7 @@ export function buildGradeSummary(
       id: a.id,
       title: a.title || 'ไม่มีชื่องาน',
       maxScore: a.maxScore || 0,
+      due: dueDay(a),
       submitted: values.length,
       average: values.length ? round2(values.reduce((x, y) => x + y, 0) / values.length) : null,
     };
@@ -136,46 +161,53 @@ export function gradeSummaryFingerprint(summary: GradeSummary | null | undefined
 // Attendance
 // ---------------------------------------------------------------------------
 
-export interface AttendanceHours {
-  /** มา + สาย + กิจกรรม */
-  present: number;
-  /** ลาป่วย + ลากิจ */
-  leave: number;
-  /** ขาด + หนี */
-  absent: number;
+export type AttendanceKind = 'present' | 'late' | 'leave' | 'absent';
+export const ATTENDANCE_KINDS: AttendanceKind[] = ['present', 'late', 'leave', 'absent'];
+
+/** มา (with กิจกรรม), สาย, ลา (ป่วย/กิจ), ขาด (with หนี) */
+const KIND_OF: Record<string, AttendanceKind> = {
+  'มา': 'present', 'กิจกรรม': 'present', 'สาย': 'late', 'ลาป่วย': 'leave', 'ลากิจ': 'leave', 'ขาด': 'absent', 'หนี': 'absent',
+};
+
+/** One checked session: student-hours per kind. */
+export interface SessionMix extends Record<AttendanceKind, number> {
+  /** "Wed 28/10", as attendance documents key their date */
+  date: string;
+  classroom: string;
 }
 
-const PRESENT = new Set(['มา', 'สาย', 'กิจกรรม']);
-const LEAVE = new Set(['ลาป่วย', 'ลากิจ']);
-const ABSENT = new Set(['ขาด', 'หนี']);
-
-export const attendanceTotal = (h: AttendanceHours) => h.present + h.leave + h.absent;
-
-/** Present share in % (one decimal), null before any recorded session. */
-export function attendanceRate(h: AttendanceHours | undefined): number | null {
-  if (!h) return null;
-  const total = attendanceTotal(h);
-  return total > 0 ? Math.round((h.present / total) * 1000) / 10 : null;
-}
-
-/** Hours per student from a subject's attendance summary (blank statuses ignored). */
-export function attendanceHoursByStudent(summary: AttendanceSummary): Record<string, AttendanceHours> {
-  const out: Record<string, AttendanceHours> = {};
-  for (const [studentId, sessions] of Object.entries(summary.students || {})) {
-    const h: AttendanceHours = { present: 0, leave: 0, absent: 0 };
-    for (const [sessionId, status] of Object.entries(sessions || {})) {
-      const hours = Number(summary.sessions?.[sessionId]?.hours) || 1;
-      if (PRESENT.has(status)) h.present += hours;
-      else if (LEAVE.has(status)) h.leave += hours;
-      else if (ABSENT.has(status)) h.absent += hours;
-    }
-    out[studentId] = h;
+/** Compact a subject's attendance summary to one row per session (blank statuses ignored). */
+export function sessionMixes(summary: AttendanceSummary): SessionMix[] {
+  const rows = new Map<string, SessionMix>();
+  for (const [sessionId, session] of Object.entries(summary.sessions || {})) {
+    rows.set(sessionId, { date: session.date, classroom: session.classroom, present: 0, late: 0, leave: 0, absent: 0 });
   }
-  return out;
+  for (const statuses of Object.values(summary.students || {})) {
+    for (const [sessionId, status] of Object.entries(statuses || {})) {
+      const row = rows.get(sessionId);
+      const kind = KIND_OF[status];
+      if (row && kind) row[kind] += Number(summary.sessions[sessionId]?.hours) || 1;
+    }
+  }
+  return Array.from(rows.values()).filter(r => r.present + r.late + r.leave + r.absent > 0);
+}
+
+/**
+ * The calendar day of a session date like "Wed 28/10". Dates carry no year: it is the latest
+ * such day that is not after `today`.
+ */
+export function sessionDay(date: string, today: Date): Date | null {
+  const m = date.match(/(\d{1,2})\/(\d{1,2})/);
+  if (!m) return null;
+  const d = new Date(today.getFullYear(), +m[2] - 1, +m[1]);
+  if (Number.isNaN(d.getTime())) return null;
+  const end = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59);
+  if (d > end) d.setFullYear(d.getFullYear() - 1);
+  return d;
 }
 
 // ---------------------------------------------------------------------------
-// Teacher overview
+// Teacher dashboard
 // ---------------------------------------------------------------------------
 
 /** What the home page keeps (and caches) per subject. */
@@ -184,235 +216,148 @@ export interface SubjectStatsInput {
   subjectName: string;
   classroom: string;
   grades: GradeSummary | null;
-  attendance: Record<string, AttendanceHours> | null;
+  sessions: SessionMix[] | null;
 }
 
-export interface StudentStatRow {
+export interface PodiumEntry {
   studentId: string;
   name: string;
-  number: string;
   classroom: string;
-  /** mean total over the subjects with scores; null when none */
-  total: number | null;
-  /** the grade, only when one subject is selected */
-  grade: string | null;
-  pending: number;
-  hours: AttendanceHours;
-  rate: number | null;
+  /** mean total over the subjects with scores */
+  total: number;
 }
 
-export interface SubjectStatRow {
-  subjectId: string;
-  subjectName: string;
-  classroom: string;
-  averageTotal: number | null;
-  attendanceRate: number | null;
-  pending: number;
-  students: number;
-}
-
-export interface AssignmentStatRow {
-  id: string;
-  title: string;
-  submitted: number;
-  students: number;
-  /** submitted share in % */
-  rate: number;
-}
-
-export interface TeacherStats {
-  studentCount: number;
-  averageTotal: number | null;
-  /** mean of numeric grades over (student, subject) pairs with scores */
-  gradePointAverage: number | null;
-  pendingTotal: number;
-  studentsWithPending: number;
-  attendanceRate: number | null;
-  belowThreshold: number;
-  podium: StudentStatRow[];
-  mostPending: StudentStatRow[];
-  mostAbsent: StudentStatRow[];
-  /** grade label → count, lowest grade first */
-  grades: { label: string; count: number }[];
-  attendanceMix: AttendanceHours;
-  subjects: SubjectStatRow[];
-  /** single subject only: lowest submission first */
-  assignments: AssignmentStatRow[];
-  /** at least one subject has scores */
-  hasScores: boolean;
-  /** at least one recorded attendance hour */
-  hasAttendance: boolean;
-}
-
-const mean = (values: number[]) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : null);
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'th');
 
-function gradeSortValue(label: string): number {
-  const n = parseFloat(label);
-  return Number.isFinite(n) ? n : -1;
+/** Highest mean totals over the teacher's subjects that have scores. */
+export function topScores(inputs: SubjectStatsInput[], count = 3): PodiumEntry[] {
+  const rows = new Map<string, { name: string; classroom: string; totals: number[] }>();
+  for (const input of inputs) {
+    if (!input.grades?.hasScores) continue;
+    for (const [id, s] of Object.entries(input.grades.students)) {
+      const row = rows.get(id) ?? { name: s.name, classroom: s.classroom, totals: [] };
+      row.totals.push(s.total);
+      rows.set(id, row);
+    }
+  }
+  return Array.from(rows.entries())
+    .map(([studentId, r]) => ({ studentId, name: r.name, classroom: r.classroom, total: round2(r.totals.reduce((a, b) => a + b, 0) / r.totals.length) }))
+    .sort((a, b) => b.total - a.total || byName(a, b))
+    .slice(0, count);
+}
+
+export type PendingRange = 'month' | 'term';
+
+export interface PendingTimeline {
+  labels: string[];
+  rows: { studentId: string; name: string; classroom: string; counts: number[] }[];
+  /** largest count, for the chart's scale */
+  max: number;
+}
+
+const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59);
+
+/** Points of the pending chart: four weeks up to today, or month ends since the school year began (May). */
+export function pendingPoints(range: PendingRange, today: Date): { at: Date; label: string }[] {
+  if (range === 'month') {
+    return [21, 14, 7, 0].map(back => {
+      const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - back);
+      return { at: endOfDay(d), label: `${d.getDate()} ${THAI_MONTHS_SHORT[d.getMonth()]}` };
+    });
+  }
+  const startYear = today.getMonth() >= 4 ? today.getFullYear() : today.getFullYear() - 1;
+  const points: { at: Date; label: string }[] = [];
+  for (let d = new Date(startYear, 4, 1); d <= today; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
+    const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    points.push({ at: endOfDay(monthEnd < today ? monthEnd : today), label: THAI_MONTHS_SHORT[d.getMonth()] });
+  }
+  return points.slice(-6);
 }
 
 /**
- * Everything the home statistics show. `subjectId` narrows to one subject; otherwise a
- * student's numbers are averaged (score) or summed (pending work, hours) over the
- * teacher's subjects they take.
+ * Pending work that is due (deadline passed, or no deadline and already given) at each point,
+ * for the students with the most of it today. Counts only work still without a score now.
  */
-export function computeTeacherStats(inputs: SubjectStatsInput[], subjectId?: string | null): TeacherStats {
-  const list = subjectId ? inputs.filter(i => i.subjectId === subjectId) : inputs;
-  const single = !!subjectId && list.length === 1;
-
-  const rows = new Map<string, StudentStatRow & { totals: number[] }>();
-  const rowFor = (id: string, fallback?: Partial<StudentStatRow>) => {
-    let row = rows.get(id);
-    if (!row) {
-      row = {
-        studentId: id, name: fallback?.name || id, number: fallback?.number || '', classroom: fallback?.classroom || '',
-        total: null, grade: null, pending: 0, hours: { present: 0, leave: 0, absent: 0 }, rate: null, totals: [],
-      };
-      rows.set(id, row);
-    } else if (fallback?.name && row.name === id) {
-      Object.assign(row, { name: fallback.name, number: fallback.number || row.number, classroom: fallback.classroom || row.classroom });
-    }
-    return row;
-  };
-
-  const gradeCounts = new Map<string, number>();
-  const gradePoints: number[] = [];
-  const mix: AttendanceHours = { present: 0, leave: 0, absent: 0 };
-  const subjects: SubjectStatRow[] = [];
-
-  for (const input of list) {
+export function pendingTimeline(inputs: SubjectStatsInput[], range: PendingRange, today: Date, count = 5): PendingTimeline {
+  const points = pendingPoints(range, today);
+  const rows = new Map<string, { name: string; classroom: string; dues: number[] }>();
+  for (const input of inputs) {
     const g = input.grades;
-    const roster = g ? Object.keys(g.students) : [];
-    const rosterSet = new Set(roster);
-    const totals: number[] = [];
-    let pending = 0;
-
-    if (g) {
-      for (const label of g.scale) if (!gradeCounts.has(label)) gradeCounts.set(label, 0);
-      for (const [id, s] of Object.entries(g.students)) {
-        const row = rowFor(id, s);
-        row.pending += s.pending;
-        pending += s.pending;
-        if (g.hasScores) {
-          row.totals.push(s.total);
-          totals.push(s.total);
-          gradeCounts.set(s.grade, (gradeCounts.get(s.grade) ?? 0) + 1);
-          const point = parseFloat(s.grade);
-          if (Number.isFinite(point)) gradePoints.push(point);
-          if (single) row.grade = s.grade;
-        }
+    if (!g) continue;
+    const dueOf = new Map(g.assignments.map(a => [a.id, a.due]));
+    for (const [id, s] of Object.entries(g.students)) {
+      for (const assignmentId of s.pendingIds || []) {
+        const due = dueOf.get(assignmentId);
+        if (!due) continue;
+        const [y, m, d] = due.split('-').map(Number);
+        const row = rows.get(id) ?? { name: s.name, classroom: s.classroom, dues: [] };
+        row.dues.push(new Date(y, m - 1, d).getTime());
+        rows.set(id, row);
       }
     }
+  }
+  const ranked = Array.from(rows.entries())
+    .map(([studentId, r]) => ({
+      studentId, name: r.name, classroom: r.classroom,
+      counts: points.map(p => r.dues.filter(t => t <= p.at.getTime()).length),
+    }))
+    .filter(r => r.counts[r.counts.length - 1] > 0)
+    .sort((a, b) => b.counts[b.counts.length - 1] - a.counts[a.counts.length - 1] || byName(a, b))
+    .slice(0, count);
+  return { labels: points.map(p => p.label), rows: ranked, max: Math.max(0, ...ranked.flatMap(r => r.counts)) };
+}
 
-    const subjectHours: AttendanceHours = { present: 0, leave: 0, absent: 0 };
-    for (const [id, h] of Object.entries(input.attendance || {})) {
-      // Without a roster, keep everyone; with one, drop students who left the subject
-      if (g && !rosterSet.has(id)) continue;
-      const row = rowFor(id);
-      row.hours.present += h.present; row.hours.leave += h.leave; row.hours.absent += h.absent;
-      subjectHours.present += h.present; subjectHours.leave += h.leave; subjectHours.absent += h.absent;
+export type AttendanceRange = 'week' | 'month' | 'term';
+
+export interface RoomAttendance {
+  room: string;
+  hours: number;
+  /** share of checked student-hours, 0–100 with one decimal */
+  pct: Record<AttendanceKind, number>;
+}
+
+export interface AttendanceComparison {
+  rooms: RoomAttendance[];
+  /** share over every room */
+  overall: Record<AttendanceKind, number>;
+  /** the room with the highest share of each kind */
+  peaks: { kind: AttendanceKind; room: string; value: number }[];
+}
+
+const pct = (part: number, total: number) => (total > 0 ? Math.round((part / total) * 1000) / 10 : 0);
+
+function inRange(day: Date, range: AttendanceRange, today: Date): boolean {
+  if (range === 'term') return true;
+  if (range === 'month') return day.getFullYear() === today.getFullYear() && day.getMonth() === today.getMonth();
+  const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - ((today.getDay() + 6) % 7));
+  return day >= monday && day <= endOfDay(today);
+}
+
+/** มา / สาย / ลา / ขาด per room (the session's classroom) over the teacher's subjects. */
+export function attendanceByRoom(inputs: SubjectStatsInput[], range: AttendanceRange, today: Date): AttendanceComparison {
+  const sums = new Map<string, Record<AttendanceKind, number>>();
+  for (const input of inputs) {
+    for (const s of input.sessions || []) {
+      const day = sessionDay(s.date, today);
+      if (!day || !inRange(day, range, today)) continue;
+      const room = s.classroom || input.classroom;
+      const sum = sums.get(room) ?? { present: 0, late: 0, leave: 0, absent: 0 };
+      ATTENDANCE_KINDS.forEach(k => { sum[k] += s[k]; });
+      sums.set(room, sum);
     }
-    mix.present += subjectHours.present; mix.leave += subjectHours.leave; mix.absent += subjectHours.absent;
-
-    const avg = mean(totals);
-    subjects.push({
-      subjectId: input.subjectId,
-      subjectName: input.subjectName,
-      classroom: input.classroom,
-      averageTotal: avg === null ? null : round2(avg),
-      attendanceRate: attendanceRate(subjectHours),
-      pending,
-      students: roster.length || Object.keys(input.attendance || {}).length,
+  }
+  const all = { present: 0, late: 0, leave: 0, absent: 0 };
+  const rooms = Array.from(sums.entries())
+    .sort(([a], [b]) => a.localeCompare(b, 'th', { numeric: true }))
+    .map(([room, sum]) => {
+      const hours = ATTENDANCE_KINDS.reduce((t, k) => t + sum[k], 0);
+      ATTENDANCE_KINDS.forEach(k => { all[k] += sum[k]; });
+      return { room, hours, pct: Object.fromEntries(ATTENDANCE_KINDS.map(k => [k, pct(sum[k], hours)])) as Record<AttendanceKind, number> };
     });
-  }
-
-  const students: StudentStatRow[] = Array.from(rows.values()).map(({ totals, ...row }) => {
-    const avg = mean(totals);
-    return { ...row, total: avg === null ? null : round2(avg), rate: attendanceRate(row.hours) };
+  const total = ATTENDANCE_KINDS.reduce((t, k) => t + all[k], 0);
+  const peaks = rooms.length === 0 ? [] : ATTENDANCE_KINDS.map(kind => {
+    const best = rooms.reduce((a, b) => (b.pct[kind] > a.pct[kind] ? b : a));
+    return { kind, room: best.room, value: best.pct[kind] };
   });
-
-  const withTotal = students.filter(s => s.total !== null);
-  const rates = students.map(s => s.rate).filter((r): r is number => r !== null);
-  const avgTotal = mean(withTotal.map(s => s.total as number));
-  const gpa = mean(gradePoints);
-
-  const assignments: AssignmentStatRow[] = single && list[0].grades
-    ? list[0].grades.assignments.map(a => {
-        const count = Object.keys(list[0].grades!.students).length;
-        return { id: a.id, title: a.title, submitted: a.submitted, students: count, rate: count ? Math.round((a.submitted / count) * 100) : 0 };
-      }).sort((a, b) => a.rate - b.rate || a.title.localeCompare(b.title, 'th'))
-    : [];
-
-  return {
-    studentCount: students.length,
-    averageTotal: avgTotal === null ? null : round2(avgTotal),
-    gradePointAverage: gpa === null ? null : Math.round(gpa * 100) / 100,
-    pendingTotal: students.reduce((sum, s) => sum + s.pending, 0),
-    studentsWithPending: students.filter(s => s.pending > 0).length,
-    attendanceRate: attendanceRate(mix),
-    belowThreshold: rates.filter(r => r < ATTENDANCE_THRESHOLD).length,
-    podium: [...withTotal].sort((a, b) => (b.total as number) - (a.total as number) || byName(a, b)).slice(0, 3),
-    mostPending: students.filter(s => s.pending > 0).sort((a, b) => b.pending - a.pending || byName(a, b)).slice(0, 5),
-    mostAbsent: students
-      .filter(s => s.hours.absent > 0)
-      .sort((a, b) => b.hours.absent - a.hours.absent || (a.rate ?? 100) - (b.rate ?? 100) || byName(a, b))
-      .slice(0, 5),
-    grades: Array.from(gradeCounts.entries())
-      .map(([label, count]) => ({ label, count }))
-      .sort((a, b) => gradeSortValue(a.label) - gradeSortValue(b.label)),
-    attendanceMix: mix,
-    subjects,
-    assignments,
-    hasScores: list.some(i => i.grades?.hasScores),
-    hasAttendance: attendanceTotal(mix) > 0,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// One student inside their class (per-student popup)
-// ---------------------------------------------------------------------------
-
-export interface ClassPosition {
-  /** 1-based rank by total (ties share a rank) */
-  rank: number;
-  of: number;
-  classAverage: { total: number; collected: number; midterm: number; final: number };
-  /** assignmentId → mean of entered scores */
-  assignmentAverages: Record<string, number | null>;
-}
-
-export function classPosition(
-  studentId: string,
-  roster: { studentId: string }[],
-  assignments: Assignment[],
-  groups: AssignmentGroup[],
-  config: GradeConfig | null | undefined,
-  scores: StudentScore[],
-): ClassPosition {
-  const byId = new Map(scores.map(s => [s.studentId, s]));
-  const breakdowns = roster.map(s => ({ id: s.studentId, b: computeBreakdown(byId.get(s.studentId), assignments, groups, config) }));
-  const own = breakdowns.find(x => x.id === studentId)?.b.total ?? 0;
-  const avg = (pick: (b: (typeof breakdowns)[number]['b']) => number) =>
-    round2(mean(breakdowns.map(x => pick(x.b))) ?? 0);
-
-  const assignmentAverages: Record<string, number | null> = {};
-  for (const a of assignments) {
-    const values = roster
-      .map(s => getFieldValue(byId.get(s.studentId), `a:${a.id}`))
-      .filter((v): v is number => v !== undefined);
-    assignmentAverages[a.id] = values.length ? round2(values.reduce((x, y) => x + y, 0) / values.length) : null;
-  }
-
-  return {
-    rank: breakdowns.filter(x => x.b.total > own).length + 1,
-    of: breakdowns.length,
-    classAverage: {
-      total: avg(b => b.total),
-      collected: avg(b => b.collected),
-      midterm: avg(b => b.midterm),
-      final: avg(b => b.final),
-    },
-    assignmentAverages,
-  };
+  return { rooms, overall: Object.fromEntries(ATTENDANCE_KINDS.map(k => [k, pct(all[k], total)])) as Record<AttendanceKind, number>, peaks };
 }

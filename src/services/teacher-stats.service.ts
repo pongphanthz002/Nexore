@@ -1,10 +1,10 @@
 import type { FirebaseConfig } from '@/types/firebase.types';
 import { schoolDatabaseService, type SubjectData } from '@/services/school-database.service';
 import { teacherDatabaseService } from '@/services/teacher-database.service';
-import { attendanceHoursByStudent, buildGradeSummary, type GradeSummary, type SubjectStatsInput } from '@/lib/class-stats';
+import { buildGradeSummary, sessionMixes, type GradeSummary, type SubjectStatsInput } from '@/lib/class-stats';
 import { defaultGradeConfig } from '@/lib/grade-calculation';
 import { runPool } from '@/lib/firestore-helpers';
-import { readTeacherStats, writeTeacherStats, TEACHER_STATS_FRESH_MS, type CachedTeacherStats } from '@/lib/teacher-stats-cache';
+import { readTeacherStats, writeTeacherStats, TEACHER_STATS_FRESH_MS, TEACHER_STATS_VERSION, type CachedTeacherStats } from '@/lib/teacher-stats-cache';
 
 /**
  * Loads what the teacher home statistics need: each subject's grade summary and attendance
@@ -78,11 +78,11 @@ export async function loadTeacherStats(
       subjectName: subject.subjectName,
       classroom: subject.classroom,
       grades: found?.grades ?? built.get(subject.subjectId) ?? null,
-      attendance: found?.attendance ? attendanceHoursByStudent(found.attendance) : null,
+      sessions: found?.attendance ? sessionMixes(found.attendance) : null,
     };
   });
 
-  const result: CachedTeacherStats = { owner, savedAt: Date.now(), inputs };
+  const result: CachedTeacherStats = { version: TEACHER_STATS_VERSION, owner, savedAt: Date.now(), inputs };
   writeTeacherStats(result);
   return result;
 }

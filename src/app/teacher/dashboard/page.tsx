@@ -1,7 +1,7 @@
 'use client';
 
 import TodayTimetable from '@/components/timetable/TodayTimetable';
-import TeacherStats from '@/components/stats/TeacherStats';
+import ClassDashboard from '@/components/stats/TeacherDashboard';
 
 export default function TeacherDashboard() {
   return (
@@ -9,8 +9,8 @@ export default function TeacherDashboard() {
       <div className="mx-auto w-full max-w-7xl space-y-6">
         {/* Attendance bar (current period, until checked) + today's timetable */}
         <TodayTimetable role="teacher" />
-        {/* Class statistics (2 summary reads per subject, cached 10 minutes) */}
-        <TeacherStats />
+        {/* Dashboard over every subject (2 summary reads per subject, cached 10 minutes) */}
+        <ClassDashboard />
       </div>
     </div>
   );

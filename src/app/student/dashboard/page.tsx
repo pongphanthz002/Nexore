@@ -93,7 +93,7 @@ export default function StudentDashboard() {
       <StudentHeader isDark={isDark} toggleTheme={toggleTheme} />
       
       {/* Main content */}
-      <div className="pt-24 pb-24 px-6">
+      <div className="pt-24 pb-32 px-6">
         <div className="max-w-7xl mx-auto space-y-6">
           {/* Today's timetable (opens the full-screen week view) */}
           {studentInfo && <TodayTimetable role="student" studentInfo={studentInfo} />}

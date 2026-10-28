@@ -92,7 +92,7 @@ export default function StudentProfilePage() {
 
   if (loading) {
     return (
-      <div className={`min-h-screen ${isDarkMode ? 'bg-[#0F172A]' : 'bg-[#F8FAFC]'} font-sans`}>
+      <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'} font-sans`}>
         <StudentHeader isDark={isDarkMode} toggleTheme={toggleTheme} />
         <ProfileSkeleton isDark={isDarkMode} />
         <StudentFooter isDark={isDarkMode} />
@@ -100,7 +100,7 @@ export default function StudentProfilePage() {
     );
   }
 
-  const darkClass = isDarkMode ? 'dark bg-[#0F172A] text-slate-100' : 'bg-[#F8FAFC] text-slate-900';
+  const darkClass = isDarkMode ? 'dark bg-gray-900 text-slate-100' : 'bg-gray-50 text-slate-900';
 
   const heroGradient = isDarkMode
     ? 'bg-gradient-to-br from-red-950 via-slate-900 to-red-950 border border-red-900/30'
@@ -110,7 +110,7 @@ export default function StudentProfilePage() {
     <div className={`min-h-screen ${darkClass} font-sans transition-colors duration-300 overflow-x-hidden`}>
       <StudentHeader isDark={isDarkMode} toggleTheme={toggleTheme} />
 
-      <main className="w-full px-5 pt-28 pb-28 max-w-lg mx-auto space-y-6">
+      <main className="w-full px-5 pt-28 pb-32 max-w-lg mx-auto space-y-6">
 
         {/* --- 1. FIGMA-GRADE STUDENT ID CARD --- */}
         <motion.div

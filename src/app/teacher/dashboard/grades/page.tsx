@@ -25,7 +25,8 @@ import ScoreGrid, { formatScore, type CellEdit, type ScoreGridActions } from '@/
 import MobileScoreEntry from '@/components/MobileScoreEntry';
 import GoogleSheetsIcon from '@/components/GoogleSheetsIcon';
 import Modal, { ModalHeader } from '@/components/Modal';
-import StudentGradeSheet from '@/components/StudentGradeSheet';
+import StudentSubjectSheet from '@/components/StudentSubjectSheet';
+import { buildHueMap } from '@/lib/timetable';
 import { useTheme } from '@/contexts/ThemeContext';
 
 type HistoryEntry = { studentId: string; field: ScoreField; before: number | null; after: number | null };
@@ -1133,10 +1134,11 @@ export default function GradesPage() {
         </Modal>
 
         {/* Student Detail */}
-        <StudentGradeSheet
+        <StudentSubjectSheet
           student={selectedStudent}
           subject={selectedSubject}
-          roster={filteredStudents}
+          teacher={teacherConfig ? { teacherId: teacherConfig.teacherId, name: teacherConfig.name, defaultRoom: teacherConfig.defaultRoom } : null}
+          hue={selectedSubject ? buildHueMap(subjects).get(selectedSubject.subjectName) ?? 'blue' : 'blue'}
           assignments={assignments}
           groups={assignmentGroups}
           config={gradeConfig}

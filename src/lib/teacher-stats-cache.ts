@@ -10,7 +10,11 @@ import type { SubjectStatsInput } from './class-stats';
 /** Shown without re-reading while younger than this. */
 export const TEACHER_STATS_FRESH_MS = 10 * 60 * 1000;
 
+/** Bump when `SubjectStatsInput` changes shape, so older cached copies are ignored. */
+export const TEACHER_STATS_VERSION = 2;
+
 export interface CachedTeacherStats {
+  version: number;
   /** `${schoolProjectId}:${teacherId}` */
   owner: string;
   savedAt: number;
@@ -22,7 +26,7 @@ export function readTeacherStats(owner: string): CachedTeacherStats | null {
     const raw = localStorage.getItem(STORAGE_KEYS.TEACHER_STATS);
     if (!raw) return null;
     const cached = JSON.parse(raw) as CachedTeacherStats;
-    return cached.owner === owner && Array.isArray(cached.inputs) ? cached : null;
+    return cached.version === TEACHER_STATS_VERSION && cached.owner === owner && Array.isArray(cached.inputs) ? cached : null;
   } catch {
     return null;
   }
