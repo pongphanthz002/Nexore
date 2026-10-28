@@ -4,8 +4,10 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { schoolDatabaseService, SubjectData, StudentData, ScheduleSlot } from '@/services/school-database.service';
+import { schoolDatabaseService, SubjectData, StudentData, ScheduleSlot, SubjectWhitelistRow } from '@/services/school-database.service';
 import { teacherDatabaseService } from '@/services/teacher-database.service';
+import { runPool } from '@/lib/firestore-helpers';
+import UploadProgressModal, { UploadProgress } from '@/components/UploadProgressModal';
 import * as XLSX from 'xlsx';
 import { Download, Upload, Trash2, Plus, ArrowLeft, Search, BookOpen, Calendar, Clock, Loader2, X } from 'lucide-react';
 import { GoogleBasicSubjectIcon, GoogleElectiveSubjectIcon } from '@/components/GoogleSubjectIcons';
@@ -27,6 +29,14 @@ export default function SubjectsManagement() {
   const [isSavingSubject, setIsSavingSubject] = useState(false);
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
   const [studentClassFilter, setStudentClassFilter] = useState<string>('all');
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
+  // Upload waiting for confirmation because it adds or removes subjects
+  const [pendingUpload, setPendingUpload] = useState<{
+    rows: SubjectWhitelistRow[];
+    toAdd: SubjectWhitelistRow[];
+    toDelete: SubjectData[];
+    updatedCount: number;
+  } | null>(null);
 
   const [newSubject, setNewSubject] = useState<{
     teacherId: string;
@@ -212,6 +222,8 @@ export default function SubjectsManagement() {
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    // Reset so choosing the same file again still triggers onChange
+    e.target.value = '';
     if (!file) return;
 
     if (!userAccount?.schoolFirebaseConfig) {
@@ -220,6 +232,7 @@ export default function SubjectsManagement() {
     }
 
     setLoading(true);
+    setUploadProgress({ title: 'กำลังอัพโหลดวิชาเรียน', label: 'กำลังอ่านไฟล์และตรวจสอบข้อมูล', step: 1, totalSteps: 2, done: 0, total: 0 });
     try {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
@@ -227,82 +240,165 @@ export default function SubjectsManagement() {
       const worksheet = workbook.Sheets[sheetName];
       const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
 
-      // Parse classroom field to handle multiple classes (comma-separated)
-      const subjectsData: any[] = [];
-      jsonData.forEach((row: any, index: number) => {
-        const classroomStr = row['ห้อง'] || '';
-        const classrooms = classroomStr.split(',').map((c: string) => c.trim()).filter((c: string) => c);
-
-        // Parse subject type from Thai text
-        const subjectTypeRaw = (row['ประเภทวิชา'] || '').toString().trim();
-        const subjectType = subjectTypeRaw === 'เพิ่มเติม' ? 'elective' : 'basic';
-
-        if (classrooms.length > 0) {
-          classrooms.forEach((classroom: string) => {
-            // Replace "/" with "-" in classroom name for valid Firestore document ID
-            // e.g., "ม.1/1" → "ม.1-1"
-            const safeClassroom = classroom.replace(/\//g, '-');
-            subjectsData.push({
-              subjectId: `SUB${Date.now()}_${index}_${safeClassroom}`,
-              teacherId: row['เลขประจำตัวครู'] || '',
-              subjectName: row['วิชา'] || '',
-              subjectType,
-              classroom: classroom,
-              day: row['วัน'] || '',
-              time: row['เวลา'] || '',
-              duration: row['จำนวนชั่วโมง'] || '1'
-            });
-          });
-        }
-      });
-
-      // Delete ALL existing subjects and their related data
-      const existingSubjects = await schoolDatabaseService.getAllSubjects(userAccount.schoolFirebaseConfig);
+      // Subjects already in the system keep their subjectId, so their attendance, scores and
+      // assignments (keyed by subjectId in the teacher DBs) stay attached. A row matches an
+      // existing subject with the same teacher, subject name and classroom.
+      const existingSubjects = await schoolDatabaseService.getAllSubjects(userAccount.schoolFirebaseConfig, true);
+      const subjectKey = (teacherId: string, subjectName: string, classroom: string) =>
+        `${teacherId.trim()}|${subjectName.trim()}|${classroom.trim()}`;
+      const unmatched = new Map<string, SubjectData[]>();
       for (const subject of existingSubjects) {
-        try {
-          // Delete all subject related data from teacher's database
-          const teacher = teachers.find(t => t.teacherId === subject.teacherId);
-          if (teacher?.firebaseConfig) {
-            try {
-              await teacherDatabaseService.deleteSubjectAllData(
-                teacher.firebaseConfig,
-                subject.subjectId,
-                subject.classroom
-              );
-            } catch (error) {
-              console.error('Error deleting subject data from teacher database:', subject.subjectId, error);
+        const key = subjectKey(String(subject.teacherId ?? ''), String(subject.subjectName ?? ''), String(subject.classroom ?? ''));
+        unmatched.set(key, [...(unmatched.get(key) || []), subject]);
+      }
+      const takeMatch = (key: string): SubjectData | undefined => {
+        const list = unmatched.get(key);
+        const match = list?.shift();
+        if (list && list.length === 0) unmatched.delete(key);
+        return match;
+      };
+
+      const rows: SubjectWhitelistRow[] = [];
+      const toAdd: SubjectWhitelistRow[] = [];
+      jsonData.forEach((row: any, index: number) => {
+        // Excel may give numeric cells as numbers
+        const teacherId = String(row['เลขประจำตัวครู'] ?? '');
+        const subjectName = String(row['วิชา'] ?? '');
+        const classroomStr = String(row['ห้อง'] ?? '').trim();
+        const day = String(row['วัน'] ?? '');
+        const time = String(row['เวลา'] ?? '');
+        const duration = String(row['จำนวนชั่วโมง'] || '1');
+
+        // Parse subject type from Thai text; leave it unset when the column is blank
+        // so an old template can't turn existing electives into basic subjects
+        const subjectTypeRaw = String(row['ประเภทวิชา'] ?? '').trim();
+        const subjectType = subjectTypeRaw === 'เพิ่มเติม' ? 'elective' : subjectTypeRaw === 'พื้นฐาน' ? 'basic' : undefined;
+
+        const buildRow = (classroom: string, existing?: SubjectData): SubjectWhitelistRow => {
+          // Replace "/" with "-" in classroom name for valid Firestore document ID
+          // e.g., "ม.1/1" → "ม.1-1"
+          const safeClassroom = classroom.replace(/\//g, '-');
+          const result: SubjectWhitelistRow = {
+            subjectId: existing?.subjectId || `SUB${Date.now()}_${index}_${safeClassroom}`,
+            teacherId,
+            subjectName,
+            classroom,
+            day,
+            time,
+            duration,
+            subjectType: subjectType || (existing ? undefined : 'basic'),
+          };
+          // Screens read schedules before day/time: keep the first slot in step with the file
+          const slots = existing?.schedules;
+          if (slots && slots.length > 0) {
+            const first = slots[0];
+            if (first.day !== day || first.time !== time || (first.duration || '1') !== duration) {
+              result.schedules = [{ ...first, day, time, duration }, ...slots.slice(1)];
             }
           }
+          return result;
+        };
 
-          // Always delete all subject related data from school database (for admin teachers or as backup)
-          try {
-            await schoolDatabaseService.deleteSubjectAllData(
-              userAccount.schoolFirebaseConfig,
-              subject.subjectId,
-              subject.classroom
-            );
-          } catch (error) {
-            console.error('Error deleting subject data from school database:', subject.subjectId, error);
-          }
-
-          // Delete subject from school database
-          await schoolDatabaseService.deleteSubject(userAccount.schoolFirebaseConfig, subject.subjectId);
-        } catch (error) {
-          console.error('Error deleting subject:', subject.subjectId, error);
+        // A downloaded file lists a multi-room subject (e.g. an elective) as one "ม.1/1, ม.1/2" cell
+        const wholeMatch = classroomStr ? takeMatch(subjectKey(teacherId, subjectName, classroomStr)) : undefined;
+        if (wholeMatch) {
+          rows.push(buildRow(wholeMatch.classroom, wholeMatch));
+          return;
         }
+
+        // Otherwise a comma-separated cell means one subject per classroom
+        const classrooms = classroomStr.split(',').map((c: string) => c.trim()).filter((c: string) => c);
+        classrooms.forEach((classroom: string) => {
+          const existing = takeMatch(subjectKey(teacherId, subjectName, classroom));
+          const built = buildRow(existing?.classroom ?? classroom, existing);
+          rows.push(built);
+          if (!existing) toAdd.push(built);
+        });
+      });
+
+      const toDelete = Array.from(unmatched.values()).flat();
+      const updatedCount = rows.length - toAdd.length;
+
+      if (toAdd.length > 0 || toDelete.length > 0) {
+        setPendingUpload({ rows, toAdd, toDelete, updatedCount });
+        setUploadProgress(null);
+        setLoading(false);
+        return;
       }
 
-      // Save all new subjects from the file
-      await schoolDatabaseService.saveSubjectWhitelist(userAccount.schoolFirebaseConfig, subjectsData);
-      await loadData(true);
-      invalidateCache();
-      alert('อัพโหลดรายชื่อวิชาเรียนสำเร็จ');
+      await runSubjectUpload(rows, []);
     } catch (error) {
       console.error('Error uploading subjects:', error);
+      setUploadProgress(null);
       alert('ไม่สามารถอัพโหลดรายชื่อวิชาเรียนได้');
     } finally {
+      setUploadProgress(null);
       setLoading(false);
     }
+  };
+
+  const confirmSubjectUpload = async () => {
+    if (!pendingUpload) return;
+    const { rows, toDelete } = pendingUpload;
+    setPendingUpload(null);
+    setLoading(true);
+    try {
+      await runSubjectUpload(rows, toDelete);
+    } catch (error) {
+      console.error('Error uploading subjects:', error);
+      setUploadProgress(null);
+      alert('ไม่สามารถอัพโหลดรายชื่อวิชาเรียนได้');
+    } finally {
+      setUploadProgress(null);
+      setLoading(false);
+    }
+  };
+
+  /** Delete subjects missing from the file (with their data), then save every row. */
+  const runSubjectUpload = async (rows: SubjectWhitelistRow[], toDelete: SubjectData[]) => {
+    if (!userAccount?.schoolFirebaseConfig) return;
+    const schoolConfig = userAccount.schoolFirebaseConfig;
+    const totalSteps = toDelete.length > 0 ? 2 : 1;
+    const title = 'กำลังอัพโหลดวิชาเรียน';
+
+    const failedSubjects: string[] = [];
+    if (toDelete.length > 0) {
+      let deleted = 0;
+      setUploadProgress({ title, label: 'กำลังลบวิชาที่ไม่อยู่ในไฟล์', step: 1, totalSteps, done: 0, total: toDelete.length });
+      await runPool(toDelete, 3, async subject => {
+        const teacher = teachers.find(t => t.teacherId === subject.teacherId);
+        try {
+          await Promise.all([
+            // Delete all subject related data from teacher's database
+            teacher?.firebaseConfig
+              ? teacherDatabaseService.deleteSubjectAllData(teacher.firebaseConfig, subject.subjectId, subject.classroom)
+                .catch(error => console.error('Error deleting subject data from teacher database:', subject.subjectId, error))
+              : Promise.resolve(),
+            // Always delete all subject related data from school database (for admin teachers or as backup)
+            schoolDatabaseService.deleteSubjectAllData(schoolConfig, subject.subjectId, subject.classroom)
+              .catch(error => console.error('Error deleting subject data from school database:', subject.subjectId, error)),
+          ]);
+          // Delete subject from school database
+          await schoolDatabaseService.deleteSubject(schoolConfig, subject.subjectId);
+        } catch (error) {
+          console.error('Error deleting subject:', subject.subjectId, error);
+          failedSubjects.push(`${subject.subjectName} (${subject.classroom})`);
+        }
+        deleted++;
+        setUploadProgress(p => p && { ...p, done: deleted });
+      });
+    }
+
+    setUploadProgress({ title, label: 'กำลังบันทึกวิชาเรียน', step: totalSteps, totalSteps, done: 0, total: rows.length });
+    await schoolDatabaseService.saveSubjectWhitelist(schoolConfig, rows, (done, total) => setUploadProgress(p => p && { ...p, done, total }));
+    setUploadProgress(p => p && { ...p, label: 'กำลังโหลดรายการล่าสุด', done: 0, total: 0 });
+    await loadData(true);
+    invalidateCache();
+    setUploadProgress(null);
+    if (failedSubjects.length > 0) {
+      alert(`ลบวิชาบางวิชาไม่สำเร็จ: ${failedSubjects.join(', ')}`);
+    }
+    alert('อัพโหลดรายชื่อวิชาเรียนสำเร็จ');
   };
 
   const handleAddSubject = async () => {
@@ -564,7 +660,7 @@ export default function SubjectsManagement() {
     return teacher ? teacher.name : teacherId;
   };
 
-  if (loading && subjects.length === 0) {
+  if (loading && subjects.length === 0 && !uploadProgress) {
     return (
       <div className={`min-h-screen p-6 pb-24 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
         <h1 className={`text-3xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-800'}`}>จัดการวิชาเรียน</h1>
@@ -843,6 +939,82 @@ export default function SubjectsManagement() {
           </div>
         </div>
       </motion.div>
+
+      <UploadProgressModal progress={uploadProgress} isDark={isDark} />
+
+      {/* Upload Confirmation Dialog */}
+      {pendingUpload && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className={`rounded-2xl p-6 max-w-lg w-full shadow-2xl max-h-[90vh] overflow-y-auto ${isDark ? 'bg-gray-800' : 'bg-white'}`}
+          >
+            <div className="mb-4">
+              <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'} mb-2`}>
+                ⚠️ ยืนยันการอัพโหลดวิชาเรียน
+              </h3>
+              <p className={isDark ? 'text-gray-300' : 'text-gray-600'}>
+                วิชาเดิม {pendingUpload.updatedCount} วิชาจะอัปเดตตามไฟล์ โดยข้อมูลเช็คชื่อและคะแนนยังอยู่ครบ
+              </p>
+            </div>
+
+            {pendingUpload.toDelete.length > 0 && (
+              <div className={`max-h-40 overflow-y-auto mb-4 rounded-2xl p-4 ${isDark ? 'bg-red-900/30' : 'bg-red-50'}`}>
+                <p className={`text-sm mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>วิชาที่ไม่อยู่ในไฟล์และจะถูกลบ ({pendingUpload.toDelete.length} วิชา):</p>
+                <p className="text-sm font-semibold text-red-600 mb-2">
+                  ข้อมูลเช็คชื่อ คะแนน และการบ้านของวิชาเหล่านี้จะถูกลบด้วย
+                </p>
+                {pendingUpload.toDelete.map((subject) => (
+                  <div key={subject.subjectId} className="flex items-center gap-2 py-1">
+                    <span className="text-red-500">🗑️</span>
+                    <span className={isDark ? 'text-gray-200' : 'text-gray-800'}>
+                      {subject.subjectName} - {subject.classroom} (ครู {subject.teacherId})
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {pendingUpload.toAdd.length > 0 && (
+              <div className={`max-h-40 overflow-y-auto mb-4 rounded-2xl p-4 ${isDark ? 'bg-green-900/30' : 'bg-green-50'}`}>
+                <p className={`text-sm mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>วิชาที่จะถูกเพิ่ม ({pendingUpload.toAdd.length} วิชา):</p>
+                {pendingUpload.toAdd.map((subject) => (
+                  <div key={subject.subjectId} className="flex items-center gap-2 py-1">
+                    <span className="text-green-500">➕</span>
+                    <span className={isDark ? 'text-gray-200' : 'text-gray-800'}>
+                      {subject.subjectName} - {subject.classroom} (ครู {subject.teacherId})
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setPendingUpload(null)}
+                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'}`}
+              >
+                ยกเลิก
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={confirmSubjectUpload}
+                className={`flex-1 text-white py-3 rounded-xl ${pendingUpload.toDelete.length > 0 ? 'bg-red-500' : 'bg-blue-500'}`}
+              >
+                ยืนยันและอัพโหลด
+              </motion.button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
 
       {/* Add Subject Modal */}
       <AnimatePresence>

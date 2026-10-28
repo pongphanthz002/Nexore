@@ -1,8 +1,8 @@
 import { firebaseManager } from '@/lib/firebase';
-import { collection, doc, setDoc, getDoc, getDocs, query, where, deleteDoc, writeBatch, documentId, Firestore, DocumentReference } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, query, where, deleteDoc, writeBatch, WriteBatch, documentId, Firestore, DocumentReference } from 'firebase/firestore';
 import { teacherDatabaseService, GradeConfig, Assignment, AssignmentGroup, StudentScore } from '@/services/teacher-database.service';
 import { firestoreService } from '@/services/firestore.service';
-import { TtlCache, withRetry, chunkArray } from '@/lib/firestore-helpers';
+import { TtlCache, withRetry, chunkArray, runPool, ProgressCallback } from '@/lib/firestore-helpers';
 import type { FirebaseConfig } from '@/types/firebase.types';
 
 export interface TeacherFirebaseConfig {
@@ -78,7 +78,15 @@ export interface SubjectWhitelistRow {
   day: string;
   time: string;
   duration?: string;
+  /** Only written when provided; omit to keep the subject's existing type. */
+  subjectType?: 'basic' | 'elective';
+  /** Only written when provided; omit to keep the subject's existing schedules. */
+  schedules?: ScheduleSlot[];
 }
+
+/** Whitelist uploads commit this many writes per batch, several batches at a time. */
+const UPLOAD_BATCH_SIZE = 200;
+const UPLOAD_CONCURRENCY = 4;
 
 export interface AdminWhitelistRow {
   email: string;
@@ -312,15 +320,14 @@ class SchoolDatabaseService {
    * Writes only whitelist-owned fields with merge, so email/uid/role/firebaseConfig
    * set during teacher setup are never overwritten.
    */
-  async saveTeacherWhitelist(schoolFirebaseConfig: FirebaseConfig, teachers: WhitelistTeacherRow[]): Promise<void> {
+  async saveTeacherWhitelist(schoolFirebaseConfig: FirebaseConfig, teachers: WhitelistTeacherRow[], onProgress?: ProgressCallback): Promise<void> {
     const database = this.getSchoolDB(schoolFirebaseConfig);
     // Existing roster (usually already cached by the admin page) tells us which docs are new
     const existing = await this.getAllTeachers(schoolFirebaseConfig);
     const existingIds = new Set(existing.map(t => t.teacherId));
     this.invalidateTeachers();
 
-    for (const chunk of chunkArray(teachers.filter(t => t.teacherId), 499)) {
-      const batch = writeBatch(database);
+    await this.commitInBatches(teachers.filter(t => t.teacherId), onProgress, (batch, chunk) => {
       for (const teacher of chunk) {
         const teacherRef = doc(database, this.teachersCollection, teacher.teacherId);
         const teacherData: Record<string, unknown> = {
@@ -334,8 +341,7 @@ class SchoolDatabaseService {
         }
         batch.set(teacherRef, teacherData, { merge: true });
       }
-      await batch.commit();
-    }
+    }, database);
   }
 
   async deleteTeacher(schoolFirebaseConfig: FirebaseConfig, teacherId: string): Promise<void> {
@@ -364,7 +370,11 @@ class SchoolDatabaseService {
    * are never overwritten, and teacherNodes is only written when the row provides it.
    * Returns teacher IDs referenced in teacherNodes that don't exist in the teachers collection.
    */
-  async saveStudentWhitelist(schoolFirebaseConfig: FirebaseConfig, students: WhitelistStudentRow[]): Promise<{ unknownTeacherIds: string[] }> {
+  async saveStudentWhitelist(
+    schoolFirebaseConfig: FirebaseConfig,
+    students: WhitelistStudentRow[],
+    onProgress?: ProgressCallback
+  ): Promise<{ unknownTeacherIds: string[] }> {
     const database = this.getSchoolDB(schoolFirebaseConfig);
     const [existingStudents, teachers] = await Promise.all([
       this.getAllStudents(schoolFirebaseConfig),
@@ -375,8 +385,7 @@ class SchoolDatabaseService {
     const unknownTeacherIds = new Set<string>();
     this.invalidateStudents();
 
-    for (const chunk of chunkArray(students.filter(s => s.studentId), 499)) {
-      const batch = writeBatch(database);
+    await this.commitInBatches(students.filter(s => s.studentId), onProgress, (batch, chunk) => {
       for (const student of chunk) {
         const studentRef = doc(database, this.studentsCollection, student.studentId);
         const isNew = !existingIds.has(student.studentId);
@@ -404,8 +413,7 @@ class SchoolDatabaseService {
 
         batch.set(studentRef, studentData, { merge: true });
       }
-      await batch.commit();
-    }
+    }, database);
 
     return { unknownTeacherIds: Array.from(unknownTeacherIds) };
   }
@@ -632,14 +640,13 @@ class SchoolDatabaseService {
   /**
    * Save subject whitelist to school database (merge keeps createdAt and extra fields)
    */
-  async saveSubjectWhitelist(schoolFirebaseConfig: FirebaseConfig, subjects: SubjectWhitelistRow[]): Promise<void> {
+  async saveSubjectWhitelist(schoolFirebaseConfig: FirebaseConfig, subjects: SubjectWhitelistRow[], onProgress?: ProgressCallback): Promise<void> {
     const database = this.getSchoolDB(schoolFirebaseConfig);
     const existing = await this.getAllSubjects(schoolFirebaseConfig);
     const existingIds = new Set(existing.map(s => s.subjectId));
     this.invalidateSubjects();
 
-    for (const chunk of chunkArray(subjects.filter(s => s.subjectId), 499)) {
-      const batch = writeBatch(database);
+    await this.commitInBatches(subjects.filter(s => s.subjectId), onProgress, (batch, chunk) => {
       for (const subject of chunk) {
         const subjectData: Record<string, unknown> = {
           subjectId: subject.subjectId,
@@ -651,11 +658,35 @@ class SchoolDatabaseService {
           duration: subject.duration || '1',
           updatedAt: new Date(),
         };
+        if (subject.subjectType) subjectData.subjectType = subject.subjectType;
+        if (subject.schedules) subjectData.schedules = subject.schedules;
         if (!existingIds.has(subject.subjectId)) subjectData.createdAt = new Date();
         batch.set(doc(database, this.subjectsCollection, subject.subjectId), subjectData, { merge: true });
       }
-      await batch.commit();
-    }
+    }, database);
+  }
+
+  /**
+   * Commit rows in write batches, several batches in parallel, reporting rows written.
+   * Whitelist writes are idempotent merges, so a retried batch is safe.
+   */
+  private async commitInBatches<T>(
+    rows: T[],
+    onProgress: ProgressCallback | undefined,
+    fill: (batch: WriteBatch, chunk: T[]) => void,
+    database: Firestore
+  ): Promise<void> {
+    let done = 0;
+    onProgress?.(0, rows.length);
+    await runPool(chunkArray(rows, UPLOAD_BATCH_SIZE), UPLOAD_CONCURRENCY, async chunk => {
+      await withRetry(() => {
+        const batch = writeBatch(database);
+        fill(batch, chunk);
+        return batch.commit();
+      });
+      done += chunk.length;
+      onProgress?.(done, rows.length);
+    });
   }
 
   /**

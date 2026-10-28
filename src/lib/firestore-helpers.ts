@@ -122,3 +122,27 @@ export function chunkArray<T>(arr: T[], size: number): T[][] {
   }
   return chunks;
 }
+
+/** Reports progress of a long-running operation (e.g. a whitelist upload). */
+export type ProgressCallback = (done: number, total: number) => void;
+
+/**
+ * Run `fn` over `items` with at most `concurrency` calls in flight.
+ * Stops starting new items after the first error and rethrows it once running calls settle.
+ */
+export async function runPool<T>(items: T[], concurrency: number, fn: (item: T, index: number) => Promise<void>): Promise<void> {
+  let next = 0;
+  let failure: { error: unknown } | null = null;
+  const worker = async () => {
+    while (!failure && next < items.length) {
+      const index = next++;
+      try {
+        await fn(items[index], index);
+      } catch (error) {
+        failure = failure || { error };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+  if (failure) throw (failure as { error: unknown }).error;
+}
