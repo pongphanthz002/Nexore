@@ -81,3 +81,25 @@ html, body {
   overscroll-behavior: none;
   overscroll-behavior-y: none;
 }
+
+/* Timetable subject blocks (colours come from hueVars in src/lib/timetable.ts) */
+:root {
+  --tt-card: #ffffff;
+}
+html.dark {
+  --tt-card: #1f2937;
+}
+.timetable-block {
+  background: var(--sb);
+  box-shadow: inset 4px 0 0 var(--sbar);
+}
+.timetable-block.current {
+  box-shadow: inset 4px 0 0 var(--sbar), 0 0 0 2px var(--sbar);
+}
+.timetable-block.past {
+  background: color-mix(in srgb, var(--sb) 55%, var(--tt-card));
+  box-shadow: inset 4px 0 0 color-mix(in srgb, var(--sbar) 45%, var(--tt-card));
+}
+.timetable-block.past > * {
+  opacity: 0.6;
+}

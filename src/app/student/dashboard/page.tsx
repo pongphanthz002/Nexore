@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import StudentScheduleWidget from '@/components/StudentScheduleWidget';
+import TodayTimetable from '@/components/timetable/TodayTimetable';
 import StudentHeader from '@/components/StudentHeader';
 import StudentFooter from '@/components/StudentFooter';
 import { useAuth } from '@/contexts/AuthContext';
@@ -95,8 +95,8 @@ export default function StudentDashboard() {
       {/* Main content */}
       <div className="pt-24 pb-24 px-6">
         <div className="max-w-7xl mx-auto space-y-6">
-          {/* Student Schedule Widget */}
-          <StudentScheduleWidget isDark={isDark} studentInfo={studentInfo} />
+          {/* Today's timetable (opens the full-screen week view) */}
+          {studentInfo && <TodayTimetable role="student" studentInfo={studentInfo} />}
 
           {/* Pending Assignments Section */}
           {!loadingPending && pendingAssignments.length > 0 && (

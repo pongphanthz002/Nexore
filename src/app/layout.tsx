@@ -1,11 +1,17 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Noto_Sans_Thai } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { THEME_COLORS, themeInitScript } from "@/config/theme";
 
-const inter = Inter({ subsets: ["latin"] });
+// One face for Thai and Latin on every device (system Thai fonts differ between iOS, Android and PC)
+const notoSansThai = Noto_Sans_Thai({
+  subsets: ["thai", "latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
+  variable: "--font-sans",
+});
 
 export const metadata: Metadata = {
   title: "Nexore - Learning Management System",
@@ -42,7 +48,7 @@ export default function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="theme-color" content={THEME_COLORS.light} />
       </head>
-      <body className={inter.className}>
+      <body className={`${notoSansThai.variable} ${notoSansThai.className}`}>
         <ThemeProvider>
           <AuthProvider>{children}</AuthProvider>
         </ThemeProvider>

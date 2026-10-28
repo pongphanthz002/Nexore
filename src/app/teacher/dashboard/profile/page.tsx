@@ -1,7 +1,7 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { schoolDatabaseService, SubjectData, StudentData, ScheduleSlot, TeacherFirebaseConfig } from '@/services/school-database.service';
 import { teacherDatabaseService, normalizeFirebaseConfig } from '@/services/teacher-database.service';
@@ -9,9 +9,29 @@ import { firestoreService } from '@/services/firestore.service';
 import { firebaseManager } from '@/lib/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import type { FirebaseConfig } from '@/types/firebase.types';
-import { Edit, Save, X, Settings, Files, Eye, EyeOff, AlertTriangle, Loader2, BookOpen, Plus, Trash2, Clock, Calendar, Users, GraduationCap, ChevronRight, Search, CheckSquare, Square } from 'lucide-react';
+import { Edit, Save, X, Settings, Files, Eye, EyeOff, AlertTriangle, Loader2, BookOpen, Plus, Trash2, Clock, Calendar, Users, GraduationCap, ChevronRight, Search, CheckSquare, Square, Pencil } from 'lucide-react';
 import { GoogleBasicSubjectIcon, GoogleElectiveSubjectIcon } from '@/components/GoogleSubjectIcons';
 import { useTheme } from '@/contexts/ThemeContext';
+
+function emptySubjectForm(): {
+  subjectName: string;
+  subjectCode: string;
+  subjectType: 'basic' | 'elective';
+  classroom: string;
+  room: string;
+  studentIds: string[];
+  schedules: ScheduleSlot[];
+} {
+  return {
+    subjectName: '',
+    subjectCode: '',
+    subjectType: 'basic',
+    classroom: '',
+    room: '',
+    studentIds: [],
+    schedules: [{ day: 'จันทร์', time: '08:30-09:30', duration: '1' }],
+  };
+}
 
 export default function ProfilePage() {
   const { userAccount, setUserAccount, invalidateCache, user } = useAuth();
@@ -46,21 +66,14 @@ export default function ProfilePage() {
   const [teacherConfig, setTeacherConfig] = useState<TeacherFirebaseConfig | null>(null);
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
   const [studentClassFilter, setStudentClassFilter] = useState<string>('all');
-  const [newSubjectData, setNewSubjectData] = useState<{
-    subjectName: string;
-    subjectType: 'basic' | 'elective';
-    classroom: string;
-    studentIds: string[];
-    schedules: ScheduleSlot[];
-  }>({
-    subjectName: '',
-    subjectType: 'basic',
-    classroom: '',
-    studentIds: [],
-    schedules: [{ day: 'จันทร์', time: '08:30-09:30', duration: '1' }]
-  });
+  const [newSubjectData, setNewSubjectData] = useState(emptySubjectForm);
+  // Edit mode of the subject form, the subject menu (right-click / long press) and the removal warning
+  const [editingSubject, setEditingSubject] = useState<SubjectData | null>(null);
+  const [subjectMenu, setSubjectMenu] = useState<{ subject: SubjectData; x: number; y: number } | null>(null);
+  const [removalConfirm, setRemovalConfirm] = useState<{ count: number } | null>(null);
+  const longPress = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
 
-  const [formData, setFormData] = useState({ name: '' });
+  const [formData, setFormData] = useState({ name: '', defaultRoom: '' });
   const [configFormData, setConfigFormData] = useState({
     apiKey: '',
     authDomain: '',
@@ -72,9 +85,13 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (userAccount) {
-      setFormData({ name: userAccount.name || '' });
+      setFormData(prev => ({ ...prev, name: userAccount.name || '' }));
     }
   }, [userAccount]);
+
+  useEffect(() => {
+    setFormData(prev => ({ ...prev, defaultRoom: teacherConfig?.defaultRoom || '' }));
+  }, [teacherConfig]);
 
   useEffect(() => {
     async function loadTeachers() {
@@ -147,7 +164,56 @@ export default function ProfilePage() {
     }));
   };
 
-  const handleAddSubject = async () => {
+  /** Student IDs a subject teaches: the whole classroom for basic subjects, the chosen list for electives. */
+  const rosterOf = (sub: { subjectType?: string; classroom: string; studentIds?: string[] }) =>
+    sub.subjectType === 'elective'
+      ? sub.studentIds || []
+      : allStudents.filter(st => st.class === sub.classroom).map(st => st.studentId);
+
+  const openSubjectEditor = (sub: SubjectData | null) => {
+    setSubjectMenu(null);
+    setEditingSubject(sub);
+    setNewSubjectData(sub ? {
+      subjectName: sub.subjectName,
+      subjectCode: sub.subjectCode || '',
+      subjectType: sub.subjectType || 'basic',
+      classroom: sub.classroom,
+      room: sub.room || '',
+      studentIds: sub.studentIds || [],
+      schedules: sub.schedules && sub.schedules.length > 0
+        ? sub.schedules.map(sc => ({ ...sc }))
+        : [{ day: sub.day || 'จันทร์', time: sub.time || '08:30-09:30', duration: sub.duration || '1' }],
+    } : emptySubjectForm());
+    setShowAddSubjectModal(true);
+  };
+
+  const closeSubjectEditor = () => {
+    setShowAddSubjectModal(false);
+    setEditingSubject(null);
+    setRemovalConfirm(null);
+    setStudentSearchQuery('');
+    setStudentClassFilter('all');
+    setNewSubjectData(emptySubjectForm());
+  };
+
+  // Right-click (mouse) or press-and-hold (touch) on a subject opens its menu
+  const openSubjectMenu = (subject: SubjectData, x: number, y: number) => {
+    setSubjectMenu({ subject, x: Math.min(x, window.innerWidth - 216), y: Math.min(y, window.innerHeight - 120) });
+  };
+  const startLongPress = (e: React.PointerEvent, subject: SubjectData) => {
+    if (e.pointerType === 'mouse') return;
+    const { clientX: x, clientY: y } = e;
+    longPress.current = { x, y, timer: setTimeout(() => { longPress.current = null; openSubjectMenu(subject, x, y); }, 500) };
+  };
+  const cancelLongPress = (e?: React.PointerEvent) => {
+    const lp = longPress.current;
+    if (!lp) return;
+    if (e?.type === 'pointermove' && Math.hypot(e.clientX - lp.x, e.clientY - lp.y) < 8) return;
+    clearTimeout(lp.timer);
+    longPress.current = null;
+  };
+
+  const handleAddSubject = async (confirmedRemoval = false) => {
     if (!userAccount?.schoolFirebaseConfig || !userAccount?.userId) {
       alert('ไม่พบข้อมูลครูผู้สอนหรือข้อมูลโรงเรียน');
       return;
@@ -178,38 +244,48 @@ export default function ProfilePage() {
     setIsSavingSubject(true);
     try {
       const primarySlot = newSubjectData.schedules[0] || { day: 'จันทร์', time: '08:30-09:30', duration: '1' };
-      const subject: any = {
-        subjectId: `SUB${Date.now()}`,
-        teacherId: userAccount.userId,
+      const fields = {
         subjectName: newSubjectData.subjectName.trim(),
+        subjectCode: newSubjectData.subjectCode.trim(),
         subjectType: newSubjectData.subjectType,
         classroom: finalClassroom,
+        room: newSubjectData.room.trim(),
         day: primarySlot.day || 'จันทร์',
         time: primarySlot.time || '08:30-09:30',
         duration: primarySlot.duration || '1',
-        schedules: newSubjectData.schedules
+        schedules: newSubjectData.schedules,
+        studentIds: newSubjectData.subjectType === 'elective' ? newSubjectData.studentIds : [],
       };
 
-      if (newSubjectData.subjectType === 'elective') {
-        subject.studentIds = newSubjectData.studentIds;
+      if (editingSubject) {
+        // Students who leave the subject (room change or removed from an elective) lose its data
+        const after = new Set(rosterOf(fields));
+        const removed = rosterOf(editingSubject).filter(id => !after.has(id));
+        const dataConfig = teacherConfig?.firebaseConfig || userAccount.schoolFirebaseConfig;
+        if (removed.length > 0) {
+          if (!confirmedRemoval) {
+            const hasData = await teacherDatabaseService.subjectHasData(dataConfig, editingSubject.subjectId).catch(() => true);
+            if (hasData) {
+              setRemovalConfirm({ count: removed.length });
+              return;
+            }
+          }
+          await teacherDatabaseService.deleteSubjectStudentData(dataConfig, editingSubject.subjectId, removed);
+        }
+        await schoolDatabaseService.updateSubject(userAccount.schoolFirebaseConfig, editingSubject.subjectId, fields);
+      } else {
+        await schoolDatabaseService.addSubject(userAccount.schoolFirebaseConfig, {
+          subjectId: `SUB${Date.now()}`,
+          teacherId: userAccount.userId,
+          ...fields,
+        });
       }
-
-      await schoolDatabaseService.addSubject(userAccount.schoolFirebaseConfig, subject);
       invalidateCache();
       await loadTeacherSubjects();
-      setShowAddSubjectModal(false);
-      setStudentSearchQuery('');
-      setStudentClassFilter('all');
-      setNewSubjectData({
-        subjectName: '',
-        subjectType: 'basic',
-        classroom: '',
-        studentIds: [],
-        schedules: [{ day: 'จันทร์', time: '08:30-09:30', duration: '1' }]
-      });
+      closeSubjectEditor();
     } catch (error) {
-      console.error('Error adding subject:', error);
-      alert('ไม่สามารถเพิ่มวิชาเรียนได้');
+      console.error('Error saving subject:', error);
+      alert(editingSubject ? 'ไม่สามารถบันทึกการแก้ไขได้' : 'ไม่สามารถเพิ่มวิชาเรียนได้');
     } finally {
       setIsSavingSubject(false);
     }
@@ -313,15 +389,26 @@ export default function ProfilePage() {
     }));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (userAccount) {
       setUserAccount({ ...userAccount, name: formData.name });
+      const room = formData.defaultRoom.trim();
+      if (room !== (teacherConfig?.defaultRoom || '')) {
+        try {
+          await schoolDatabaseService.updateTeacherDefaultRoom(userAccount.schoolFirebaseConfig, userAccount.userId, room);
+          setTeacherConfig(prev => (prev ? { ...prev, defaultRoom: room } : prev));
+        } catch (error) {
+          console.error('Error saving default room:', error);
+          alert('บันทึกห้องประจำไม่สำเร็จ ลองอีกครั้ง');
+          return;
+        }
+      }
     }
     setIsEditing(false);
   };
 
   const handleCancel = () => {
-    setFormData({ name: userAccount?.name || '' });
+    setFormData({ name: userAccount?.name || '', defaultRoom: teacherConfig?.defaultRoom || '' });
     setSelectedTeacherId('');
     setIsEditing(false);
   };
@@ -540,6 +627,25 @@ export default function ProfilePage() {
             </div>
 
             <div>
+              <label htmlFor="default-room" className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>ห้องประจำ</label>
+              {isEditing ? (
+                <>
+                  <input
+                    id="default-room"
+                    type="text"
+                    value={formData.defaultRoom}
+                    placeholder="เช่น 204, ห้องภาษา 2"
+                    onChange={(e) => setFormData({ ...formData, defaultRoom: e.target.value })}
+                    className={`w-full mt-1 p-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+                  />
+                  <p className={`mt-1 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>วิชาที่ไม่ได้ตั้งห้องที่สอนจะใช้ห้องนี้ นักเรียนจะเห็นห้องนี้ในตารางเรียน</p>
+                </>
+              ) : (
+                <p className={`text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>{teacherConfig?.defaultRoom || '-'}</p>
+              )}
+            </div>
+
+            <div>
               <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>อีเมล</label>
               <p className={`text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>{userAccount?.email || '-'}</p>
             </div>
@@ -632,7 +738,7 @@ export default function ProfilePage() {
               <div className="text-left">
                 <h2 className="font-bold text-lg leading-tight">จัดการวิชาเรียนที่สอน</h2>
                 <p className={`text-xs mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  เพิ่มหรือลบรายวิชาพื้นฐานและเพิ่มเติม
+                  เพิ่ม แก้ไข หรือลบรายวิชาพื้นฐานและเพิ่มเติม
                 </p>
               </div>
             </div>
@@ -983,7 +1089,7 @@ export default function ProfilePage() {
                       <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
-                        onClick={() => setShowAddSubjectModal(true)}
+                        onClick={() => openSubjectEditor(null)}
                         title="เพิ่มวิชา"
                         className="p-2 sm:p-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white shadow-md shadow-red-500/20 transition-all flex items-center justify-center"
                       >
@@ -999,7 +1105,7 @@ export default function ProfilePage() {
                     </div>
                   </div>
                   <p className={`text-xs sm:text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    มีทั้งหมด {teacherSubjects.length} วิชา
+                    มีทั้งหมด {teacherSubjects.length} วิชา · กดค้างหรือคลิกขวาที่วิชาเพื่อแก้ไขหรือลบ
                   </p>
                 </div>
 
@@ -1018,7 +1124,7 @@ export default function ProfilePage() {
                       <p className="font-semibold text-base">ยังไม่มีวิชาเรียนที่สอน</p>
                       <p className="text-xs opacity-70 mt-1 mb-4">กดปุ่ม &quot;+&quot; ด้านบนเพื่อเพิ่มวิชาเรียนใหม่</p>
                       <button
-                        onClick={() => setShowAddSubjectModal(true)}
+                        onClick={() => openSubjectEditor(null)}
                         className="px-4 py-2 rounded-xl bg-red-500 text-white font-medium text-sm inline-flex items-center gap-1.5 shadow-md shadow-red-500/20"
                       >
                         <Plus size={16} />
@@ -1026,17 +1132,34 @@ export default function ProfilePage() {
                       </button>
                     </div>
                   ) : (
-                    teacherSubjects.map((sub) => {
+                    <div className={`rounded-2xl border overflow-hidden divide-y ${isDark ? 'border-gray-700 divide-gray-700 bg-gray-900/40' : 'border-gray-200 divide-gray-200 bg-white'}`}>
+                    {teacherSubjects.map((sub) => {
                       const isElective = sub.subjectType === 'elective';
                       const studentCount = isElective && Array.isArray(sub.studentIds) ? sub.studentIds.length : null;
 
                       return (
                         <div
                           key={sub.subjectId}
-                          className={`p-4 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
-                            isDark 
-                              ? 'bg-gray-900/60 border-gray-700/80 hover:border-gray-600' 
-                              : 'bg-gray-50/80 border-gray-200/90 hover:border-gray-300'
+                          tabIndex={0}
+                          aria-haspopup="menu"
+                          aria-label={`${sub.subjectName} ${sub.classroom} กดค้างหรือคลิกขวาเพื่อแก้ไขหรือลบ`}
+                          onContextMenu={(e) => { e.preventDefault(); openSubjectMenu(sub, e.clientX, e.clientY); }}
+                          onPointerDown={(e) => startLongPress(e, sub)}
+                          onPointerMove={cancelLongPress}
+                          onPointerUp={() => cancelLongPress()}
+                          onPointerCancel={() => cancelLongPress()}
+                          onKeyDown={(e) => {
+                            if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+                              e.preventDefault();
+                              const r = e.currentTarget.getBoundingClientRect();
+                              openSubjectMenu(sub, r.right - 216, r.bottom);
+                            }
+                          }}
+                          style={{ WebkitTouchCallout: 'none' }}
+                          className={`p-4 flex items-center justify-between gap-3 select-none cursor-context-menu outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${
+                            subjectMenu?.subject.subjectId === sub.subjectId
+                              ? isDark ? 'bg-gray-700/60' : 'bg-gray-100'
+                              : isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'
                           }`}
                         >
                           <div className="flex-1 min-w-0">
@@ -1065,6 +1188,8 @@ export default function ProfilePage() {
                               <span className="font-semibold text-red-500 dark:text-red-400">
                                 ห้อง {sub.classroom}
                               </span>
+                              {sub.subjectCode && <span>• {sub.subjectCode}</span>}
+                              <span>• สอนที่ {sub.room || (teacherConfig?.defaultRoom ? `${teacherConfig.defaultRoom} (ห้องประจำ)` : '-')}</span>
                               {sub.schedules && sub.schedules.length > 0 ? (
                                 sub.schedules.map((sch, i) => (
                                   <span key={i} className="flex items-center gap-1">
@@ -1099,19 +1224,10 @@ export default function ProfilePage() {
                             </div>
                           </div>
 
-                          <button
-                            onClick={() => {
-                              setSubjectToDelete(sub);
-                              setShowDeleteSubjectConfirm(true);
-                            }}
-                            title="ลบวิชาเรียน"
-                            className="p-2 rounded-xl text-red-500 hover:bg-red-500/10 transition-colors"
-                          >
-                            <Trash2 size={18} />
-                          </button>
                         </div>
                       );
-                    })
+                    })}
+                    </div>
                   )}
                 </div>
 
@@ -1128,6 +1244,41 @@ export default function ProfilePage() {
                 </div>
               </motion.div>
             </div>
+          )}
+        </AnimatePresence>
+
+        {/* Subject menu (right-click / long press) */}
+        <AnimatePresence>
+          {subjectMenu && (
+            <>
+              <div className="fixed inset-0 z-[70]" onPointerDown={() => setSubjectMenu(null)} />
+              <motion.div
+                role="menu"
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.96 }}
+                transition={{ duration: 0.16 }}
+                style={{ left: Math.max(8, subjectMenu.x), top: subjectMenu.y }}
+                onKeyDown={(e) => { if (e.key === 'Escape') setSubjectMenu(null); }}
+                className={`fixed z-[71] w-52 rounded-2xl p-1.5 shadow-xl origin-top-left ${isDark ? 'bg-gray-800 text-white ring-1 ring-white/10' : 'bg-white text-gray-900 ring-1 ring-black/5'}`}
+              >
+                <button
+                  role="menuitem"
+                  autoFocus
+                  onClick={() => openSubjectEditor(subjectMenu.subject)}
+                  className={`flex w-full items-center gap-2.5 rounded-xl px-3 h-11 text-sm font-semibold ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                >
+                  <Pencil size={18} /> แก้ไข
+                </button>
+                <button
+                  role="menuitem"
+                  onClick={() => { setSubjectToDelete(subjectMenu.subject); setShowDeleteSubjectConfirm(true); setSubjectMenu(null); }}
+                  className={`flex w-full items-center gap-2.5 rounded-xl px-3 h-11 text-sm font-semibold text-red-500 ${isDark ? 'hover:bg-gray-700' : 'hover:bg-red-50'}`}
+                >
+                  <Trash2 size={18} /> ลบวิชา
+                </button>
+              </motion.div>
+            </>
           )}
         </AnimatePresence>
 
@@ -1148,10 +1299,10 @@ export default function ProfilePage() {
                     <div className={`p-2.5 rounded-xl ${isDark ? 'bg-red-950/40 text-red-400' : 'bg-red-50 text-red-600'}`}>
                       <BookOpen size={22} />
                     </div>
-                    <h3 className="text-xl font-bold">เพิ่มวิชาเรียนใหม่</h3>
+                    <h3 className="text-xl font-bold">{editingSubject ? 'แก้ไขวิชาเรียน' : 'เพิ่มวิชาเรียนใหม่'}</h3>
                   </div>
                   <button 
-                    onClick={() => setShowAddSubjectModal(false)}
+                    onClick={closeSubjectEditor}
                     className={`p-2 rounded-xl transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}
                   >
                     <X size={20} />
@@ -1169,6 +1320,23 @@ export default function ProfilePage() {
                       placeholder="เช่น คณิตศาสตร์พื้นฐาน, วิทยาการคำนวณ"
                       value={newSubjectData.subjectName}
                       onChange={(e) => setNewSubjectData({ ...newSubjectData, subjectName: e.target.value })}
+                      className={`w-full p-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-red-500 ${
+                        isDark ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                      }`}
+                    />
+                  </div>
+
+                  {/* Subject code */}
+                  <div>
+                    <label htmlFor="subject-code" className={`text-xs font-semibold block mb-1.5 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                      รหัสวิชา
+                    </label>
+                    <input
+                      id="subject-code"
+                      type="text"
+                      placeholder="เช่น อ31101"
+                      value={newSubjectData.subjectCode}
+                      onChange={(e) => setNewSubjectData({ ...newSubjectData, subjectCode: e.target.value })}
                       className={`w-full p-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-red-500 ${
                         isDark ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
                       }`}
@@ -1269,6 +1437,24 @@ export default function ProfilePage() {
                       />
                     </div>
                   )}
+
+                  {/* Teaching room (empty = the teacher's default room) */}
+                  <div>
+                    <label htmlFor="subject-room" className={`text-xs font-semibold block mb-1.5 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                      ห้องที่สอน
+                    </label>
+                    <input
+                      id="subject-room"
+                      type="text"
+                      placeholder={teacherConfig?.defaultRoom ? `ใช้ห้องประจำ (${teacherConfig.defaultRoom})` : 'เช่น 204, แล็บ 2'}
+                      value={newSubjectData.room}
+                      onChange={(e) => setNewSubjectData({ ...newSubjectData, room: e.target.value })}
+                      className={`w-full p-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-red-500 ${
+                        isDark ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                      }`}
+                    />
+                    <p className={`mt-1 text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>เว้นว่างไว้เพื่อใช้ห้องประจำจากข้อมูลส่วนตัว</p>
+                  </div>
 
                   {/* Elective Student Selector: Cross-Classroom Support */}
                   {newSubjectData.subjectType === 'elective' && (
@@ -1503,7 +1689,7 @@ export default function ProfilePage() {
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => setShowAddSubjectModal(false)}
+                    onClick={closeSubjectEditor}
                     disabled={isSavingSubject}
                     className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all ${
                       isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -1514,13 +1700,52 @@ export default function ProfilePage() {
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={handleAddSubject}
+                    onClick={() => handleAddSubject()}
                     disabled={isSavingSubject}
                     className="flex-1 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-md shadow-red-500/20 transition-all disabled:opacity-50"
                   >
                     {isSavingSubject && <Loader2 size={16} className="animate-spin" />}
-                    {isSavingSubject ? 'กำลังบันทึก...' : 'บันทึกวิชาเรียน'}
+                    {isSavingSubject ? 'กำลังบันทึก...' : editingSubject ? 'บันทึกการแก้ไข' : 'บันทึกวิชาเรียน'}
                   </motion.button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Students leaving an edited subject lose its data: confirm first */}
+        <AnimatePresence>
+          {removalConfirm && (
+            <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50">
+              <motion.div
+                role="alertdialog"
+                aria-modal="true"
+                aria-labelledby="removal-title"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className={`w-full max-w-md rounded-3xl p-6 shadow-2xl ${isDark ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'}`}
+              >
+                <h3 id="removal-title" className="text-lg font-bold mb-2">นักเรียน {removalConfirm.count} คนจะไม่อยู่ในวิชานี้แล้ว</h3>
+                <p className={`text-sm leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                  ข้อมูลการเช็คชื่อและคะแนนของนักเรียนกลุ่มนี้ในวิชา {editingSubject?.subjectName} จะถูกลบถาวร และย้อนกลับไม่ได้
+                </p>
+                <div className="flex gap-3 mt-6">
+                  <button
+                    onClick={() => setRemovalConfirm(null)}
+                    disabled={isSavingSubject}
+                    className={`flex-1 py-3 rounded-xl text-sm font-semibold ${isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-700'}`}
+                  >
+                    ยกเลิก
+                  </button>
+                  <button
+                    onClick={async () => { await handleAddSubject(true); setRemovalConfirm(null); }}
+                    disabled={isSavingSubject}
+                    className="flex-1 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {isSavingSubject && <Loader2 size={16} className="animate-spin" />}
+                    ลบข้อมูลและบันทึก
+                  </button>
                 </div>
               </motion.div>
             </div>

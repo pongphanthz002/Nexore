@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import GoogleSheetsIcon from '@/components/GoogleSheetsIcon';
+import AttendanceStatusSelect from '@/components/AttendanceStatusSelect';
 import { useTheme } from '@/contexts/ThemeContext';
 
 // Parse "08:30-09:30" → { startMinutes, endMinutes }
@@ -107,40 +108,18 @@ function parseInputDateToFormat(dateStr: string): string {
 
 // Map attendance status to beautiful background/border/text colors
 function getStatusStyles(status: string, isDark: boolean): string {
-  switch (status) {
-    case 'มา':
-      return isDark 
-        ? 'bg-gray-800 border-gray-700 text-white' 
-        : 'bg-white border-gray-200 text-gray-900';
-    case 'ขาด':
-      return isDark 
-        ? 'bg-red-950/40 border-red-900/60 text-red-200' 
-        : 'bg-red-50 border-red-200 text-red-900';
-    case 'สาย':
-      return isDark 
-        ? 'bg-yellow-950/40 border-yellow-900/60 text-yellow-200' 
-        : 'bg-yellow-50 border-yellow-200 text-yellow-900';
-    case 'ลาป่วย':
-      return isDark 
-        ? 'bg-emerald-950/40 border-emerald-900/60 text-emerald-200' 
-        : 'bg-emerald-50 border-emerald-200 text-emerald-900';
-    case 'ลากิจ':
-      return isDark 
-        ? 'bg-fuchsia-950/40 border-fuchsia-900/60 text-fuchsia-200' 
-        : 'bg-fuchsia-50 border-fuchsia-200 text-fuchsia-900';
-    case 'กิจกรรม':
-      return isDark 
-        ? 'bg-sky-950/40 border-sky-900/60 text-sky-200' 
-        : 'bg-sky-50 border-sky-200 text-sky-900';
-    case 'หนี':
-      return isDark 
-        ? 'bg-orange-950/40 border-orange-900/60 text-orange-200' 
-        : 'bg-orange-50 border-orange-200 text-orange-900';
-    default:
-      return isDark 
-        ? 'bg-gray-700/50 border-gray-600 text-gray-300' 
-        : 'bg-gray-50 border-gray-100 text-gray-500';
-  }
+  // Same hues as AttendanceStatusSelect; "มา" stays neutral so exceptions stand out
+  const tint: Record<string, [string, string]> = {
+    'มา': ['bg-white border-gray-200 text-gray-900', 'bg-gray-800 border-gray-700 text-white'],
+    'ขาด': ['bg-red-50 border-red-200 text-red-900', 'bg-red-950/40 border-red-900/60 text-red-100'],
+    'สาย': ['bg-amber-50 border-amber-200 text-amber-900', 'bg-amber-950/40 border-amber-900/60 text-amber-100'],
+    'ลาป่วย': ['bg-sky-50 border-sky-200 text-sky-900', 'bg-sky-950/40 border-sky-900/60 text-sky-100'],
+    'ลากิจ': ['bg-fuchsia-50 border-fuchsia-200 text-fuchsia-900', 'bg-fuchsia-950/40 border-fuchsia-900/60 text-fuchsia-100'],
+    'กิจกรรม': ['bg-teal-50 border-teal-200 text-teal-900', 'bg-teal-950/40 border-teal-900/60 text-teal-100'],
+    'หนี': ['bg-orange-50 border-orange-200 text-orange-900', 'bg-orange-950/40 border-orange-900/60 text-orange-100'],
+  };
+  const pair = tint[status] ?? ['bg-gray-50 border-gray-100 text-gray-500', 'bg-gray-700/50 border-gray-600 text-gray-300'];
+  return pair[isDark ? 1 : 0];
 }
 
 function SchedulesContent() {
@@ -161,6 +140,9 @@ function SchedulesContent() {
   const [selectedDate, setSelectedDate] = useState(formatDateForInput(new Date()));
   const [selectedHours, setSelectedHours] = useState(1);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+  // Rooms checked together (one period taught to several rooms); each record keeps its subject in recordOwner
+  const [groupSubjects, setGroupSubjects] = useState<SubjectData[]>([]);
+  const [recordOwner, setRecordOwner] = useState<Record<string, string>>({});
   const [loadingAttendance, setLoadingAttendance] = useState(false);
   const [fromSection, setFromSection] = useState<'current' | 'all'>('current');
   const [paramsProcessed, setParamsProcessed] = useState(false);
@@ -278,7 +260,20 @@ function SchedulesContent() {
     const subjectId = searchParams.get('subjectId');
     
     if (!loading && !paramsProcessed) {
-      if (subjectId) {
+      const subjectIds = searchParams.get('subjectIds');
+      if (subjectIds) {
+        // From the home timetable: every room of the current period, today, the period's hours
+        setParamsProcessed(true);
+        const group = subjectIds.split(',').map(id => subjects.find(s => s.subjectId === id)).filter((s): s is SubjectData => !!s);
+        if (group.length) {
+          const hours = parseInt(searchParams.get('hours') || '');
+          if (hours) setSelectedHours(hours);
+          setSelectedSubject(group[0]);
+          setFromSection('current');
+          setFilteredStudents(matchStudents(group[0]));
+          loadAttendanceGroup(group, hours || undefined);
+        }
+      } else if (subjectId) {
         // Find subject by ID
         const subject = subjects.find(s => s.subjectId === subjectId);
         if (subject) {
@@ -570,21 +565,20 @@ function SchedulesContent() {
     }, [] as SubjectData[])
     .sort((a, b) => a.classroom.localeCompare(b.classroom, 'th'));
 
+  const matchStudents = (subject: SubjectData) => students
+    .filter(s => {
+      if (subject.subjectType === 'elective' && Array.isArray(subject.studentIds) && subject.studentIds.length > 0) {
+        return subject.studentIds.includes(s.studentId);
+      }
+      return s.class === subject.classroom;
+    })
+    .sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0));
+
   const handleSelectSubject = async (subject: SubjectData, section: 'current' | 'all' = 'current') => {
     setSelectedSubject(subject);
     setFromSection(section);
-    const matched = students
-      .filter(s => {
-        if (subject.subjectType === 'elective' && Array.isArray(subject.studentIds) && subject.studentIds.length > 0) {
-          return subject.studentIds.includes(s.studentId);
-        }
-        return s.class === subject.classroom;
-      })
-      .sort((a, b) => {
-        const numA = parseInt(a.number) || 0;
-        const numB = parseInt(b.number) || 0;
-        return numA - numB;
-      });
+    setGroupSubjects([]);
+    const matched = matchStudents(subject);
     setFilteredStudents(matched);
     
     // Set default hours from subject duration
@@ -599,57 +593,54 @@ function SchedulesContent() {
   };
 
   const handleOpenAttendance = async (subject?: SubjectData | React.MouseEvent, studentList?: StudentData[]) => {
-    // Handle both direct subject parameter and click event
-    const targetSubject = (subject && 'subjectId' in subject) ? subject : selectedSubject;
-    const targetStudents = studentList || filteredStudents;
-    if (!targetSubject) return;
-    
+    // Handle both direct subject parameter and click event; without one, reload the open group
+    if (subject && 'subjectId' in subject) return loadAttendanceGroup([subject], undefined, studentList);
+    const group = groupSubjects.length ? groupSubjects : selectedSubject ? [selectedSubject] : [];
+    if (group.length) await loadAttendanceGroup(group, undefined, studentList);
+  };
+
+  /** Load (or start) the session of every subject in the group for the selected date. New sessions start as "มา". */
+  const loadAttendanceGroup = async (group: SubjectData[], hours?: number, studentList?: StudentData[]) => {
     // Use teacher's Firebase config if available, otherwise use school config (for admin teachers)
     const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
-    
     if (!firebaseConfig) {
       alert('ไม่พบ Firebase Config กรุณาติดต่อผู้ดูแลระบบ');
       return;
     }
-    
+
+    setGroupSubjects(group);
     setIsAttendanceMode(true);
     setLoadingAttendance(true);
-    
-    try {
-      // Convert selectedDate from YYYY-MM-DD to "Mon 23/5" format
-      const formattedDate = parseInputDateToFormat(selectedDate);
-      const existingAttendance = await teacherDatabaseService.getAttendance(
-        firebaseConfig,
-        targetSubject.subjectId,
-        targetSubject.classroom,
-        formattedDate
-      );
-      
-      if (existingAttendance) {
-        setAttendanceRecords(existingAttendance.records);
-        setSelectedHours(existingAttendance.hours);
-      } else {
-        // Initialize empty records
-        const initialRecords: AttendanceRecord[] = targetStudents.map(s => ({
-          studentId: s.studentId,
-          name: s.name,
-          number: s.number,
-          status: ''
-        }));
-        setAttendanceRecords(initialRecords);
+    // Convert selectedDate from YYYY-MM-DD to "Mon 23/5" format
+    const formattedDate = parseInputDateToFormat(selectedDate);
+    const owner: Record<string, string> = {};
+    const records: AttendanceRecord[] = [];
+    let savedHours: number | undefined;
+
+    await Promise.all(group.map(async (target, i) => {
+      const roster = (group.length === 1 && studentList) || matchStudents(target);
+      let existing: AttendanceData | null = null;
+      try {
+        existing = await teacherDatabaseService.getAttendance(firebaseConfig, target.subjectId, target.classroom, formattedDate);
+      } catch (error) {
+        console.error('Error loading attendance:', error);
       }
-    } catch (error) {
-      console.error('Error loading attendance:', error);
-      const initialRecords: AttendanceRecord[] = targetStudents.map(s => ({
-        studentId: s.studentId,
-        name: s.name,
-        number: s.number,
-        status: ''
-      }));
-      setAttendanceRecords(initialRecords);
-    } finally {
-      setLoadingAttendance(false);
-    }
+      if (existing && i === 0) savedHours = existing.hours;
+      const list = existing
+        ? existing.records
+        : roster.map(s => ({ studentId: s.studentId, name: s.name, number: s.number, status: 'มา' as const }));
+      list.forEach(r => { owner[r.studentId] = target.subjectId; });
+      records.push(...list);
+    }));
+
+    // Keep rooms in group order
+    const order = new Map(group.map((g, i) => [g.subjectId, i]));
+    records.sort((a, b) => (order.get(owner[a.studentId]) ?? 0) - (order.get(owner[b.studentId]) ?? 0));
+    setRecordOwner(owner);
+    setAttendanceRecords(records);
+    if (savedHours) setSelectedHours(savedHours);
+    else if (hours) setSelectedHours(hours);
+    setLoadingAttendance(false);
   };
 
   const handleMarkAllPresent = () => {
@@ -665,50 +656,53 @@ function SchedulesContent() {
   };
 
   const handleSaveAttendance = async () => {
-    if (!selectedSubject) return;
-    
+    const group = groupSubjects.length ? groupSubjects : selectedSubject ? [selectedSubject] : [];
+    if (!group.length) return;
+
     // Use teacher's Firebase config if available, otherwise use school config (for admin teachers)
     const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
-    
     if (!firebaseConfig) {
       alert('ไม่พบ Firebase Config กรุณาติดต่อผู้ดูแลระบบ');
       return;
     }
-    
+
     setLoadingAttendance(true);
     try {
       // Convert selectedDate from YYYY-MM-DD to "Mon 23/5" format
       const formattedDate = parseInputDateToFormat(selectedDate);
-      const attendanceData: AttendanceData = {
-        subjectId: selectedSubject.subjectId,
-        subjectName: selectedSubject.subjectName || '',
-        classroom: selectedSubject.classroom,
+      // One session per room, even when the rooms were checked together
+      const saved: AttendanceData[] = group.map(target => ({
+        subjectId: target.subjectId,
+        subjectName: target.subjectName || '',
+        classroom: target.classroom,
         date: formattedDate,
         hours: Number(selectedHours) || 1,
-        records: attendanceRecords,
+        records: group.length === 1
+          ? attendanceRecords
+          : attendanceRecords.filter(r => recordOwner[r.studentId] === target.subjectId),
         createdAt: new Date(),
         updatedAt: new Date(),
-      };
-      
-      await teacherDatabaseService.saveAttendance(firebaseConfig, attendanceData);
-      alert('บันทึกเช็คชื่อสำเร็จ');
-      
+      }));
+      await Promise.all(saved.map(data => teacherDatabaseService.saveAttendance(firebaseConfig, data)));
+      alert(group.length > 1 ? `บันทึกเช็คชื่อ ${group.length} ห้องสำเร็จ` : 'บันทึกเช็คชื่อสำเร็จ');
+
       // Update todayAttendance state after successful save
       const todayFormatted = formatDate(new Date());
       if (formattedDate === todayFormatted) {
-        setTodayAttendance(prev => {
-          const filtered = prev.filter(att => 
-            !(att.subjectId === attendanceData.subjectId && att.classroom === attendanceData.classroom)
-          );
-          return [...filtered, attendanceData];
-        });
+        setTodayAttendance(prev => [
+          ...prev.filter(att => !saved.some(d => d.subjectId === att.subjectId && d.classroom === att.classroom)),
+          ...saved,
+        ]);
       }
-      
-      if (fromSection === 'current') {
+
+      if (searchParams.get('subjectIds')) {
+        // Opened from the home timetable: go back there (its attendance bar is now gone)
+        router.push('/teacher/dashboard');
+      } else if (fromSection === 'current') {
         handleBackToMain();
       } else {
         // Reload summaries before returning to student list
-        await loadSummaries(selectedSubject, filteredStudents);
+        await loadSummaries(selectedSubject ?? group[0], filteredStudents);
         setIsAttendanceMode(false);
       }
     } catch (error) {
@@ -734,6 +728,7 @@ function SchedulesContent() {
 
   const handleBackToMain = () => {
     setSelectedSubject(null);
+    setGroupSubjects([]);
     setIsAttendanceMode(false);
     router.replace('/teacher/dashboard/schedules');
   };
@@ -1041,7 +1036,9 @@ function SchedulesContent() {
                       เช็คชื่อ: {selectedSubject.subjectName}
                     </h1>
                     <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                      ห้อง {selectedSubject.classroom}
+                      {groupSubjects.length > 1
+                        ? `ห้อง ${groupSubjects.map(g => g.classroom).join(', ')} · เรียนรวม บันทึกแยกห้อง`
+                        : `ห้อง ${selectedSubject.classroom}`}
                     </p>
                   </div>
                 </div>
@@ -1104,39 +1101,37 @@ function SchedulesContent() {
                 <div className="space-y-2">
                   {attendanceRecords.map((record, index) => {
                     const statusClass = getStatusStyles(record.status, isDark);
+                    const room = groupSubjects.length > 1 ? groupSubjects.find(g => g.subjectId === recordOwner[record.studentId]) : undefined;
+                    const firstOfRoom = !!room && (index === 0 || recordOwner[attendanceRecords[index - 1].studentId] !== room.subjectId);
                     return (
-                      <motion.div
-                        key={record.studentId}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: index * 0.02 }}
-                        className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${statusClass}`}
-                      >
-                        <span className="w-12 text-center font-medium opacity-80">
-                          {record.number}
-                        </span>
-                        <span className="flex-1 font-bold">
-                          {record.name}
-                        </span>
-                        <select
-                          value={record.status}
-                          onChange={(e) => handleStatusChange(record.studentId, e.target.value)}
-                          className={`px-3 py-2 rounded-lg border text-sm font-semibold transition-all ${
-                            isDark 
-                              ? 'bg-gray-800 border-gray-600 text-white focus:ring-2 focus:ring-blue-500' 
-                              : 'bg-white border-gray-300 text-gray-900 focus:ring-2 focus:ring-blue-500'
-                          }`}
+                      <div key={record.studentId}>
+                        {firstOfRoom && (
+                          <div className={`flex items-baseline justify-between px-1 pb-1 ${index > 0 ? 'pt-4' : ''}`}>
+                            <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{room.classroom}</h2>
+                            <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                              {attendanceRecords.filter(r => recordOwner[r.studentId] === room.subjectId).length} คน
+                            </span>
+                          </div>
+                        )}
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: Math.min(index, 30) * 0.02 }}
+                          className={`flex items-center gap-3 p-3 rounded-xl border transition-colors duration-300 ${statusClass}`}
                         >
-                          <option value="">เลือก</option>
-                          <option value="มา">มา</option>
-                          <option value="ขาด">ขาด</option>
-                          <option value="สาย">สาย</option>
-                          <option value="ลาป่วย">ลาป่วย</option>
-                          <option value="ลากิจ">ลากิจ</option>
-                          <option value="กิจกรรม">กิจกรรม</option>
-                          <option value="หนี">หนี</option>
-                        </select>
-                      </motion.div>
+                          <span className="w-10 text-center font-medium tabular-nums opacity-80">
+                            {record.number}
+                          </span>
+                          <span className="flex-1 min-w-0 font-semibold">
+                            {record.name}
+                          </span>
+                          <AttendanceStatusSelect
+                            value={record.status}
+                            label={record.name}
+                            onChange={status => handleStatusChange(record.studentId, status)}
+                          />
+                        </motion.div>
+                      </div>
                     );
                   })}
                 </div>

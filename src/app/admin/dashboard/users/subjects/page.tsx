@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { schoolDatabaseService, SubjectData, StudentData, ScheduleSlot, SubjectWhitelistRow } from '@/services/school-database.service';
 import { teacherDatabaseService } from '@/services/teacher-database.service';
 import { runPool } from '@/lib/firestore-helpers';
+import { downloadSubjectSheet, parseSubjectRows } from '@/lib/subject-excel';
 import UploadProgressModal, { UploadProgress } from '@/components/UploadProgressModal';
 import * as XLSX from 'xlsx';
 import { Download, Upload, Trash2, Plus, ArrowLeft, Search, BookOpen, Calendar, Clock, Loader2, X } from 'lucide-react';
@@ -37,6 +38,10 @@ export default function SubjectsManagement() {
     toAdd: SubjectWhitelistRow[];
     toDelete: SubjectData[];
     updatedCount: number;
+    /** Subjects with data whose classroom/students change in the file: those two fields are kept. */
+    kept: SubjectData[];
+    /** Electives the file leaves with no students. */
+    emptyElectives: SubjectWhitelistRow[];
   } | null>(null);
 
   const [newSubject, setNewSubject] = useState<{
@@ -171,37 +176,12 @@ export default function SubjectsManagement() {
     }));
   };
 
-  const handleDownload = () => {
-    if (subjects.length === 0) {
-      const template = [
-        {
-          'เลขประจำตัวครู': '',
-          'วิชา': '',
-          'ประเภทวิชา': '',
-          'ห้อง': '',
-          'วัน': '',
-          'เวลา': '',
-          'จำนวนชั่วโมง': ''
-        }
-      ];
-      const worksheet = XLSX.utils.json_to_sheet(template);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'วิชาเรียน');
-      XLSX.writeFile(workbook, 'รายชื่อวิชาเรียน_template.xlsx');
-    } else {
-      const data = subjects.map(s => ({
-        'เลขประจำตัวครู': s.teacherId,
-        'วิชา': s.subjectName,
-        'ประเภทวิชา': s.subjectType === 'elective' ? 'เพิ่มเติม' : 'พื้นฐาน',
-        'ห้อง': s.classroom,
-        'วัน': s.day,
-        'เวลา': s.time,
-        'จำนวนชั่วโมง': s.duration || 1
-      }));
-      const worksheet = XLSX.utils.json_to_sheet(data);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'วิชาเรียน');
-      XLSX.writeFile(workbook, 'รายชื่อวิชาเรียน.xlsx');
+  const handleDownload = async () => {
+    try {
+      await downloadSubjectSheet(subjects);
+    } catch (error) {
+      console.error('Error downloading subjects:', error);
+      alert('ดาวน์โหลดไฟล์ไม่สำเร็จ');
     }
   };
 
@@ -221,91 +201,115 @@ export default function SubjectsManagement() {
     try {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const headers = ((XLSX.utils.sheet_to_json(worksheet, { header: 1 })[0] as unknown[]) || []).map(h => String(h ?? '').trim());
+      const parsed = parseSubjectRows(headers, XLSX.utils.sheet_to_json(worksheet) as Record<string, unknown>[]);
 
       // Subjects already in the system keep their subjectId, so their attendance, scores and
-      // assignments (keyed by subjectId in the teacher DBs) stay attached. A row matches an
-      // existing subject with the same teacher, subject name and classroom.
+      // assignments (keyed by subjectId in the teacher DBs) stay attached. A row matches by its
+      // system ID (รหัสอ้างอิงระบบ) first, so renamed subjects still match; otherwise by
+      // teacher + subject name + classroom.
       const existingSubjects = await schoolDatabaseService.getAllSubjects(userAccount.schoolFirebaseConfig, true);
       const subjectKey = (teacherId: string, subjectName: string, classroom: string) =>
         `${teacherId.trim()}|${subjectName.trim()}|${classroom.trim()}`;
-      const unmatched = new Map<string, SubjectData[]>();
+      const byId = new Map(existingSubjects.map(s => [s.subjectId, s]));
+      const byKey = new Map<string, SubjectData[]>();
       for (const subject of existingSubjects) {
         const key = subjectKey(String(subject.teacherId ?? ''), String(subject.subjectName ?? ''), String(subject.classroom ?? ''));
-        unmatched.set(key, [...(unmatched.get(key) || []), subject]);
+        byKey.set(key, [...(byKey.get(key) || []), subject]);
       }
-      const takeMatch = (key: string): SubjectData | undefined => {
-        const list = unmatched.get(key);
-        const match = list?.shift();
-        if (list && list.length === 0) unmatched.delete(key);
-        return match;
+      const taken = new Set<string>();
+      const take = (subject: SubjectData | undefined) => {
+        if (!subject || taken.has(subject.subjectId)) return undefined;
+        taken.add(subject.subjectId);
+        return subject;
       };
+      const takeMatch = (key: string) => take(byKey.get(key)?.find(s => !taken.has(s.subjectId)));
 
       const rows: SubjectWhitelistRow[] = [];
       const toAdd: SubjectWhitelistRow[] = [];
-      jsonData.forEach((row: any, index: number) => {
-        // Excel may give numeric cells as numbers
-        const teacherId = String(row['เลขประจำตัวครู'] ?? '');
-        const subjectName = String(row['วิชา'] ?? '');
-        const classroomStr = String(row['ห้อง'] ?? '').trim();
-        const day = String(row['วัน'] ?? '');
-        const time = String(row['เวลา'] ?? '');
-        const duration = String(row['จำนวนชั่วโมง'] || '1');
-
-        // Parse subject type from Thai text; leave it unset when the column is blank
-        // so an old template can't turn existing electives into basic subjects
-        const subjectTypeRaw = String(row['ประเภทวิชา'] ?? '').trim();
-        const subjectType = subjectTypeRaw === 'เพิ่มเติม' ? 'elective' : subjectTypeRaw === 'พื้นฐาน' ? 'basic' : undefined;
+      const rosterChanges: { row: SubjectWhitelistRow; existing: SubjectData }[] = [];
+      for (const r of parsed) {
+        if (!r.teacherId || !r.subjectName) continue;
 
         const buildRow = (classroom: string, existing?: SubjectData): SubjectWhitelistRow => {
-          // Replace "/" with "-" in classroom name for valid Firestore document ID
-          // e.g., "ม.1/1" → "ม.1-1"
+          // Replace "/" with "-" in classroom name for valid Firestore document ID, e.g. "ม.1/1" → "ม.1-1"
           const safeClassroom = classroom.replace(/\//g, '-');
+          const first = r.schedules?.[0];
           const result: SubjectWhitelistRow = {
-            subjectId: existing?.subjectId || `SUB${Date.now()}_${index}_${safeClassroom}`,
-            teacherId,
-            subjectName,
+            subjectId: existing?.subjectId || `SUB${Date.now()}_${r.index}_${safeClassroom}`,
+            teacherId: r.teacherId,
+            subjectName: r.subjectName,
             classroom,
-            day,
-            time,
-            duration,
-            subjectType: subjectType || (existing ? undefined : 'basic'),
+            day: first?.day ?? (r.schedules ? '' : existing?.day ?? ''),
+            time: first?.time ?? (r.schedules ? '' : existing?.time ?? ''),
+            duration: first?.duration ?? (r.schedules ? '1' : existing?.duration ?? '1'),
+            subjectType: r.subjectType || (existing ? undefined : 'basic'),
           };
-          // Screens read schedules before day/time: keep the first slot in step with the file
-          const slots = existing?.schedules;
-          if (slots && slots.length > 0) {
-            const first = slots[0];
-            if (first.day !== day || first.time !== time || (first.duration || '1') !== duration) {
-              result.schedules = [{ ...first, day, time, duration }, ...slots.slice(1)];
+          if (r.subjectCode !== undefined) result.subjectCode = r.subjectCode;
+          if (r.room !== undefined) result.room = r.room;
+          if (r.schedules && !r.legacySlot) {
+            result.schedules = r.schedules;
+          } else if (r.legacySlot && first) {
+            // Old one-slot file: screens read schedules before day/time, so keep the first slot in step
+            const slots = existing?.schedules;
+            if (slots && slots.length > 0) {
+              const s0 = slots[0];
+              if (s0.day !== first.day || s0.time !== first.time || (s0.duration || '1') !== first.duration) {
+                result.schedules = [{ ...s0, ...first }, ...slots.slice(1)];
+              }
             }
           }
+          const type = r.subjectType || existing?.subjectType || 'basic';
+          if (r.studentIds !== undefined && type === 'elective') result.studentIds = r.studentIds;
           return result;
         };
 
+        const idMatch = take(r.subjectId ? byId.get(r.subjectId) : undefined);
+        if (idMatch) {
+          const built = buildRow(r.classroom || idMatch.classroom, idMatch);
+          rows.push(built);
+          const lostStudents = built.studentIds !== undefined && (idMatch.studentIds || []).some(id => !built.studentIds!.includes(id));
+          if (built.classroom !== idMatch.classroom || lostStudents) rosterChanges.push({ row: built, existing: idMatch });
+          continue;
+        }
+
         // A downloaded file lists a multi-room subject (e.g. an elective) as one "ม.1/1, ม.1/2" cell
-        const wholeMatch = classroomStr ? takeMatch(subjectKey(teacherId, subjectName, classroomStr)) : undefined;
+        const wholeMatch = r.classroom ? takeMatch(subjectKey(r.teacherId, r.subjectName, r.classroom)) : undefined;
         if (wholeMatch) {
           rows.push(buildRow(wholeMatch.classroom, wholeMatch));
-          return;
+          continue;
         }
 
         // Otherwise a comma-separated cell means one subject per classroom
-        const classrooms = classroomStr.split(',').map((c: string) => c.trim()).filter((c: string) => c);
-        classrooms.forEach((classroom: string) => {
-          const existing = takeMatch(subjectKey(teacherId, subjectName, classroom));
+        const classrooms = r.classroom.split(',').map(c => c.trim()).filter(c => c);
+        classrooms.forEach(classroom => {
+          const existing = takeMatch(subjectKey(r.teacherId, r.subjectName, classroom));
           const built = buildRow(existing?.classroom ?? classroom, existing);
           rows.push(built);
           if (!existing) toAdd.push(built);
         });
+      }
+
+      // Subjects that already have attendance or scores keep their classroom and students
+      // (changing them would orphan that data); teachers change those from their subject menu.
+      const kept: SubjectData[] = [];
+      await runPool(rosterChanges, 5, async ({ row, existing }) => {
+        const teacher = teachers.find(t => t.teacherId === existing.teacherId);
+        const dataConfig = teacher?.firebaseConfig || userAccount.schoolFirebaseConfig;
+        const hasData = await teacherDatabaseService.subjectHasData(dataConfig, existing.subjectId).catch(() => true);
+        if (!hasData) return;
+        row.classroom = existing.classroom;
+        delete row.studentIds;
+        kept.push(existing);
       });
 
-      const toDelete = Array.from(unmatched.values()).flat();
+      const toDelete = existingSubjects.filter(s => !taken.has(s.subjectId));
       const updatedCount = rows.length - toAdd.length;
+      const emptyElectives = rows.filter(row => row.studentIds !== undefined && row.studentIds.length === 0);
 
-      if (toAdd.length > 0 || toDelete.length > 0) {
-        setPendingUpload({ rows, toAdd, toDelete, updatedCount });
+      if (toAdd.length > 0 || toDelete.length > 0 || kept.length > 0 || emptyElectives.length > 0) {
+        setPendingUpload({ rows, toAdd, toDelete, updatedCount, kept, emptyElectives });
         setUploadProgress(null);
         setLoading(false);
         return;
@@ -947,6 +951,33 @@ export default function SubjectsManagement() {
                 วิชาเดิม {pendingUpload.updatedCount} วิชาจะอัปเดตตามไฟล์ โดยข้อมูลเช็คชื่อและคะแนนยังอยู่ครบ
               </p>
             </div>
+
+            {pendingUpload.kept.length > 0 && (
+              <div className={`max-h-40 overflow-y-auto mb-4 rounded-2xl p-4 ${isDark ? 'bg-amber-900/30' : 'bg-amber-50'}`}>
+                <p className={`text-sm mb-1 font-semibold ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
+                  ข้ามการเปลี่ยนห้อง/นักเรียนของวิชาที่มีข้อมูลแล้ว {pendingUpload.kept.length} วิชา
+                </p>
+                <p className={`text-xs mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>ข้อมูลอื่นในแถวยังอัปเดตตามไฟล์ ครูเปลี่ยนห้องหรือนักเรียนได้จากเมนูวิชาที่สอน</p>
+                {pendingUpload.kept.map((subject) => (
+                  <div key={subject.subjectId} className={`py-0.5 text-sm ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                    {subject.subjectName} - {subject.classroom} (ครู {subject.teacherId})
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {pendingUpload.emptyElectives.length > 0 && (
+              <div className={`max-h-40 overflow-y-auto mb-4 rounded-2xl p-4 ${isDark ? 'bg-amber-900/30' : 'bg-amber-50'}`}>
+                <p className={`text-sm mb-2 font-semibold ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
+                  วิชาเพิ่มเติมที่จะไม่มีนักเรียน ({pendingUpload.emptyElectives.length} วิชา)
+                </p>
+                {pendingUpload.emptyElectives.map((subject) => (
+                  <div key={subject.subjectId} className={`py-0.5 text-sm ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                    {subject.subjectName} - {subject.classroom} (ครู {subject.teacherId})
+                  </div>
+                ))}
+              </div>
+            )}
 
             {pendingUpload.toDelete.length > 0 && (
               <div className={`max-h-40 overflow-y-auto mb-4 rounded-2xl p-4 ${isDark ? 'bg-red-900/30' : 'bg-red-50'}`}>

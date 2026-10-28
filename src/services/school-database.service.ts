@@ -12,6 +12,8 @@ export interface TeacherFirebaseConfig {
   uid?: string;
   role?: 'teacher' | 'admin';
   firebaseConfig?: FirebaseConfig | null;
+  /** Room the teacher usually teaches in; subjects without their own `room` use it. */
+  defaultRoom?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -47,6 +49,10 @@ export interface SubjectData {
   subjectType?: 'basic' | 'elective'; // 'basic' = วิชาพื้นฐาน, 'elective' = วิชาเพิ่มเติม
   studentIds?: string[]; // IDs of enrolled students for elective subjects
   schedules?: ScheduleSlot[]; // Multiple teaching schedules (up to 3 days)
+  /** Official subject code shown to users (e.g. "อ31101"); subjectId stays the internal key. */
+  subjectCode?: string;
+  /** Room where the subject is taught; empty = the teacher's defaultRoom. */
+  room?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -82,6 +88,12 @@ export interface SubjectWhitelistRow {
   subjectType?: 'basic' | 'elective';
   /** Only written when provided; omit to keep the subject's existing schedules. */
   schedules?: ScheduleSlot[];
+  /** Only written when the file has the column (blank clears it). */
+  subjectCode?: string;
+  /** Only written when the file has the column (blank = the teacher's default room). */
+  room?: string;
+  /** Electives only; only written when the file has the column. */
+  studentIds?: string[];
 }
 
 /** Whitelist uploads commit this many writes per batch, several batches at a time. */
@@ -660,6 +672,9 @@ class SchoolDatabaseService {
         };
         if (subject.subjectType) subjectData.subjectType = subject.subjectType;
         if (subject.schedules) subjectData.schedules = subject.schedules;
+        if (subject.subjectCode !== undefined) subjectData.subjectCode = subject.subjectCode;
+        if (subject.room !== undefined) subjectData.room = subject.room;
+        if (subject.studentIds !== undefined) subjectData.studentIds = subject.studentIds;
         if (!existingIds.has(subject.subjectId)) subjectData.createdAt = new Date();
         batch.set(doc(database, this.subjectsCollection, subject.subjectId), subjectData, { merge: true });
       }
@@ -700,6 +715,19 @@ class SchoolDatabaseService {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+  }
+
+  /** Teacher edits from the profile's subject menu (merge, keeps fields not passed). */
+  async updateSubject(schoolFirebaseConfig: FirebaseConfig, subjectId: string, patch: Partial<Omit<SubjectData, 'subjectId' | 'createdAt'>>): Promise<void> {
+    this.invalidateSubjects();
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    await setDoc(doc(database, this.subjectsCollection, subjectId), { ...patch, updatedAt: new Date() }, { merge: true });
+  }
+
+  async updateTeacherDefaultRoom(schoolFirebaseConfig: FirebaseConfig, teacherId: string, defaultRoom: string): Promise<void> {
+    this.invalidateTeachers();
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    await setDoc(doc(database, this.teachersCollection, teacherId), { defaultRoom, updatedAt: new Date() }, { merge: true });
   }
 
   async deleteSubject(schoolFirebaseConfig: FirebaseConfig, subjectId: string): Promise<void> {
