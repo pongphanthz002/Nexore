@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
@@ -46,11 +46,7 @@ export default function TeachersManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const lastLoadedConfigRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    loadTeachers();
-  }, [userAccount]);
-
-  const loadTeachers = async (force = false) => {
+  const loadTeachers = useCallback(async (force = false) => {
     try {
       if (!userAccount?.schoolFirebaseConfig) return;
       const configKey = userAccount.schoolFirebaseConfig.projectId;
@@ -65,7 +61,11 @@ export default function TeachersManagement() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userAccount]);
+
+  useEffect(() => {
+    loadTeachers();
+  }, [loadTeachers]);
 
   const filteredTeachers = teachers.filter(teacher =>
     teacher.name.toLowerCase().includes(searchQuery.toLowerCase()) ||

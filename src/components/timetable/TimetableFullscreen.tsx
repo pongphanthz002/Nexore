@@ -142,10 +142,18 @@ export function TimetableFullscreen({ role, week, days, today, now, range, isDar
           </button>
           <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-2">
             <b className="text-[17px] font-semibold">{dayDateLabel(day)}</b>
-            {day === today && (
-              <span className={`self-center rounded-full px-2 text-xs font-semibold leading-[22px] ${role === 'student' ? 'bg-red-600 text-white dark:bg-red-500' : 'bg-gray-900 text-white dark:bg-gray-50 dark:text-gray-900'}`}>
+            {day === today ? (
+              <span className="self-center rounded-full bg-red-600 px-2 text-xs font-semibold leading-[22px] text-white dark:bg-red-500">
                 วันนี้
               </span>
+            ) : days.includes(today) && (
+              <button
+                type="button"
+                onClick={() => go(days.indexOf(today))}
+                className="self-center rounded-full bg-red-50 px-2.5 text-xs font-semibold leading-[26px] text-red-700 transition-transform active:scale-95 dark:bg-red-950/60 dark:text-red-300"
+              >
+                กลับไปวันนี้
+              </button>
             )}
             <small className="text-xs text-gray-600 dark:text-gray-400">
               {role === 'teacher' ? 'ตารางสอน' : 'ตารางเรียน'} · {list.length ? `${periodCount(list)} คาบ` : 'ไม่มีคาบ'}
@@ -164,14 +172,17 @@ export function TimetableFullscreen({ role, week, days, today, now, range, isDar
                 onClick={() => go(i)}
                 aria-current={i === index}
                 aria-label={`${THAI_DAYS[d]}${d === today ? ' (วันนี้)' : ''}`}
-                className={`relative h-9 min-w-9 rounded-full px-1.5 text-[13px] font-semibold transition-colors ${
-                  i === index ? 'bg-gray-900 text-white dark:bg-gray-50 dark:text-gray-900' : 'text-gray-600 dark:text-gray-400'
+                className={`h-9 min-w-9 rounded-full px-1.5 text-[13px] font-semibold transition-colors ${
+                  d === today
+                    ? i === index
+                      ? 'bg-red-600 text-white dark:bg-red-500'
+                      : 'text-red-600 shadow-[inset_0_0_0_1.5px_currentColor] dark:text-red-400'
+                    : i === index
+                      ? 'bg-gray-200 text-gray-900 dark:bg-gray-700 dark:text-gray-50'
+                      : 'text-gray-600 dark:text-gray-400'
                 }`}
               >
                 {THAI_DAYS_SHORT[d]}
-                {d === today && (
-                  <span className={`absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full ${i === index ? 'bg-white dark:bg-gray-900' : 'bg-red-500'}`} />
-                )}
               </button>
             ))}
           </div>

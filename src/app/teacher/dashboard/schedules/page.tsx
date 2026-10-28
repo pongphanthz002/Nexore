@@ -298,6 +298,8 @@ function SchedulesContent() {
         setParamsProcessed(true);
       }
     }
+    // Runs once the query params and subjects are ready; the handlers it calls read the latest state anyway
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, subjects, currentSubjects, loading, paramsProcessed]);
 
   // Helper to get status counts (Updated: Count by hours and new categories)
@@ -552,6 +554,8 @@ function SchedulesContent() {
   // Load attendance summaries when subject is selected or teacher configuration changes
   useEffect(() => {
     loadSummaries();
+    // These are exactly the values loadSummaries reads; it is recreated every render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSubject, filteredStudents, teacherConfig]);
 
   // All unique subjects (unique by subjectName + classroom)
@@ -724,6 +728,8 @@ function SchedulesContent() {
     if (isAttendanceMode && selectedSubject) {
       handleOpenAttendance();
     }
+    // Only a date change should reload the open session, not every state change it reads
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate]);
 
   const handleBackToMain = () => {

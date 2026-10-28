@@ -36,6 +36,8 @@ export default function QRScanner({ onScan, onError, autoStart = true }: QRScann
     if (autoStart && isHttps && !showManualInput) {
       startScanning();
     }
+    // Start only when these flags change; startScanning is recreated every render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoStart, isHttps, showManualInput]);
 
   const startScanning = async () => {

@@ -13,7 +13,7 @@ const PX_PER_MIN = 1.4;
 const LUNCH = { start: 11 * 60 + 50, end: 12 * 60 + 40 };
 
 export const blockState = (entry: TimetableEntry, isToday: boolean, now: number): BlockState =>
-  !isToday ? 'upcoming' : now >= entry.end ? 'past' : now >= entry.start ? 'current' : 'upcoming';
+  !isToday ? 'other' : now >= entry.end ? 'past' : now >= entry.start ? 'current' : 'upcoming';
 
 interface TimetableCardProps {
   role: TimetableRole;

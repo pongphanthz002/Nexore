@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { schoolDatabaseService } from '@/services/school-database.service';
 import StudentHeader from '@/components/StudentHeader';
@@ -18,7 +18,7 @@ export default function StudentLearningPage() {
   const [studentInfo, setStudentInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchStudentInfo = async () => {
+  const fetchStudentInfo = useCallback(async () => {
     setLoading(true);
     try {
       if (!userAccount?.schoolFirebaseConfig) return;
@@ -31,13 +31,13 @@ export default function StudentLearningPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userAccount]);
 
   useEffect(() => {
     if (userAccount?.userId) {
       fetchStudentInfo();
     }
-  }, [userAccount]);
+  }, [userAccount?.userId, fetchStudentInfo]);
 
   if (loading) {
     return (

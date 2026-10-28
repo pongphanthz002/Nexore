@@ -215,23 +215,32 @@ class TeacherDatabaseService {
   }
 
   /**
-   * Delete all data for a specific student from a teacher's database:
-   * their score documents and their entries in attendance summaries.
-   * (Session documents in `attendance` keep the class roster as recorded.)
+   * Delete all data for a specific student from a teacher's database: their score documents,
+   * their entries in attendance summaries and their rows in attendance sessions. Sessions are
+   * searched in `subjectIds` (the student's current subjects) plus every subject whose summary
+   * lists the student, so subjects they already left are cleaned too.
    */
-  async deleteAllStudentData(teacherFirebaseConfig: FirebaseConfig, studentId: string): Promise<void> {
+  async deleteAllStudentData(teacherFirebaseConfig: FirebaseConfig, studentId: string, subjectIds: string[] = []): Promise<void> {
     const database = this.getTeacherDB(teacherFirebaseConfig);
 
     const [scoresSnap, summariesSnap] = await Promise.all([
       getDocs(query(collection(database, 'studentScores'), where('studentId', '==', studentId))),
       getDocs(collection(database, ATTENDANCE_SUMMARIES)),
     ]);
+    const summariesWithStudent = summariesSnap.docs.filter(d => (d.data() as AttendanceSummary).students?.[studentId]);
+
+    const sessionSubjectIds = Array.from(new Set([...subjectIds, ...summariesWithStudent.map(d => d.id)].filter(Boolean)));
+    const sessionSnaps = await Promise.all(chunkArray(sessionSubjectIds, 30).map(ids =>
+      getDocs(query(collection(database, 'attendance'), where('subjectId', 'in', ids)))));
 
     const writes: Array<(batch: ReturnType<typeof writeBatch>) => void> = [];
     scoresSnap.docs.forEach(d => writes.push(batch => batch.delete(d.ref)));
-    summariesSnap.docs
-      .filter(d => (d.data() as AttendanceSummary).students?.[studentId])
-      .forEach(d => writes.push(batch => batch.update(d.ref, { [`students.${studentId}`]: deleteField() })));
+    summariesWithStudent.forEach(d => writes.push(batch => batch.update(d.ref, { [`students.${studentId}`]: deleteField() })));
+    sessionSnaps.flatMap(snap => snap.docs).forEach(d => {
+      const records: AttendanceRecord[] = d.data().records || [];
+      const kept = records.filter(r => String(r.studentId) !== studentId);
+      if (kept.length !== records.length) writes.push(batch => batch.update(d.ref, { records: kept }));
+    });
 
     for (const chunk of chunkArray(writes, 499)) {
       const batch = writeBatch(database);
@@ -593,6 +602,37 @@ class TeacherDatabaseService {
   async deleteAssignment(teacherFirebaseConfig: FirebaseConfig, assignmentId: string): Promise<void> {
     const database = this.getTeacherDB(teacherFirebaseConfig);
     await deleteDoc(doc(database, 'assignments', assignmentId));
+  }
+
+  /**
+   * Delete assignments of one subject/classroom together with their values in
+   * `studentScores.assignmentScores` (one score query, then batched writes).
+   */
+  async deleteAssignmentsWithScores(teacherFirebaseConfig: FirebaseConfig, subjectId: string, classroom: string, assignmentIds: string[]): Promise<void> {
+    if (assignmentIds.length === 0) return;
+    const database = this.getTeacherDB(teacherFirebaseConfig);
+    const scoresSnap = await getDocs(query(
+      collection(database, 'studentScores'),
+      where('subjectId', '==', subjectId),
+      where('classroom', '==', classroom)
+    ));
+
+    const writes: Array<(batch: ReturnType<typeof writeBatch>) => void> = [];
+    scoresSnap.docs.forEach(d => {
+      const scores = (d.data().assignmentScores || {}) as Record<string, unknown>;
+      const present = assignmentIds.filter(id => id in scores);
+      if (present.length === 0) return;
+      const patch: Record<string, unknown> = {};
+      present.forEach(id => { patch[`assignmentScores.${id}`] = deleteField(); });
+      writes.push(batch => batch.update(d.ref, patch));
+    });
+    assignmentIds.forEach(id => writes.push(batch => batch.delete(doc(database, 'assignments', id))));
+
+    for (const chunk of chunkArray(writes, 499)) {
+      const batch = writeBatch(database);
+      chunk.forEach(write => write(batch));
+      await batch.commit();
+    }
   }
 
   async getAssignmentGroups(teacherFirebaseConfig: FirebaseConfig, subjectId: string, classroom: string): Promise<AssignmentGroup[]> {

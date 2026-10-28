@@ -17,6 +17,10 @@ import { isNetworkError } from '@/lib/firestore-helpers';
 import { STORAGE_KEYS } from '@/config/storage.keys';
 import type { FirebaseConfig, UserRole } from '@/types/firebase.types';
 
+/** Width of the left-edge strip where touches are blocked to stop iOS swipe-back. */
+const EDGE_SWIPE_ZONE = 24;
+const INTERACTIVE_SELECTOR = 'a, button, input, select, textarea, label, summary, [role="button"], [role="tab"], [contenteditable="true"]';
+
 export interface UserAccount {
   id: string;
   email: string;
@@ -226,13 +230,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Prevent iOS Safari edge swipe-to-go-back gesture globally
+    // Prevent iOS Safari edge swipe-to-go-back gesture globally. preventDefault on touchstart
+    // also cancels the tap's click, so touches on controls are left alone and the zone is
+    // kept to the screen edge (where the back gesture starts).
     const preventEdgeSwipe = (e: TouchEvent) => {
-      const touchX = e.touches[0].clientX;
-      // Only prevent from left edge (50px) - right edge swipe is for forward navigation
-      if (touchX < 50) {
-        e.preventDefault();
-      }
+      if (e.touches[0].clientX >= EDGE_SWIPE_ZONE) return;
+      const target = e.target as Element | null;
+      if (target?.closest?.(INTERACTIVE_SELECTOR)) return;
+      e.preventDefault();
     };
 
     document.addEventListener('touchstart', preventEdgeSwipe, { passive: false });

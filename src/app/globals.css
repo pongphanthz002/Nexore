@@ -41,6 +41,11 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* No double-tap-to-zoom wait on controls, so taps register at once */
+a, button, input, select, textarea, label, summary, [role="button"], [role="tab"] {
+  touch-action: manipulation;
+}
+
 /* Allow text selection for inputs and textareas */
 input, textarea, [contenteditable] {
   user-select: text;
@@ -96,10 +101,19 @@ html.dark {
 .timetable-block.current {
   box-shadow: inset 4px 0 0 var(--sbar), 0 0 0 2px var(--sbar);
 }
+/* Today's finished periods: a little quieter than what is still to come, but stronger than other days */
 .timetable-block.past {
-  background: color-mix(in srgb, var(--sb) 55%, var(--tt-card));
-  box-shadow: inset 4px 0 0 color-mix(in srgb, var(--sbar) 45%, var(--tt-card));
+  background: color-mix(in srgb, var(--sb) 80%, var(--tt-card));
+  box-shadow: inset 4px 0 0 color-mix(in srgb, var(--sbar) 75%, var(--tt-card));
 }
 .timetable-block.past > * {
+  opacity: 0.85;
+}
+/* Days other than today: clearly lighter, so today always stands out */
+.timetable-block.other {
+  background: color-mix(in srgb, var(--sb) 35%, var(--tt-card));
+  box-shadow: inset 4px 0 0 color-mix(in srgb, var(--sbar) 40%, var(--tt-card));
+}
+.timetable-block.other > * {
   opacity: 0.6;
 }

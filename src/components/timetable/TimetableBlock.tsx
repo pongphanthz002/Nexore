@@ -4,7 +4,8 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { Check } from 'lucide-react';
 import { formatMinutes, hueVars, roomLabel, TimetableEntry, TimetableRole } from '@/lib/timetable';
 
-export type BlockState = 'past' | 'current' | 'upcoming';
+/** Today: past / current / upcoming. Any other day of the week: other (drawn quieter, so today stands out). */
+export type BlockState = 'past' | 'current' | 'upcoming' | 'other';
 
 /** Big line of a block: the rooms for a teacher, the time for a student. */
 function TimeRange({ entry }: { entry: TimetableEntry }) {

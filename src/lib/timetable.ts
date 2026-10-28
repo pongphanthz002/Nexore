@@ -10,7 +10,7 @@ export type TimetableRole = 'teacher' | 'student';
 /** getDay() index → the Thai day name stored on subjects. */
 export const THAI_DAYS = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'] as const;
 export const THAI_DAYS_SHORT = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'] as const;
-const THAI_MONTHS_SHORT = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+export const THAI_MONTHS_SHORT = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
 /** Monday-first week, the order of the day dots. */
 export const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
@@ -113,7 +113,7 @@ export function hueVars(hue: SubjectHue, isDark: boolean): React.CSSProperties {
   return vars as React.CSSProperties;
 }
 
-export function buildHueMap(subjects: SubjectData[]): Map<string, SubjectHue> {
+export function buildHueMap(subjects: { subjectName: string }[]): Map<string, SubjectHue> {
   const map = new Map<string, SubjectHue>();
   for (const s of subjects) {
     if (!map.has(s.subjectName)) map.set(s.subjectName, HUE_ORDER[map.size % HUE_ORDER.length]);

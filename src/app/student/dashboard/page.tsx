@@ -131,7 +131,7 @@ export default function StudentDashboard() {
                         initial={{ opacity: 0, x: -8 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: idx * 0.05 }}
-                        onClick={() => router.push('/student/dashboard/subjects')}
+                        onClick={() => router.push(`/student/dashboard/subjects?subject=${encodeURIComponent(item.subjectId)}`)}
                         className={`p-4 rounded-xl border cursor-pointer transition-all hover:shadow-sm active:scale-[0.98] ${
                           isOverdue
                             ? (isDark ? 'bg-red-950/20 border-red-900/40' : 'bg-red-50/60 border-red-200/60')

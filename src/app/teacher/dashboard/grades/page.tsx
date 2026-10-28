@@ -505,10 +505,23 @@ export default function GradesPage() {
       const targets = list.filter(a => ids.includes(a.id));
       const scored = scoresRef.current.filter(s => targets.some(a => isScored(s.assignmentScores?.[a.id]))).length;
       const names = targets.length === 1 ? `"${targets[0].title}"` : `${targets.length} งาน (${targets.map(a => a.title).join(', ')})`;
-      const detail = scored > 0 ? `\nมีนักเรียนกรอกคะแนนงานเหล่านี้แล้ว ${scored} คน คะแนนเหล่านี้จะไม่ถูกนับอีก` : '';
+      const detail = scored > 0 ? `\nมีนักเรียนกรอกคะแนนงานเหล่านี้แล้ว ${scored} คน คะแนนเหล่านี้จะถูกลบด้วย` : '';
       if (!confirm(`ลบ ${names}?${detail}`)) return;
       try {
-        await Promise.all(targets.map(a => teacherDatabaseService.deleteAssignment(gradeDbConfig, a.id)));
+        // Write queued cells first so none of them re-creates a deleted assignment's score afterwards
+        await autosave.flush();
+        const bySheet = new Map<string, Assignment[]>();
+        targets.forEach(a => {
+          const key = `${a.subjectId}|${a.classroom}`;
+          bySheet.set(key, [...(bySheet.get(key) || []), a]);
+        });
+        await Promise.all(Array.from(bySheet.values()).map(list => teacherDatabaseService.deleteAssignmentsWithScores(
+          gradeDbConfig, list[0].subjectId, list[0].classroom, list.map(a => a.id))));
+        setStudentScores(prev => prev.map(s => {
+          const assignmentScores = { ...s.assignmentScores };
+          ids.forEach(id => { delete assignmentScores[id]; });
+          return { ...s, assignmentScores };
+        }));
       } catch (error) {
         console.error('Error deleting assignments:', error);
         alert('ลบชิ้นงานไม่สำเร็จบางรายการ กำลังโหลดข้อมูลล่าสุด');

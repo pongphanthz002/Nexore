@@ -1,6 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Home, BookOpen, Lightbulb, User } from 'lucide-react';
 
@@ -13,13 +14,23 @@ const StudentFooter = ({ isDark }: StudentFooterProps) => {
   const pathname = usePathname();
 
   const menuItems = [
-    { icon: Home,      path: '/student/dashboard' },
-    { icon: BookOpen,  path: '/student/dashboard/subjects' },
-    { icon: Lightbulb, path: '/student/dashboard/learning' },
-    { icon: User,      path: '/student/dashboard/profile' },
+    { icon: Home, path: '/student/dashboard', label: 'หน้าหลัก' },
+    { icon: BookOpen, path: '/student/dashboard/subjects', label: 'วิชาเรียน' },
+    { icon: Lightbulb, path: '/student/dashboard/learning', label: 'การเรียนรู้' },
+    { icon: User, path: '/student/dashboard/profile', label: 'โปรไฟล์' },
   ];
 
+  // Highlight the tapped item at once while the next page loads
+  const [pending, setPending] = useState<string | null>(null);
+  useEffect(() => { setPending(null); }, [pathname]);
+  // router.push does not prefetch like <Link>; load every tab's page ahead of the tap
+  useEffect(() => {
+    menuItems.forEach(item => router.prefetch(item.path));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router]);
+
   const isActive = (path: string) => {
+    if (pending) return pending === path;
     if (path === '/student/dashboard') {
       return pathname === '/student/dashboard';
     }
@@ -46,7 +57,14 @@ const StudentFooter = ({ isDark }: StudentFooterProps) => {
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
               transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-              onClick={() => router.push(item.path)}
+              type="button"
+              aria-label={item.label}
+              aria-current={active ? 'page' : undefined}
+              onClick={() => {
+                if (active) return;
+                setPending(item.path);
+                router.push(item.path);
+              }}
               className={`p-3 rounded-2xl transition-all flex items-center justify-center ${
                 active
                   ? 'bg-red-500 text-white shadow-md shadow-red-500/30'

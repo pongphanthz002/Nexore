@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
@@ -64,11 +64,7 @@ export default function SubjectsManagement() {
   const [showTeacherDropdown, setShowTeacherDropdown] = useState(false);
   const lastLoadedConfigRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    loadData();
-  }, [userAccount]);
-
-  const loadData = async (force = false) => {
+  const loadData = useCallback(async (force = false) => {
     try {
       if (!userAccount?.schoolFirebaseConfig) return;
       const configKey = userAccount.schoolFirebaseConfig.projectId;
@@ -88,7 +84,11 @@ export default function SubjectsManagement() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userAccount]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Available classrooms from student data
   const availableClassrooms = Array.from(new Set(allStudents.map(s => s.class)))

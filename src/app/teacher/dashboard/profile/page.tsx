@@ -1,7 +1,7 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { schoolDatabaseService, SubjectData, StudentData, ScheduleSlot, TeacherFirebaseConfig } from '@/services/school-database.service';
 import { teacherDatabaseService, normalizeFirebaseConfig } from '@/services/teacher-database.service';
@@ -107,7 +107,7 @@ export default function ProfilePage() {
     loadTeachers();
   }, [userAccount]);
 
-  const loadTeacherSubjects = async () => {
+  const loadTeacherSubjects = useCallback(async () => {
     if (!userAccount?.schoolFirebaseConfig || !userAccount?.userId) return;
     setLoadingSubjects(true);
     try {
@@ -125,11 +125,11 @@ export default function ProfilePage() {
     } finally {
       setLoadingSubjects(false);
     }
-  };
+  }, [userAccount]);
 
   useEffect(() => {
     loadTeacherSubjects();
-  }, [userAccount]);
+  }, [loadTeacherSubjects]);
 
   const handleAddScheduleSlot = () => {
     if (newSubjectData.schedules.length >= 3) return;
