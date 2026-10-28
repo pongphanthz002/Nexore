@@ -1,59 +1,224 @@
 'use client';
 
-import { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
+import { createContext, useContext, useState, ReactNode, useEffect, useRef, useCallback } from 'react';
 import { firebaseManager } from '@/lib/firebase';
-import { 
-  signInWithPopup, 
-  GoogleAuthProvider, 
+import {
+  signInWithPopup,
+  GoogleAuthProvider,
   signOut as firebaseSignOut,
   onAuthStateChanged,
   User,
-  Auth 
+  Auth
 } from 'firebase/auth';
 import { firestoreService } from '@/services/firestore.service';
-import { schoolDatabaseService } from '@/services/school-database.service';
-import { collection, doc, getDoc, getDocs, query, where, setDoc } from 'firebase/firestore';
+import { schoolDatabaseService, StudentData, TeacherFirebaseConfig } from '@/services/school-database.service';
+import { studentDatabaseService } from '@/services/student-database.service';
+import { isNetworkError } from '@/lib/firestore-helpers';
+import { STORAGE_KEYS } from '@/config/storage.keys';
+import type { FirebaseConfig, UserRole } from '@/types/firebase.types';
 
 export interface UserAccount {
   id: string;
   email: string;
+  /** Firebase Auth UID (absent in caches written by older versions) */
+  uid?: string;
   schoolId: string;
-  schoolFirebaseConfig: any;
-  role: 'admin' | 'teacher' | 'student';
+  schoolFirebaseConfig: FirebaseConfig;
+  role: UserRole;
   userId: string; // teacherId or studentId
   name: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
+/**
+ * - loading: resolving the signed-in user's account
+ * - ready: signed out, or signed in with a resolved account
+ * - not-registered: signed in, but no Master Registry mapping / school (needs setup)
+ * - not-in-whitelist: mapping exists but the teacher/student record is missing from the School DB
+ * - offline-error: couldn't reach Firestore and there is no cached account
+ * - error: unexpected failure resolving the account
+ */
+export type AuthStatus = 'loading' | 'ready' | 'not-registered' | 'not-in-whitelist' | 'offline-error' | 'error';
+
 interface AuthContextType {
   user: User | null;
   userAccount: UserAccount | null;
   loading: boolean;
+  authStatus: AuthStatus;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   setUserAccount: (account: UserAccount | null) => void;
   setSignupValidation: (value: boolean) => void;
   invalidateCache: () => void;
+  /** Re-resolve the account from Firestore (e.g. after offline-error) */
+  refreshAccount: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   userAccount: null,
   loading: true,
+  authStatus: 'loading',
   signInWithGoogle: async () => {},
   signOut: async () => {},
   setUserAccount: () => {},
   setSignupValidation: () => {},
   invalidateCache: () => {},
+  refreshAccount: async () => {},
 });
+
+/** Cached account is shown immediately for up to 7 days... */
+const CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+/** ...and re-checked in the background once it is older than 30 minutes. */
+const CACHE_REVALIDATE_AFTER = 30 * 60 * 1000;
+
+function readCachedAccount(currentUser: User): { account: UserAccount; age: number } | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.USER_ACCOUNT);
+    const ts = localStorage.getItem(STORAGE_KEYS.USER_ACCOUNT_TIMESTAMP);
+    if (!raw || !ts) return null;
+    const account = JSON.parse(raw) as UserAccount;
+    const age = Date.now() - parseInt(ts, 10);
+    const sameUser = account.uid ? account.uid === currentUser.uid : account.email === currentUser.email;
+    if (!sameUser || !(age >= 0 && age < CACHE_MAX_AGE) || !account.schoolFirebaseConfig?.projectId) return null;
+    return { account, age };
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedAccount(account: UserAccount): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.USER_ACCOUNT, JSON.stringify(account));
+    localStorage.setItem(STORAGE_KEYS.USER_ACCOUNT_TIMESTAMP, Date.now().toString());
+  } catch {
+    // Storage unavailable — caching is best-effort
+  }
+}
+
+function clearCachedAccount(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEYS.USER_ACCOUNT);
+    localStorage.removeItem(STORAGE_KEYS.USER_ACCOUNT_TIMESTAMP);
+  } catch {
+    // ignore
+  }
+}
+
+type ResolveResult =
+  | { status: 'ready'; account: UserAccount }
+  | { status: 'not-registered' | 'not-in-whitelist' };
+
+/**
+ * Resolve uid → Master Registry mapping → school hub → School DB record.
+ * Typically 2–3 reads (hub config is cached locally for a day).
+ */
+async function resolveAccount(currentUser: User): Promise<ResolveResult> {
+  const email = currentUser.email || '';
+  const mapping = await firestoreService.getUserMapping(currentUser.uid, email);
+  if (!mapping?.schoolId) return { status: 'not-registered' };
+
+  const hub = await firestoreService.getHubCached(mapping.schoolId);
+  const schoolConfig = hub?.schoolFirebaseConfig;
+  if (!schoolConfig) return { status: 'not-registered' };
+
+  const mappedRole: UserRole = mapping.role || 'student';
+  let role: UserRole = mappedRole;
+  let userId = '';
+  let name = currentUser.displayName || '';
+
+  if (mappedRole === 'student') {
+    const member = await schoolDatabaseService.findMember<StudentData>(schoolConfig, 'student', {
+      userId: mapping.userId, uid: currentUser.uid, email,
+    });
+    if (!member) return { status: 'not-in-whitelist' };
+    userId = member.id;
+    if (member.data.name) name = member.data.name;
+  } else {
+    const member = await schoolDatabaseService.findMember<TeacherFirebaseConfig>(schoolConfig, 'teacher', {
+      userId: mapping.userId, uid: currentUser.uid, email,
+    });
+    if (member) {
+      userId = member.id;
+      if (member.data.role) role = member.data.role;
+      if (member.data.name) name = member.data.name;
+    } else if (mappedRole === 'admin') {
+      // School owner without a teacher record
+      userId = mapping.userId || currentUser.uid;
+    } else {
+      return { status: 'not-in-whitelist' };
+    }
+  }
+
+  // Remember the School DB id so the next lookup is a single document read
+  if (mapping.userId !== userId || !mapping.uid) {
+    firestoreService.saveUserAccount(email, mapping.schoolId, currentUser.uid, mappedRole, userId)
+      .catch(err => console.error('Error updating user mapping:', err));
+  }
+
+  return {
+    status: 'ready',
+    account: {
+      id: email,
+      email,
+      uid: currentUser.uid,
+      schoolId: mapping.schoolId,
+      schoolFirebaseConfig: schoolConfig,
+      role,
+      userId,
+      name: name || email,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  };
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [userAccount, setUserAccount] = useState<UserAccount | null>(null);
+  const [userAccount, setUserAccountState] = useState<UserAccount | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authStatus, setAuthStatus] = useState<AuthStatus>('loading');
   const [auth, setAuth] = useState<Auth | null>(null);
   const signupValidationRef = useRef(false);
+  /** Bumped whenever the account is set explicitly, so stale background resolves are dropped. */
+  const generationRef = useRef(0);
+  const hasAccountRef = useRef(false);
+
+  const applyAccount = useCallback((account: UserAccount | null) => {
+    hasAccountRef.current = !!account;
+    setUserAccountState(account);
+  }, []);
+
+  /**
+   * Resolve from Firestore and apply the result. When `background` is true and the
+   * user already has a cached account, network failures keep the cached account.
+   */
+  const revalidate = useCallback(async (currentUser: User, background: boolean) => {
+    const generation = generationRef.current;
+    try {
+      const result = await resolveAccount(currentUser);
+      if (generation !== generationRef.current) return; // superseded by setUserAccount/signOut
+      if (result.status === 'ready') {
+        applyAccount(result.account);
+        writeCachedAccount(result.account);
+        setAuthStatus('ready');
+      } else {
+        clearCachedAccount();
+        applyAccount(null);
+        setAuthStatus(result.status);
+      }
+    } catch (error) {
+      if (generation !== generationRef.current) return;
+      console.error('Error loading user account:', error);
+      if (background && hasAccountRef.current) {
+        // Keep working from the cached account; we'll retry on the next launch
+        return;
+      }
+      applyAccount(null);
+      setAuthStatus(isNetworkError(error) ? 'offline-error' : 'error');
+    }
+  }, [applyAccount]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -72,189 +237,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     document.addEventListener('touchstart', preventEdgeSwipe, { passive: false });
 
+    // In development the PWA is disabled, but a service worker registered by an earlier
+    // production run keeps serving old cached bundles. Remove it and its caches.
+    if (process.env.NODE_ENV === 'development' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(async (registrations) => {
+        if (registrations.length === 0) return;
+        await Promise.all(registrations.map(r => r.unregister()));
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map(key => caches.delete(key)));
+        }
+        console.warn('[dev] Removed stale service worker; reloading to load current code');
+        window.location.reload();
+      }).catch(err => console.error('Error removing service worker:', err));
+    }
+
     try {
       const instance = firebaseManager.getMasterRegistryInstance();
       setAuth(instance.auth);
-      console.log('Auth instance obtained:', instance.auth?.app?.name);
 
       const unsubscribe = onAuthStateChanged(instance.auth, async (currentUser) => {
-        console.log('Auth state changed:', currentUser?.email);
         setUser(currentUser);
-        
-        // Load user account from Master Registry if user is authenticated
-        if (currentUser?.email) {
-          console.log('Loading user account from Master Registry for:', currentUser.email);
-          // Check if this is a signup validation sign out
-          if (signupValidationRef.current) {
-            console.log('Signup validation sign out detected, skipping user account loading');
-            signupValidationRef.current = false;
-            setUserAccount(null);
-            setLoading(false);
-            return;
-          }
-          
-          // Try to load from cache first
-          const cachedAccount = localStorage.getItem('NEXORE_USER_ACCOUNT');
-          const cacheTimestamp = localStorage.getItem('NEXORE_USER_ACCOUNT_TIMESTAMP');
-          const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes in milliseconds
-          
-          if (cachedAccount && cacheTimestamp) {
-            const age = Date.now() - parseInt(cacheTimestamp);
-            const parsed = JSON.parse(cachedAccount);
-            if (age < CACHE_DURATION && parsed.email === currentUser.email) {
-              console.log('Loading user account from cache for:', currentUser.email);
-              console.log('Cached user account role:', parsed.role);
-              console.log('Cached user account userId:', parsed.userId);
-              console.log('Cache age:', age, 'ms');
-              setUserAccount(parsed);
-              setLoading(false);
-              return;
-            } else {
-              console.log('Cache expired or email mismatch, fetching from Firestore');
-              localStorage.removeItem('NEXORE_USER_ACCOUNT');
-              localStorage.removeItem('NEXORE_USER_ACCOUNT_TIMESTAMP');
-            }
-          }
-          
-          try {
-            // Fetch user account from Master Registry
-            const accountData = await firestoreService.getUserAccount(currentUser.email);
-            
-            console.log('User account data from Master Registry:', accountData);
-            
-            if (accountData) {
-              // Load hub using schoolId from user account
-              let finalHub = null;
-              if (accountData.schoolId) {
-                finalHub = await firestoreService.getHub(accountData.schoolId);
-                console.log('Hub data:', finalHub);
-              }
-              
-              if (finalHub && finalHub.schoolFirebaseConfig) {
-                // Check if user is a teacher and has role in School Database
-                let finalRole = accountData.role || 'student';
-                let finalUserId = accountData.uid || currentUser.uid; // Default to Firebase Auth UID
-                
-                let teacherDisplayName = currentUser.displayName || '';
-                
-                if (accountData.role === 'teacher' || accountData.role === 'admin') {
-                  try {
-                    const schoolInstance = firebaseManager.getInstance(
-                      finalHub.schoolFirebaseConfig,
-                      `school-${finalHub.schoolFirebaseConfig.projectId}`
-                    );
-                    const teachersRef = collection(schoolInstance.db, 'teachers');
-                    const targetUid = accountData.uid || currentUser.uid;
-                    let q = query(teachersRef, where('uid', '==', targetUid));
-                    let querySnapshot = await getDocs(q);
 
-                    // Fallback lookup by email if query by UID returns empty
-                    if (querySnapshot.empty && currentUser.email) {
-                      const qEmail = query(teachersRef, where('email', '==', currentUser.email));
-                      querySnapshot = await getDocs(qEmail);
-                    }
-                    
-                    if (!querySnapshot.empty) {
-                      const teacherDoc = querySnapshot.docs[0];
-                      const teacherData = teacherDoc.data();
-                      if (teacherData?.role) {
-                        finalRole = teacherData.role;
-                        console.log('Role from School Database:', finalRole);
-                      }
-                      if (teacherData?.name) {
-                        teacherDisplayName = teacherData.name;
-                      }
-                      // Use teacherId as userId (document ID)
-                      finalUserId = teacherDoc.id;
-                      console.log('TeacherId from School Database:', finalUserId);
-
-                      // Update UID on teacher document if missing or different
-                      if (!teacherData.uid && targetUid) {
-                        setDoc(teacherDoc.ref, { uid: targetUid }, { merge: true }).catch(err => 
-                          console.error('Error updating teacher uid:', err)
-                        );
-                      }
-                    }
-                  } catch (err) {
-                    console.error('Error fetching teacher role from School Database:', err);
-                  }
-                } else if (accountData.role === 'student') {
-                  try {
-                    const schoolInstance = firebaseManager.getInstance(
-                      finalHub.schoolFirebaseConfig,
-                      `school-${finalHub.schoolFirebaseConfig.projectId}`
-                    );
-                    const studentsRef = collection(schoolInstance.db, 'students');
-                    const targetUid = accountData.uid || currentUser.uid;
-                    let q = query(studentsRef, where('uid', '==', targetUid));
-                    let querySnapshot = await getDocs(q);
-
-                    // Fallback lookup by email if query by UID returns empty
-                    if (querySnapshot.empty && currentUser.email) {
-                      const qEmail = query(studentsRef, where('email', '==', currentUser.email));
-                      querySnapshot = await getDocs(qEmail);
-                    }
-                    
-                    if (!querySnapshot.empty) {
-                      const studentDoc = querySnapshot.docs[0];
-                      const studentData = studentDoc.data();
-                      if (studentData?.name) {
-                        teacherDisplayName = studentData.name;
-                      }
-                      finalUserId = studentDoc.id; // studentId is the document ID
-                      console.log('StudentId from School Database:', finalUserId);
-
-                      // Update UID on student document if missing or different
-                      if (!studentData.uid && targetUid) {
-                        setDoc(studentDoc.ref, { uid: targetUid }, { merge: true }).catch(err => 
-                          console.error('Error updating student uid:', err)
-                        );
-                      }
-                    }
-                  } catch (err) {
-                    console.error('Error fetching studentId from School Database:', err);
-                  }
-                }
-                
-                const fullUserAccount: UserAccount = {
-                  id: currentUser.email,
-                  email: currentUser.email,
-                  schoolId: accountData.schoolId,
-                  schoolFirebaseConfig: finalHub.schoolFirebaseConfig,
-                  role: finalRole,
-                  userId: finalUserId,
-                  name: teacherDisplayName || currentUser.displayName || currentUser.email || '',
-                  createdAt: new Date(),
-                  updatedAt: new Date(),
-                };
-                console.log('Setting user account:', fullUserAccount);
-                console.log('Setting user account role:', fullUserAccount.role);
-                console.log('Setting user account userId:', fullUserAccount.userId);
-                setUserAccount(fullUserAccount);
-                
-                // Log after setting to verify
-                console.log('AuthContext - After setUserAccount, userAccount role:', fullUserAccount.role);
-                console.log('AuthContext - After setUserAccount, userAccount userId:', fullUserAccount.userId);
-                
-                // Cache the user account
-                localStorage.setItem('NEXORE_USER_ACCOUNT', JSON.stringify(fullUserAccount));
-                localStorage.setItem('NEXORE_USER_ACCOUNT_TIMESTAMP', Date.now().toString());
-              } else {
-                console.log('No hub or firebase config found for user');
-                setUserAccount(null);
-              }
-            } else {
-              console.log('No user account found in Master Registry');
-              setUserAccount(null);
-            }
-          } catch (error) {
-            console.error('Error loading user account:', error);
-            setUserAccount(null);
-          }
-        } else {
-          setUserAccount(null);
+        if (!currentUser?.email) {
+          applyAccount(null);
+          setAuthStatus('ready');
+          setLoading(false);
+          return;
         }
-        
+
+        // Signup validation sign-out in progress: don't load the account
+        if (signupValidationRef.current) {
+          signupValidationRef.current = false;
+          applyAccount(null);
+          setAuthStatus('ready');
+          setLoading(false);
+          return;
+        }
+
+        const cached = readCachedAccount(currentUser);
+        if (cached) {
+          // Stale-while-revalidate: show the cached account immediately
+          applyAccount(cached.account);
+          setAuthStatus('ready');
+          setLoading(false);
+          if (cached.age > CACHE_REVALIDATE_AFTER) {
+            revalidate(currentUser, true);
+          }
+          return;
+        }
+
+        setAuthStatus('loading');
+        await revalidate(currentUser, false);
         setLoading(false);
       });
 
@@ -264,12 +298,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
     } catch (error) {
       console.error('Error initializing auth:', error);
+      setAuthStatus('error');
       setLoading(false);
       return () => {
         document.removeEventListener('touchstart', preventEdgeSwipe);
       };
     }
-  }, []);
+  }, [applyAccount, revalidate]);
 
   const signInWithGoogle = async () => {
     if (!auth) {
@@ -278,17 +313,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
-    try {
-      console.log('Starting Google sign in with auth:', auth.app?.name);
-      const result = await signInWithPopup(auth, provider);
-      console.log('Google sign in successful:', result.user?.email);
-      console.log('User UID:', result.user?.uid);
-      console.log('User object:', result.user);
-      setUser(result.user);
-    } catch (error) {
-      console.error('Error signing in with Google:', error);
-      throw error;
-    }
+    const result = await signInWithPopup(auth, provider);
+    setUser(result.user);
   };
 
   const signOut = async () => {
@@ -296,36 +322,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error('Firebase Auth not initialized');
     }
 
-    try {
-      await firebaseSignOut(auth);
-      setUser(null);
-      setUserAccount(null);
-      // Clear Nexore-specific caches only (preserve Firebase IndexedDB)
-      if (typeof window !== 'undefined') {
-        // Clear only Nexore keys from localStorage
-        const keysToRemove: string[] = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key && (key.startsWith('NEXORE_') || key.startsWith('nexore-') || key.startsWith('nexore_'))) {
-            keysToRemove.push(key);
-          }
+    generationRef.current++;
+    await firebaseSignOut(auth);
+    setUser(null);
+    applyAccount(null);
+    setAuthStatus('ready');
+    // Clear Nexore-specific caches only (preserve Firebase IndexedDB)
+    if (typeof window !== 'undefined') {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('NEXORE_') || key.startsWith('nexore-') || key.startsWith('nexore_')) && key !== STORAGE_KEYS.THEME) {
+          keysToRemove.push(key);
         }
-        keysToRemove.forEach(key => localStorage.removeItem(key));
-        sessionStorage.clear();
-        // Clear cookies
-        document.cookie.split(";").forEach(function(c) { 
-          document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
-        });
-        // Reset Firebase instances (but do NOT delete IndexedDB)
-        firebaseManager.clearAllInstances();
-        // Re-initialize master registry instance
-        firebaseManager.getMasterRegistryInstance();
       }
-    } catch (error) {
-      console.error('Error signing out:', error);
-      throw error;
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+      sessionStorage.clear();
+      // Clear cookies
+      document.cookie.split(";").forEach(function(c) {
+        document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+      });
+      // Drop in-memory data caches and release school/teacher Firebase apps
+      schoolDatabaseService.clearCache();
+      studentDatabaseService.clearCache();
+      firebaseManager.clearAllInstances();
     }
   };
+
+  /**
+   * Set the account explicitly (setup flows, role switch). Also caches it so the
+   * next launch doesn't need to re-resolve.
+   */
+  const setUserAccount = useCallback((account: UserAccount | null) => {
+    generationRef.current++;
+    applyAccount(account);
+    if (account) {
+      writeCachedAccount({ ...account, uid: account.uid || user?.uid });
+      setAuthStatus('ready');
+    } else {
+      clearCachedAccount();
+    }
+  }, [applyAccount, user]);
 
   const setSignupValidation = (value: boolean) => {
     signupValidationRef.current = value;
@@ -333,14 +370,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const invalidateCache = () => {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('NEXORE_USER_ACCOUNT');
-      localStorage.removeItem('NEXORE_USER_ACCOUNT_TIMESTAMP');
-      console.log('Cache invalidated');
+      clearCachedAccount();
     }
   };
 
+  const refreshAccount = async () => {
+    if (!user?.email) return;
+    setAuthStatus('loading');
+    setLoading(true);
+    await revalidate(user, false);
+    setLoading(false);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, userAccount, loading, signInWithGoogle, signOut, setUserAccount, setSignupValidation, invalidateCache }}>
+    <AuthContext.Provider value={{ user, userAccount, loading, authStatus, signInWithGoogle, signOut, setUserAccount, setSignupValidation, invalidateCache, refreshAccount }}>
       {children}
     </AuthContext.Provider>
   );

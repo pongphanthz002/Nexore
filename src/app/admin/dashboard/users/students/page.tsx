@@ -4,9 +4,9 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { studentDatabaseService } from '@/services/student-database.service';
 import { schoolDatabaseService } from '@/services/school-database.service';
 import { firestoreService } from '@/services/firestore.service';
-import { teacherDatabaseService } from '@/services/teacher-database.service';
 import * as XLSX from 'xlsx';
 import { Download, Upload, Trash2, Edit, Eye, EyeOff, RefreshCw, Plus, ArrowLeft, Search, X } from 'lucide-react';
 
@@ -149,7 +149,7 @@ export default function StudentsManagement() {
         class: row['ชั้น'] || '',
         number: row['เลขที่'] || '',
         schoolId: userAccount.schoolId || 'default',
-        teacherNodes: []
+        // teacherNodes isn't in the Excel file: omit it so existing values are kept
       }));
 
       // Get existing students
@@ -174,7 +174,10 @@ export default function StudentsManagement() {
       }
 
       // No changes, proceed with upload
-      await schoolDatabaseService.saveStudentWhitelist(userAccount.schoolFirebaseConfig, studentsData);
+      const { unknownTeacherIds } = await schoolDatabaseService.saveStudentWhitelist(userAccount.schoolFirebaseConfig, studentsData);
+      if (unknownTeacherIds.length > 0) {
+        alert(`คำเตือน: ไม่พบครูรหัส ${unknownTeacherIds.join(', ')} ในระบบ (teacherNodes) ข้อมูลนักเรียนถูกบันทึกแล้ว`);
+      }
       await loadStudents(true);
       alert('อัพโหลดรายชื่อนักเรียนสำเร็จ');
     } catch (error) {
@@ -196,49 +199,25 @@ export default function StudentsManagement() {
     setLoading(true);
     setShowDeleteConfirm(false);
     try {
-      // Get all teachers to get their firebase configs
-      const allTeachers = await schoolDatabaseService.getAllTeachers(userAccount.schoolFirebaseConfig);
-      const teacherConfigs = new Map();
-      for (const teacher of allTeachers) {
-        if (teacher.firebaseConfig) {
-          teacherConfigs.set(teacher.teacherId, teacher.firebaseConfig);
-        }
-      }
-
-      // Delete students that are not in the new file
+      // Delete students that are not in the new file (School DB, Master Registry and Teacher DBs)
+      const failedTeacherIds = new Set<string>();
       for (const student of studentsToDelete) {
         try {
-          // Delete from School Database
-          await schoolDatabaseService.deleteStudent(userAccount.schoolFirebaseConfig, student.studentId);
-
-          // Delete user account from Master Registry (if email exists)
-          if (student.email) {
-            await firestoreService.deleteUserAccount(student.email);
-          }
-
-          // Note: Firebase Auth deletion requires Admin SDK (server-side)
-          // Cannot be done from client SDK - will need manual cleanup or server endpoint
-
-          // Delete all student data from each Teacher Database
-          if (student.teacherNodes && student.teacherNodes.length > 0) {
-            for (const teacherId of student.teacherNodes) {
-              const teacherConfig = teacherConfigs.get(teacherId);
-              if (teacherConfig) {
-                try {
-                  await teacherDatabaseService.deleteAllStudentData(teacherConfig, student.studentId);
-                } catch (error) {
-                  console.error('Error deleting student data from teacher database:', teacherId, error);
-                }
-              }
-            }
-          }
+          const result = await studentDatabaseService.deleteStudentCompletely(userAccount.schoolFirebaseConfig, student);
+          result.failedTeacherIds.forEach(id => failedTeacherIds.add(id));
         } catch (error) {
           console.error('Error deleting student:', student.studentId, error);
         }
       }
+      if (failedTeacherIds.size > 0) {
+        alert(`ลบข้อมูลในฐานข้อมูลครูบางคนไม่สำเร็จ: ${Array.from(failedTeacherIds).join(', ')}`);
+      }
 
       // Save new students to School Database
-      await schoolDatabaseService.saveStudentWhitelist(userAccount.schoolFirebaseConfig, pendingStudentsData);
+      const { unknownTeacherIds } = await schoolDatabaseService.saveStudentWhitelist(userAccount.schoolFirebaseConfig, pendingStudentsData);
+      if (unknownTeacherIds.length > 0) {
+        alert(`คำเตือน: ไม่พบครูรหัส ${unknownTeacherIds.join(', ')} ในระบบ (teacherNodes) ข้อมูลนักเรียนถูกบันทึกแล้ว`);
+      }
       await loadStudents(true);
       invalidateCache();
       alert('อัพโหลดรายชื่อนักเรียนสำเร็จ');
@@ -438,12 +417,15 @@ export default function StudentsManagement() {
     setLoading(true);
     try {
       const studentIdsArray = Array.from(selectedStudents);
+      const failedTeacherIds = new Set<string>();
       for (const studentId of studentIdsArray) {
         const student = students.find(s => s.studentId === studentId);
-        if (student?.email) {
-          await firestoreService.deleteUserAccount(student.email);
-        }
-        await schoolDatabaseService.deleteStudent(userAccount.schoolFirebaseConfig, studentId);
+        if (!student) continue;
+        const result = await studentDatabaseService.deleteStudentCompletely(userAccount.schoolFirebaseConfig, student);
+        result.failedTeacherIds.forEach(id => failedTeacherIds.add(id));
+      }
+      if (failedTeacherIds.size > 0) {
+        alert(`ลบข้อมูลในฐานข้อมูลครูบางคนไม่สำเร็จ: ${Array.from(failedTeacherIds).join(', ')}`);
       }
       setSelectedStudents(new Set());
       await loadStudents(true);
@@ -485,7 +467,8 @@ export default function StudentsManagement() {
           newStudentData.email,
           userAccount.schoolId,
           undefined,
-          'student'
+          'student',
+          newStudentData.studentId
         );
       }
 

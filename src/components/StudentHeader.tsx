@@ -34,18 +34,7 @@ const StudentHeader = ({ isDark, toggleTheme }: StudentHeaderProps) => {
       if (!userAccount?.schoolFirebaseConfig || !userAccount?.userId) return;
 
       try {
-        let studentData = await schoolDatabaseService.getStudentData(
-          userAccount.schoolFirebaseConfig,
-          userAccount.userId
-        );
-
-        // If not found by userId, try by email
-        if (!studentData && userAccount?.email) {
-          studentData = await schoolDatabaseService.getStudentDataByEmail(
-            userAccount.schoolFirebaseConfig,
-            userAccount.email
-          );
-        }
+        const studentData = await schoolDatabaseService.getStudentForAccount(userAccount.schoolFirebaseConfig, userAccount);
 
         if (studentData?.name) {
           setStudentName(studentData.name);

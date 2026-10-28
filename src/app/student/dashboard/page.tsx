@@ -55,18 +55,7 @@ export default function StudentDashboard() {
 
       try {
         setLoading(true);
-        let studentData = await schoolDatabaseService.getStudentData(
-          userAccount.schoolFirebaseConfig,
-          userAccount.userId
-        );
-
-        // If not found by userId, try by email
-        if (!studentData && userAccount?.email) {
-          studentData = await schoolDatabaseService.getStudentDataByEmail(
-            userAccount.schoolFirebaseConfig,
-            userAccount.email
-          );
-        }
+        const studentData = await schoolDatabaseService.getStudentForAccount(userAccount.schoolFirebaseConfig, userAccount);
 
         setStudentInfo(studentData);
 

@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { studentDatabaseService, StudentSubjectInfo, StudentGradeInfo, StudentAttendanceInfo } from '@/services/student-database.service';
 import { schoolDatabaseService } from '@/services/school-database.service';
+import { allowAction } from '@/lib/firestore-helpers';
 import StudentHeader from '@/components/StudentHeader';
 import StudentFooter from '@/components/StudentFooter';
 import { 
@@ -112,6 +113,7 @@ export default function StudentSubjectsPage() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [partialFailure, setPartialFailure] = useState(false);
   const [subjects, setSubjects] = useState<StudentSubjectInfo[]>([]);
   const [grades, setGrades] = useState<StudentGradeInfo[]>([]);
   const [attendance, setAttendance] = useState<StudentAttendanceInfo[]>([]);
@@ -159,17 +161,7 @@ export default function StudentSubjectsPage() {
       }
 
       // Get student data from school database
-      let studentData = await schoolDatabaseService.getStudentData(
-        userAccount.schoolFirebaseConfig,
-        userAccount?.userId || ''
-      );
-
-      if (!studentData && userAccount?.email) {
-        studentData = await schoolDatabaseService.getStudentDataByEmail(
-          userAccount.schoolFirebaseConfig,
-          userAccount.email
-        );
-      }
+      const studentData = await schoolDatabaseService.getStudentForAccount(userAccount.schoolFirebaseConfig, userAccount, force);
 
       if (!studentData) {
         setError('ไม่พบข้อมูลนักเรียน');
@@ -178,21 +170,18 @@ export default function StudentSubjectsPage() {
 
       setStudentInfo(studentData);
 
-      // Fetch subjects first (needed by grades/attendance as dependency)
-      const subjectsData = await studentDatabaseService.getStudentSubjects(
-        userAccount.schoolFirebaseConfig,
-        studentData
-      );
+      // Subjects, grades and attendance share one cached context (one set of reads)
+      const {
+        subjects: subjectsData,
+        grades: gradesData,
+        attendance: attendanceData,
+        failedTeacherIds,
+      } = await studentDatabaseService.getStudentSubjectOverview(userAccount.schoolFirebaseConfig, studentData, force);
+
       setSubjects(subjectsData);
-
-      // Fetch grades and attendance in PARALLEL for speed
-      const [gradesData, attendanceData] = await Promise.all([
-        studentDatabaseService.getStudentGrades(userAccount.schoolFirebaseConfig, studentData),
-        studentDatabaseService.getStudentAttendance(userAccount.schoolFirebaseConfig, studentData),
-      ]);
-
       setGrades(gradesData);
       setAttendance(attendanceData);
+      setPartialFailure(failedTeacherIds.length > 0);
 
       if (subjectsData.length === 1) {
         setSelectedSubject(subjectsData[0]);
@@ -218,6 +207,12 @@ export default function StudentSubjectsPage() {
       fetchData();
     }
   }, [userAccount]);
+
+  // Manual retry re-reads from the server; throttled to avoid hammering Firestore
+  const handleRetry = () => {
+    if (!allowAction('student-subjects-refresh', 10_000)) return;
+    fetchData(true);
+  };
 
   const handleSubjectSelect = (subject: StudentSubjectInfo) => {
     setSelectedSubject(subject);
@@ -314,7 +309,24 @@ export default function StudentSubjectsPage() {
             {error && (
               <div className={`${isDarkMode ? 'bg-red-900/30 border-red-700' : 'bg-red-50 border-red-200'} border rounded-2xl p-6`}>
                 <p className="text-red-600 font-bold">{error}</p>
+                <button
+                  onClick={handleRetry}
+                  disabled={refreshing}
+                  className="mt-3 text-sm font-semibold text-red-600 underline disabled:opacity-50"
+                >
+                  {refreshing ? 'กำลังโหลด...' : 'ลองใหม่'}
+                </button>
               </div>
+            )}
+
+            {!error && partialFailure && (
+              <button
+                onClick={handleRetry}
+                disabled={refreshing}
+                className={`w-full text-left ${isDarkMode ? 'bg-amber-900/30 border-amber-700 text-amber-300' : 'bg-amber-50 border-amber-200 text-amber-700'} border rounded-2xl p-4 text-sm font-semibold disabled:opacity-50`}
+              >
+                {refreshing ? 'กำลังโหลด...' : 'บางวิชาโหลดไม่สำเร็จ แตะเพื่อลองใหม่'}
+              </button>
             )}
 
             <div className="pt-2 px-2">

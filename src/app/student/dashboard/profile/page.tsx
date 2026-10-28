@@ -81,17 +81,7 @@ export default function StudentProfilePage() {
     try {
       if (!userAccount?.schoolFirebaseConfig) return;
 
-      let studentData = await schoolDatabaseService.getStudentData(
-        userAccount.schoolFirebaseConfig,
-        userAccount?.userId || ''
-      );
-
-      if (!studentData && userAccount?.email) {
-        studentData = await schoolDatabaseService.getStudentDataByEmail(
-          userAccount.schoolFirebaseConfig,
-          userAccount.email
-        );
-      }
+      const studentData = await schoolDatabaseService.getStudentForAccount(userAccount.schoolFirebaseConfig, userAccount);
 
       setStudentInfo(studentData);
 

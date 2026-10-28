@@ -1,19 +1,21 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { schoolDatabaseService } from '@/services/school-database.service';
+import { schoolDatabaseService, SubjectData, StudentData, ScheduleSlot } from '@/services/school-database.service';
 import { teacherDatabaseService } from '@/services/teacher-database.service';
 import * as XLSX from 'xlsx';
-import { Download, Upload, Trash2, Plus, ArrowLeft } from 'lucide-react';
+import { Download, Upload, Trash2, Plus, ArrowLeft, Search, BookOpen, Calendar, Clock, Loader2, X } from 'lucide-react';
+import { GoogleBasicSubjectIcon, GoogleElectiveSubjectIcon } from '@/components/GoogleSubjectIcons';
 
 export default function SubjectsManagement() {
   const router = useRouter();
   const { userAccount, invalidateCache } = useAuth();
-  const [subjects, setSubjects] = useState<any[]>([]);
+  const [subjects, setSubjects] = useState<SubjectData[]>([]);
   const [teachers, setTeachers] = useState<any[]>([]);
+  const [allStudents, setAllStudents] = useState<StudentData[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedSubjects, setSelectedSubjects] = useState<Set<string>>(new Set());
   const [showAddModal, setShowAddModal] = useState(false);
@@ -22,17 +24,29 @@ export default function SubjectsManagement() {
   const [isSwiping, setIsSwiping] = useState(false);
   const [touchStartX, setTouchStartX] = useState(0);
   const [isDark, setIsDark] = useState(false);
-  const [newSubject, setNewSubject] = useState({
+  const [isSavingSubject, setIsSavingSubject] = useState(false);
+  const [studentSearchQuery, setStudentSearchQuery] = useState('');
+  const [studentClassFilter, setStudentClassFilter] = useState<string>('all');
+
+  const [newSubject, setNewSubject] = useState<{
+    teacherId: string;
+    subjectName: string;
+    subjectType: 'basic' | 'elective';
+    classroom: string;
+    studentIds: string[];
+    schedules: ScheduleSlot[];
+  }>({
     teacherId: '',
     subjectName: '',
+    subjectType: 'basic',
     classroom: '',
-    day: '',
-    time: '',
-    duration: '1'
+    studentIds: [],
+    schedules: [{ day: 'จันทร์', time: '08:30-09:30', duration: '1' }]
   });
+
+
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>('');
   const [showTeacherDropdown, setShowTeacherDropdown] = useState(false);
-  const [showDurationDropdown, setShowDurationDropdown] = useState(false);
   const lastLoadedConfigRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -60,12 +74,14 @@ export default function SubjectsManagement() {
       const configKey = userAccount.schoolFirebaseConfig.projectId;
       if (!force && configKey === lastLoadedConfigRef.current) return;
       setLoading(true);
-      const [subjectsData, teachersData] = await Promise.all([
+      const [subjectsData, teachersData, studentsData] = await Promise.all([
         schoolDatabaseService.getAllSubjects(userAccount.schoolFirebaseConfig),
-        schoolDatabaseService.getAllTeachers(userAccount.schoolFirebaseConfig)
+        schoolDatabaseService.getAllTeachers(userAccount.schoolFirebaseConfig),
+        schoolDatabaseService.getAllStudents(userAccount.schoolFirebaseConfig)
       ]);
       setSubjects(subjectsData);
       setTeachers(teachersData);
+      setAllStudents(studentsData);
       lastLoadedConfigRef.current = configKey;
     } catch (error) {
       console.error('Error loading data:', error);
@@ -74,12 +90,99 @@ export default function SubjectsManagement() {
     }
   };
 
+  // Available classrooms from student data
+  const availableClassrooms = Array.from(new Set(allStudents.map(s => s.class)))
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, 'th'));
+
+  const handleAddScheduleSlot = () => {
+    if (newSubject.schedules.length >= 3) return;
+    const days = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์', 'อาทิตย์'];
+    const usedDays = newSubject.schedules.map(s => s.day);
+    const nextDay = days.find(d => !usedDays.includes(d)) || 'อังคาร';
+    setNewSubject(prev => ({
+      ...prev,
+      schedules: [
+        ...prev.schedules,
+        {
+          day: nextDay,
+          time: prev.schedules[0]?.time || '08:30-09:30',
+          duration: prev.schedules[0]?.duration || '1'
+        }
+      ]
+    }));
+  };
+
+  const handleRemoveScheduleSlot = (index: number) => {
+    if (newSubject.schedules.length <= 1) return;
+    setNewSubject(prev => ({
+      ...prev,
+      schedules: prev.schedules.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleUpdateScheduleSlot = (index: number, field: keyof ScheduleSlot, value: string) => {
+    setNewSubject(prev => ({
+      ...prev,
+      schedules: prev.schedules.map((slot, i) => (i === index ? { ...slot, [field]: value } : slot))
+    }));
+  };
+
+  // For elective: filter across all classrooms with optional room filter + search query
+  const studentsForElective = allStudents
+    .filter(s => {
+      if (studentClassFilter !== 'all' && s.class !== studentClassFilter) return false;
+      if (!studentSearchQuery) return true;
+      const q = studentSearchQuery.toLowerCase();
+      return (
+        s.name.toLowerCase().includes(q) ||
+        (s.number && s.number.includes(q)) ||
+        (s.class && s.class.toLowerCase().includes(q)) ||
+        (s.studentId && s.studentId.toLowerCase().includes(q))
+      );
+    })
+    .sort((a, b) => {
+      if (a.class !== b.class) return a.class.localeCompare(b.class, 'th');
+      return (parseInt(a.number) || 0) - (parseInt(b.number) || 0);
+    });
+
+  const selectedStudentsForElective = allStudents.filter(s => newSubject.studentIds.includes(s.studentId));
+  const detectedClassesForElective = Array.from(new Set(selectedStudentsForElective.map(s => s.class).filter(Boolean))).sort();
+
+  const toggleStudentSelection = (studentId: string) => {
+    setNewSubject(prev => {
+      const exists = prev.studentIds.includes(studentId);
+      return {
+        ...prev,
+        studentIds: exists
+          ? prev.studentIds.filter(id => id !== studentId)
+          : [...prev.studentIds, studentId]
+      };
+    });
+  };
+
+  const handleSelectAllStudentsInCurrentView = () => {
+    const idsToAdd = studentsForElective.map(s => s.studentId);
+    setNewSubject(prev => ({
+      ...prev,
+      studentIds: Array.from(new Set([...prev.studentIds, ...idsToAdd]))
+    }));
+  };
+
+  const handleClearAllStudents = () => {
+    setNewSubject(prev => ({
+      ...prev,
+      studentIds: []
+    }));
+  };
+
   const handleDownload = () => {
     if (subjects.length === 0) {
       const template = [
         {
           'เลขประจำตัวครู': '',
           'วิชา': '',
+          'ประเภทวิชา': '',
           'ห้อง': '',
           'วัน': '',
           'เวลา': '',
@@ -94,6 +197,7 @@ export default function SubjectsManagement() {
       const data = subjects.map(s => ({
         'เลขประจำตัวครู': s.teacherId,
         'วิชา': s.subjectName,
+        'ประเภทวิชา': s.subjectType === 'elective' ? 'เพิ่มเติม' : 'พื้นฐาน',
         'ห้อง': s.classroom,
         'วัน': s.day,
         'เวลา': s.time,
@@ -128,7 +232,11 @@ export default function SubjectsManagement() {
       jsonData.forEach((row: any, index: number) => {
         const classroomStr = row['ห้อง'] || '';
         const classrooms = classroomStr.split(',').map((c: string) => c.trim()).filter((c: string) => c);
-        
+
+        // Parse subject type from Thai text
+        const subjectTypeRaw = (row['ประเภทวิชา'] || '').toString().trim();
+        const subjectType = subjectTypeRaw === 'เพิ่มเติม' ? 'elective' : 'basic';
+
         if (classrooms.length > 0) {
           classrooms.forEach((classroom: string) => {
             // Replace "/" with "-" in classroom name for valid Firestore document ID
@@ -138,6 +246,7 @@ export default function SubjectsManagement() {
               subjectId: `SUB${Date.now()}_${index}_${safeClassroom}`,
               teacherId: row['เลขประจำตัวครู'] || '',
               subjectName: row['วิชา'] || '',
+              subjectType,
               classroom: classroom,
               day: row['วัน'] || '',
               time: row['เวลา'] || '',
@@ -164,7 +273,7 @@ export default function SubjectsManagement() {
               console.error('Error deleting subject data from teacher database:', subject.subjectId, error);
             }
           }
-          
+
           // Always delete all subject related data from school database (for admin teachers or as backup)
           try {
             await schoolDatabaseService.deleteSubjectAllData(
@@ -175,7 +284,7 @@ export default function SubjectsManagement() {
           } catch (error) {
             console.error('Error deleting subject data from school database:', subject.subjectId, error);
           }
-          
+
           // Delete subject from school database
           await schoolDatabaseService.deleteSubject(userAccount.schoolFirebaseConfig, subject.subjectId);
         } catch (error) {
@@ -198,35 +307,65 @@ export default function SubjectsManagement() {
 
   const handleAddSubject = async () => {
     if (!userAccount?.schoolFirebaseConfig) return;
-    if (!newSubject.teacherId || !newSubject.subjectName) {
+    if (!newSubject.teacherId || !newSubject.subjectName.trim()) {
       alert('กรุณากรอกข้อมูลให้ครบ');
       return;
     }
 
-    setLoading(true);
+    let finalClassroom = newSubject.classroom.trim();
+    if (newSubject.subjectType === 'basic') {
+      if (!finalClassroom) {
+        alert('กรุณาเลือกห้องเรียน');
+        return;
+      }
+    } else {
+      if (newSubject.studentIds.length === 0) {
+        alert('กรุณาเลือกนักเรียนที่เรียนในวิชาเพิ่มเติมอย่างน้อย 1 คน');
+        return;
+      }
+      if (!finalClassroom) {
+        finalClassroom = detectedClassesForElective.join(', ') || 'วิชาเพิ่มเติม';
+      }
+    }
+
+    setIsSavingSubject(true);
     try {
-      const subject = {
+      const primarySlot = newSubject.schedules[0] || { day: 'จันทร์', time: '08:30-09:30', duration: '1' };
+      const subject: any = {
         subjectId: `SUB${Date.now()}`,
-        ...newSubject
+        teacherId: newSubject.teacherId,
+        subjectName: newSubject.subjectName.trim(),
+        subjectType: newSubject.subjectType,
+        classroom: finalClassroom,
+        day: primarySlot.day || 'จันทร์',
+        time: primarySlot.time || '08:30-09:30',
+        duration: primarySlot.duration || '1',
+        schedules: newSubject.schedules
       };
+
+      if (newSubject.subjectType === 'elective') {
+        subject.studentIds = newSubject.studentIds;
+      }
+
       await schoolDatabaseService.addSubject(userAccount.schoolFirebaseConfig, subject);
       await loadData(true);
       invalidateCache();
       setShowAddModal(false);
+      setStudentSearchQuery('');
+      setStudentClassFilter('all');
       setNewSubject({
         teacherId: '',
         subjectName: '',
+        subjectType: 'basic',
         classroom: '',
-        day: '',
-        time: '',
-        duration: '1'
+        studentIds: [],
+        schedules: [{ day: 'จันทร์', time: '08:30-09:30', duration: '1' }]
       });
-      alert('เพิ่มวิชาเรียนสำเร็จ');
     } catch (error) {
       console.error('Error adding subject:', error);
       alert('ไม่สามารถเพิ่มวิชาเรียนได้');
     } finally {
-      setLoading(false);
+      setIsSavingSubject(false);
     }
   };
 
@@ -255,7 +394,7 @@ export default function SubjectsManagement() {
               console.error('Error deleting subject data from teacher database:', subjectId, error);
             }
           }
-          
+
           // Always delete all subject related data from school database (for admin teachers or as backup)
           try {
             await schoolDatabaseService.deleteSubjectAllData(
@@ -266,7 +405,7 @@ export default function SubjectsManagement() {
           } catch (error) {
             console.error('Error deleting subject data from school database:', subjectId, error);
           }
-          
+
           // Delete subject from school database
           await schoolDatabaseService.deleteSubject(userAccount.schoolFirebaseConfig, subjectId);
         }
@@ -317,13 +456,13 @@ export default function SubjectsManagement() {
   // Swipe gesture handlers for back navigation
   const handleTouchStart = (e: React.TouchEvent) => {
     const touchX = e.touches[0].clientX;
-    
+
     // Prevent iOS Safari edge swipe-to-go-back gesture
     if (touchX < 50) {
       e.preventDefault();
       e.stopPropagation();
     }
-    
+
     // Only allow swipe from left edge (within 50px)
     if (touchX < 50) {
       setTouchStartX(touchX);
@@ -335,7 +474,7 @@ export default function SubjectsManagement() {
     if (!isSwiping) return;
     const currentX = e.touches[0].clientX;
     const diff = currentX - touchStartX;
-    
+
     // Only track left-to-right swipe
     if (diff > 0) {
       const progress = Math.min(diff / 200, 1); // 200px threshold
@@ -345,12 +484,12 @@ export default function SubjectsManagement() {
 
   const handleTouchEnd = () => {
     if (!isSwiping) return;
-    
+
     // If swiped more than 50% of threshold, go back
     if (swipeProgress > 0.5) {
       router.back();
     }
-    
+
     // Reset state
     setSwipeProgress(0);
     setIsSwiping(false);
@@ -367,43 +506,10 @@ export default function SubjectsManagement() {
     }
   };
 
-  // Group subjects by teacher
-  const groupedSubjects = subjects.reduce((acc: any, subject: any) => {
-    const teacherId = subject.teacherId || 'ไม่ระบุครู';
-    if (!acc[teacherId]) {
-      acc[teacherId] = [];
-    }
-    acc[teacherId].push(subject);
-    return acc;
-  }, {});
-
-  // Get teacher name by ID
-  const getTeacherName = (teacherId: string) => {
-    const teacher = teachers.find(t => t.teacherId === teacherId);
-    return teacher ? teacher.name : teacherId;
-  };
-
   // Filter subjects by selected teacher
-  const filteredSubjects = selectedTeacherId 
+  const filteredSubjects = selectedTeacherId
     ? subjects.filter(s => s.teacherId === selectedTeacherId)
     : [];
-
-  // Group filtered subjects by day only (don't combine duration)
-  const groupedByDay = filteredSubjects.reduce((acc: any, subject: any) => {
-    const day = subject.day || 'ไม่ระบุวัน';
-    if (!acc[day]) {
-      acc[day] = [];
-    }
-    acc[day].push(subject);
-    return acc;
-  }, {});
-
-  const handleTeacherSelect = (teacherId: string) => {
-    setSelectedTeacherId(teacherId);
-    setShowTeacherDropdown(false);
-  };
-
-  const selectedTeacher = teachers.find(t => t.teacherId === selectedTeacherId);
 
   // Helper function to convert Thai day names to English 3-letter abbreviations
   const convertDayToEnglish = (day: string) => {
@@ -429,6 +535,35 @@ export default function SubjectsManagement() {
   // Day order for sorting (Monday to Sunday)
   const dayOrder = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+  // Group filtered subjects by day
+  const groupedByDay = filteredSubjects.reduce((acc: any, subject: any) => {
+    if (subject.schedules && subject.schedules.length > 0) {
+      subject.schedules.forEach((sch: any) => {
+        const day = sch.day || subject.day || 'ไม่ระบุวัน';
+        if (!acc[day]) acc[day] = [];
+        acc[day].push({ ...subject, day: sch.day, time: sch.time, duration: sch.duration || subject.duration });
+      });
+    } else {
+      const day = subject.day || 'ไม่ระบุวัน';
+      if (!acc[day]) acc[day] = [];
+      acc[day].push(subject);
+    }
+    return acc;
+  }, {});
+
+  const handleTeacherSelect = (teacherId: string) => {
+    setSelectedTeacherId(teacherId);
+    setShowTeacherDropdown(false);
+  };
+
+  const selectedTeacher = teachers.find(t => t.teacherId === selectedTeacherId);
+
+  // Get teacher name by ID
+  const getTeacherName = (teacherId: string) => {
+    const teacher = teachers.find(t => t.teacherId === teacherId);
+    return teacher ? teacher.name : teacherId;
+  };
+
   if (loading && subjects.length === 0) {
     return (
       <div className={`min-h-screen p-6 pb-24 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
@@ -451,7 +586,7 @@ export default function SubjectsManagement() {
   }
 
   return (
-    <div 
+    <div
       className={`min-h-screen p-6 pb-24 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
@@ -466,7 +601,7 @@ export default function SubjectsManagement() {
           className="fixed inset-0 bg-black pointer-events-none z-50"
         />
       )}
-      
+
       {/* Swipe indicator arrow */}
       {isSwiping && swipeProgress > 0.1 && (
         <motion.div
@@ -486,7 +621,7 @@ export default function SubjectsManagement() {
         <h1 className={`text-3xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-800'}`}>
           จัดการข้อมูลวิชาเรียน
         </h1>
-        
+
         {/* Teacher Dropdown */}
         <div className={`flex items-center gap-3 p-4 rounded-2xl shadow-sm ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
           {/* Back Button */}
@@ -513,7 +648,7 @@ export default function SubjectsManagement() {
                 ▼
               </motion.span>
             </div>
-            
+
             {/* Dropdown List */}
             {showTeacherDropdown && (
               <motion.div
@@ -548,7 +683,7 @@ export default function SubjectsManagement() {
       >
         <div className="flex items-center justify-between mb-4">
           <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
-            {selectedTeacherId 
+            {selectedTeacherId
               ? `ข้อมูลวิชาที่สอน (${Object.keys(groupedByDay).length} วัน)`
               : 'รายชื่อวิชาเรียนทั้งหมด'
             }
@@ -585,57 +720,81 @@ export default function SubjectsManagement() {
                 return indexA - indexB;
               })
               .map((day, dayIndex) => (
-              <div key={day}>
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3 + dayIndex * 0.1 }}
-                  className={`rounded-2xl p-4 ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}
-                >
-                  <h3 className={`text-lg font-semibold mb-3 ${isDark ? 'text-white' : 'text-gray-800'}`}>
-                    {convertDayToEnglish(day)}
-                  </h3>
-                  <div className="space-y-2">
-                    {groupedByDay[day]
-                      .sort((a: any, b: any) => {
-                        // Sort by time (extract start time from time range)
-                        const timeA = a.time.split('-')[0] || a.time;
-                        const timeB = b.time.split('-')[0] || b.time;
-                        return timeA.localeCompare(timeB);
-                      })
-                      .map((subject: any, index: number) => (
-                      <motion.div
-                        key={subject.subjectId}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.3 + dayIndex * 0.1 + index * 0.02 }}
-                        whileHover={{ scale: 1.01, x: 5 }}
-                        onContextMenu={(e) => {
-                          e.preventDefault();
-                          toggleSubjectSelection(subject.subjectId);
-                        }}
-                        onTouchStart={() => handleSubjectTouchStart(subject.subjectId)}
-                        onTouchEnd={handleSubjectTouchEnd}
-                        onTouchMove={handleSubjectTouchMove}
-                        className={`rounded-xl p-3 cursor-pointer transition-all ${selectedSubjects.has(subject.subjectId) ? 'bg-red-100 border-2 border-red-500' : isDark ? 'bg-gray-600 hover:bg-gray-500' : 'bg-white hover:bg-blue-50'}`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>{subject.subjectName}</p>
-                            <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                              ห้อง {subject.classroom} • {subject.time} • {subject.duration === '1' ? '1hr.' : `${subject.duration}hrs.`}
-                            </p>
-                          </div>
-                          {selectedSubjects.has(subject.subjectId) && (
-                            <span className="text-red-500">✓</span>
-                          )}
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                </motion.div>
-              </div>
-            ))}
+                <div key={day}>
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 + dayIndex * 0.1 }}
+                    className={`rounded-2xl p-4 ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}
+                  >
+                    <h3 className={`text-lg font-semibold mb-3 ${isDark ? 'text-white' : 'text-gray-800'}`}>
+                      {convertDayToEnglish(day)}
+                    </h3>
+                    <div className="space-y-2">
+                      {groupedByDay[day]
+                        .sort((a: any, b: any) => {
+                          // Sort by time (extract start time from time range)
+                          const timeA = a.time.split('-')[0] || a.time;
+                          const timeB = b.time.split('-')[0] || b.time;
+                          return timeA.localeCompare(timeB);
+                        })
+                        .map((subject: any, index: number) => {
+                          const isElective = subject.subjectType === 'elective';
+                          const studentCount = isElective && Array.isArray(subject.studentIds) ? subject.studentIds.length : null;
+
+                          return (
+                            <motion.div
+                              key={subject.subjectId}
+                              initial={{ opacity: 0, x: -20 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: 0.3 + dayIndex * 0.1 + index * 0.02 }}
+                              whileHover={{ scale: 1.01, x: 5 }}
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                toggleSubjectSelection(subject.subjectId);
+                              }}
+                              onTouchStart={() => handleSubjectTouchStart(subject.subjectId)}
+                              onTouchEnd={handleSubjectTouchEnd}
+                              onTouchMove={handleSubjectTouchMove}
+                              className={`rounded-xl p-3 cursor-pointer transition-all ${selectedSubjects.has(subject.subjectId) ? 'bg-red-100 border-2 border-red-500' : isDark ? 'bg-gray-600 hover:bg-gray-500' : 'bg-white hover:bg-blue-50'}`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                    <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>{subject.subjectName}</p>
+                                    <span
+                                      title={isElective ? `วิชาเพิ่มเติม${studentCount !== null ? ` (${studentCount} คน)` : ''}` : 'วิชาพื้นฐาน'}
+                                      className="inline-flex items-center shrink-0"
+                                    >
+                                      {isElective ? (
+                                        <GoogleElectiveSubjectIcon size={18} />
+                                      ) : (
+                                        <GoogleBasicSubjectIcon size={18} />
+                                      )}
+                                    </span>
+                                    {isElective && studentCount !== null && (
+                                      <span className={`text-[11px] px-2 py-0.5 rounded-md font-semibold ${
+                                        isDark ? 'bg-amber-950/40 text-amber-300' : 'bg-amber-100 text-amber-800'
+                                      }`}>
+                                        {studentCount} คน
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                                    ห้อง {subject.classroom} • {subject.time} • {subject.duration === '1' ? '1hr.' : `${subject.duration}hrs.`}
+                                  </p>
+                                </div>
+                                {selectedSubjects.has(subject.subjectId) && (
+                                  <span className="text-red-500">✓</span>
+                                )}
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                    </div>
+                  </motion.div>
+                </div>
+              ))}
           </div>
         )}
       </motion.div>
@@ -686,161 +845,419 @@ export default function SubjectsManagement() {
       </motion.div>
 
       {/* Add Subject Modal */}
-      {showAddModal && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-          onClick={() => setShowAddModal(false)}
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            onClick={(e) => e.stopPropagation()}
-            className={`rounded-2xl p-6 max-w-md w-full shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
-                เพิ่มวิชาเรียน
-              </h3>
-              <button
-                onClick={() => setShowAddModal(false)}
-                className={`text-2xl ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'}`}
-              >
-                ×
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className={`block text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-1`}>
-                  เลขประจำตัวครู
-                </label>
-                <select
-                  value={newSubject.teacherId}
-                  onChange={(e) => setNewSubject({ ...newSubject, teacherId: e.target.value })}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
-                >
-                  <option value="">เลือกครู</option>
-                  {teachers.map((teacher) => (
-                    <option key={teacher.teacherId} value={teacher.teacherId}>
-                      {teacher.teacherId} - {teacher.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={`block text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-1`}>
-                  วิชา
-                </label>
-                <input
-                  type="text"
-                  value={newSubject.subjectName}
-                  onChange={(e) => setNewSubject({ ...newSubject, subjectName: e.target.value })}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
-                  placeholder="ชื่อวิชา"
-                />
-              </div>
-              <div>
-                <label className={`block text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-1`}>
-                  ห้อง
-                </label>
-                <input
-                  type="text"
-                  value={newSubject.classroom}
-                  onChange={(e) => setNewSubject({ ...newSubject, classroom: e.target.value })}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
-                  placeholder="เช่น 301"
-                />
-              </div>
-              <div>
-                <label className={`block text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-1`}>
-                  วัน
-                </label>
-                <input
-                  type="text"
-                  value={newSubject.day}
-                  onChange={(e) => setNewSubject({ ...newSubject, day: e.target.value })}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
-                  placeholder="เช่น จันทร์"
-                />
-              </div>
-              <div>
-                <label className={`block text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-1`}>
-                  เวลา
-                </label>
-                <input
-                  type="text"
-                  value={newSubject.time}
-                  onChange={(e) => setNewSubject({ ...newSubject, time: e.target.value })}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
-                  placeholder="เช่น 08:00-09:00"
-                />
-              </div>
-              <div>
-                <label className={`block text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-1`}>
-                  จำนวนชั่วโมง
-                </label>
-                <div className="relative">
-                  <div
-                    onClick={() => setShowDurationDropdown(!showDurationDropdown)}
-                    className={`w-full p-3 rounded-xl cursor-pointer flex items-center justify-between border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
-                  >
-                    <span>{newSubject.duration === '1' ? '1hr.' : `${newSubject.duration}hrs.`}</span>
-                    <motion.span
-                      animate={{ rotate: showDurationDropdown ? 180 : 0 }}
-                      className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}
-                    >
-                      ▼
-                    </motion.span>
+      <AnimatePresence>
+        {showAddModal && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className={`w-full max-w-lg max-h-[90vh] rounded-3xl p-6 shadow-2xl flex flex-col ${isDark ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
+                }`}
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex items-center gap-2">
+                  <div className={`p-2.5 rounded-xl ${isDark ? 'bg-blue-950/40 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>
+                    <BookOpen size={22} />
                   </div>
-                  
-                  {/* Duration Dropdown List */}
-                  {showDurationDropdown && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className={`absolute top-full left-0 right-0 mt-2 rounded-xl shadow-lg z-50 ${isDark ? 'bg-gray-800' : 'bg-white'}`}
+                  <h3 className="text-xl font-bold">เพิ่มวิชาเรียน</h3>
+                </div>
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className={`p-2 rounded-xl transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Modal Content - Scrollable */}
+              <div className="space-y-4 flex-1 overflow-y-auto pr-1">
+                {/* Teacher Select */}
+                <div>
+                  <label className={`text-xs font-semibold block mb-1.5 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    เลขประจำตัวครู *
+                  </label>
+                  <select
+                    value={newSubject.teacherId}
+                    onChange={(e) => setNewSubject({ ...newSubject, teacherId: e.target.value })}
+                    className={`w-full p-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                      }`}
+                  >
+                    <option value="">เลือกครู</option>
+                    {teachers.map((teacher) => (
+                      <option key={teacher.teacherId} value={teacher.teacherId}>
+                        {teacher.teacherId} - {teacher.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Subject Name */}
+                <div>
+                  <label className={`text-xs font-semibold block mb-1.5 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    ชื่อวิชา *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="เช่น คณิตศาสตร์พื้นฐาน, วิทยาการคำนวณ"
+                    value={newSubject.subjectName}
+                    onChange={(e) => setNewSubject({ ...newSubject, subjectName: e.target.value })}
+                    className={`w-full p-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                      }`}
+                  />
+                </div>
+
+                {/* Subject Type: Basic vs Elective */}
+                <div>
+                  <label className={`text-xs font-semibold block mb-1.5 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    ประเภทวิชา *
+                  </label>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setNewSubject({ ...newSubject, subjectType: 'basic', studentIds: [] })}
+                      className={`p-3 rounded-2xl border-2 flex items-center justify-center gap-2.5 transition-all ${
+                        newSubject.subjectType === 'basic'
+                          ? isDark
+                            ? 'border-blue-500 bg-blue-950/40 text-blue-300 font-bold shadow-md shadow-blue-500/10'
+                            : 'border-blue-500 bg-blue-50 text-blue-700 font-bold shadow-md shadow-blue-500/10'
+                          : isDark
+                            ? 'border-gray-700 bg-gray-900/40 text-gray-400 hover:border-gray-600'
+                            : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+                      }`}
                     >
-                      {['1', '2', '3'].map((duration) => (
-                        <div
-                          key={duration}
-                          onClick={() => {
-                            setNewSubject({ ...newSubject, duration });
-                            setShowDurationDropdown(false);
-                          }}
-                          className={`p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${isDark ? 'text-white' : 'text-gray-800'}`}
-                        >
-                          {duration === '1' ? '1hr.' : `${duration}hrs.`}
-                        </div>
+                      <GoogleBasicSubjectIcon size={22} />
+                      <span className="text-sm">วิชาพื้นฐาน</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setNewSubject({ ...newSubject, subjectType: 'elective' })}
+                      className={`p-3 rounded-2xl border-2 flex items-center justify-center gap-2.5 transition-all ${
+                        newSubject.subjectType === 'elective'
+                          ? isDark
+                            ? 'border-amber-500 bg-amber-950/40 text-amber-300 font-bold shadow-md shadow-amber-500/10'
+                            : 'border-amber-500 bg-amber-50 text-amber-800 font-bold shadow-md shadow-amber-500/10'
+                          : isDark
+                            ? 'border-gray-700 bg-gray-900/40 text-gray-400 hover:border-gray-600'
+                            : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      <GoogleElectiveSubjectIcon size={22} />
+                      <span className="text-sm">วิชาเพิ่มเติม</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Classroom input */}
+                {newSubject.subjectType === 'basic' ? (
+                  <div>
+                    <label className={`text-xs font-semibold block mb-1.5 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                      ห้องเรียน *
+                    </label>
+                    <select
+                      value={newSubject.classroom}
+                      onChange={(e) => setNewSubject({ ...newSubject, classroom: e.target.value })}
+                      className={`w-full p-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        isDark ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                      }`}
+                    >
+                      <option value="">-- เลือกห้องเรียน --</option>
+                      {availableClassrooms.map((cls) => (
+                        <option key={cls} value={cls}>
+                          ห้อง {cls}
+                        </option>
                       ))}
-                    </motion.div>
+                    </select>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className={`text-xs font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                        ห้องเรียน / กลุ่มเรียน
+                      </label>
+                      {detectedClassesForElective.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setNewSubject({ ...newSubject, classroom: detectedClassesForElective.join(', ') })}
+                          className="text-[11px] text-blue-500 hover:underline"
+                        >
+                          ใช้ห้อง: {detectedClassesForElective.join(', ')}
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      placeholder={
+                        detectedClassesForElective.length > 0
+                          ? `เช่น ${detectedClassesForElective.join(', ')}`
+                          : 'เช่น ม.1 (รวม), เพิ่มเติมคอมฯ'
+                      }
+                      value={newSubject.classroom}
+                      onChange={(e) => setNewSubject({ ...newSubject, classroom: e.target.value })}
+                      className={`w-full p-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        isDark ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                      }`}
+                    />
+                  </div>
+                )}
+
+                {/* Elective Student Selector: Cross-Classroom Support */}
+                {newSubject.subjectType === 'elective' && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className={`p-3.5 rounded-2xl border ${
+                      isDark ? 'bg-gray-900/60 border-gray-700' : 'bg-gray-50 border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <label className={`text-xs font-bold ${isDark ? 'text-amber-400' : 'text-amber-700'}`}>
+                        เลือกนักเรียนในวิชาเพิ่มเติม ({newSubject.studentIds.length} คน)
+                      </label>
+                      <div className="flex items-center gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={handleSelectAllStudentsInCurrentView}
+                          className="text-blue-500 font-semibold hover:underline"
+                        >
+                          เลือกทั้งหมดในหน้านี้
+                        </button>
+                        <span className="opacity-40">|</span>
+                        <button
+                          type="button"
+                          onClick={handleClearAllStudents}
+                          className="opacity-70 hover:underline"
+                        >
+                          ล้างทั้งหมด
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Filter by Classroom + Search Input */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+                      <div>
+                        <select
+                          value={studentClassFilter}
+                          onChange={(e) => setStudentClassFilter(e.target.value)}
+                          className={`w-full p-2 rounded-lg border text-xs ${
+                            isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                          }`}
+                        >
+                          <option value="all">ทุกห้องเรียน ({allStudents.length} คน)</option>
+                          {availableClassrooms.map((cls) => (
+                            <option key={cls} value={cls}>
+                              ห้อง {cls} ({allStudents.filter(s => s.class === cls).length} คน)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="relative">
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40" />
+                        <input
+                          type="text"
+                          placeholder="ค้นหาชื่อ หรือ เลขที่ หรือ ห้อง..."
+                          value={studentSearchQuery}
+                          onChange={(e) => setStudentSearchQuery(e.target.value)}
+                          className={`w-full pl-8 pr-3 py-2 rounded-lg border text-xs ${
+                            isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                          }`}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Student list */}
+                    {studentsForElective.length === 0 ? (
+                      <p className={`text-xs py-4 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        ไม่พบข้อมูลนักเรียนตามเงื่อนไขที่เลือก
+                      </p>
+                    ) : (
+                      <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
+                        {studentsForElective.map((student) => {
+                          const isChecked = newSubject.studentIds.includes(student.studentId);
+                          return (
+                            <label
+                              key={student.studentId}
+                              className={`flex items-center gap-2.5 p-2 rounded-xl cursor-pointer text-xs transition-colors ${
+                                isChecked
+                                  ? isDark ? 'bg-amber-950/40 text-amber-300' : 'bg-amber-100/70 text-amber-900'
+                                  : isDark ? 'hover:bg-gray-800/80' : 'hover:bg-gray-100'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => toggleStudentSelection(student.studentId)}
+                                className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                                isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
+                              }`}>
+                                {student.class || '-'}
+                              </span>
+                              <span className="font-mono font-semibold opacity-70 w-7">
+                                #{student.number}
+                              </span>
+                              <span className="font-medium flex-1 truncate">
+                                {student.name}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+
+                {/* Day, Time, and Duration combined with multi-day support (up to 3 days) */}
+                <div className="space-y-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center justify-between">
+                    <label className={`text-xs font-bold flex items-center gap-1.5 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                      <Calendar size={14} className="text-blue-500" />
+                      <span>กำหนดวัน เวลา และจำนวนคาบที่สอน</span>
+                    </label>
+                    {newSubject.schedules.length < 3 && (
+                      <button
+                        type="button"
+                        onClick={handleAddScheduleSlot}
+                        className="text-xs text-blue-500 hover:text-blue-600 font-semibold flex items-center gap-1 transition-colors"
+                      >
+                        <Plus size={14} />
+                        <span>เพิ่มวันสอน ({newSubject.schedules.length}/3)</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {newSubject.schedules.map((slot, index) => (
+                    <div
+                      key={index}
+                      className={`p-3.5 rounded-2xl border transition-all ${
+                        isDark ? 'bg-gray-900/60 border-gray-700' : 'bg-gray-50 border-gray-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-blue-500 dark:text-blue-400">
+                          วันที่ {index + 1}
+                        </span>
+                        {newSubject.schedules.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveScheduleSlot(index)}
+                            className="text-xs text-red-400 hover:text-red-600 p-1 rounded-lg transition-colors"
+                            title="ลบวันสอนนี้"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        {/* Day */}
+                        <div>
+                          <label className={`text-[11px] font-semibold block mb-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                            วันที่สอน
+                          </label>
+                          <select
+                            value={slot.day}
+                            onChange={(e) => handleUpdateScheduleSlot(index, 'day', e.target.value)}
+                            className={`w-full p-2.5 rounded-xl border text-xs transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                              isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                            }`}
+                          >
+                            <option value="จันทร์">จันทร์</option>
+                            <option value="อังคาร">อังคาร</option>
+                            <option value="พุธ">พุธ</option>
+                            <option value="พฤหัสบดี">พฤหัสบดี</option>
+                            <option value="ศุกร์">ศุกร์</option>
+                            <option value="เสาร์">เสาร์</option>
+                            <option value="อาทิตย์">อาทิตย์</option>
+                          </select>
+                        </div>
+
+                        {/* Time */}
+                        <div>
+                          <label className={`text-[11px] font-semibold block mb-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                            เวลาที่สอน
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="เช่น 08:30-09:30"
+                            value={slot.time}
+                            onChange={(e) => handleUpdateScheduleSlot(index, 'time', e.target.value)}
+                            className={`w-full p-2.5 rounded-xl border text-xs transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                              isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                            }`}
+                          />
+                        </div>
+
+                        {/* Duration */}
+                        <div>
+                          <label className={`text-[11px] font-semibold block mb-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                            จำนวนคาบ / ชม.
+                          </label>
+                          <select
+                            value={slot.duration || '1'}
+                            onChange={(e) => handleUpdateScheduleSlot(index, 'duration', e.target.value)}
+                            className={`w-full p-2.5 rounded-xl border text-xs transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                              isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                            }`}
+                          >
+                            <option value="1">1 คาบ</option>
+                            <option value="2">2 คาบ</option>
+                            <option value="3">3 คาบ</option>
+                            <option value="4">4 คาบ</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {newSubject.schedules.length < 3 && (
+                    <button
+                      type="button"
+                      onClick={handleAddScheduleSlot}
+                      className={`w-full py-2.5 px-3 rounded-xl border border-dashed text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                        isDark
+                          ? 'border-gray-700 text-gray-400 hover:border-blue-500 hover:text-blue-400 bg-gray-900/40'
+                          : 'border-gray-300 text-gray-600 hover:border-blue-500 hover:text-blue-600 bg-gray-50'
+                      }`}
+                    >
+                      <Plus size={14} />
+                      <span>เพิ่มวันที่สอนอีก (สูงสุด 3 วัน)</span>
+                    </button>
                   )}
                 </div>
               </div>
-            </div>
-            <div className="flex gap-3 mt-6">
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setShowAddModal(false)}
-                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'}`}
-              >
-                ยกเลิก
-              </motion.button>
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={handleAddSubject}
-                className="flex-1 bg-blue-500 text-white py-3 rounded-xl"
-              >
-                เพิ่ม
-              </motion.button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
+
+              {/* Modal Actions */}
+              <div className="flex gap-3 mt-5 pt-3 border-t border-gray-200 dark:border-gray-700">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setShowAddModal(false)}
+                  disabled={isSavingSubject}
+                  className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all ${isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                >
+                  ยกเลิก
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={handleAddSubject}
+                  disabled={isSavingSubject}
+                  className="flex-1 py-3 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 transition-all disabled:opacity-50"
+                >
+                  {isSavingSubject && <Loader2 size={16} className="animate-spin" />}
+                  {isSavingSubject ? 'กำลังบันทึก...' : 'บันทึกวิชาเรียน'}
+                </motion.button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

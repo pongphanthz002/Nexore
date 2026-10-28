@@ -1,7 +1,7 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useEffect, Fragment } from 'react';
+import { useState, useEffect, Fragment, useMemo, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { schoolDatabaseService, SubjectData, StudentData } from '@/services/school-database.service';
 import { 
@@ -67,7 +67,7 @@ export default function GradesPage() {
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<StudentData | null>(null);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
-  const [selectedClassroomForDownload, setSelectedClassroomForDownload] = useState<string>('all');
+  const [selectedSubjectsForDownload, setSelectedSubjectsForDownload] = useState<string[]>([]);
   const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
@@ -83,14 +83,14 @@ export default function GradesPage() {
     async function loadData() {
       if (userAccount?.schoolFirebaseConfig && userAccount?.userId) {
         try {
-          const [allSubjects, allStudents, teacherData] = await Promise.all([
-            schoolDatabaseService.getAllSubjects(userAccount.schoolFirebaseConfig),
-            schoolDatabaseService.getAllStudents(userAccount.schoolFirebaseConfig),
+          // Only this teacher's subjects and the students enrolled in them
+          const [teacherSubjects, teacherData] = await Promise.all([
+            schoolDatabaseService.getSubjectsForTeacher(userAccount.schoolFirebaseConfig, userAccount.userId),
             schoolDatabaseService.getTeacherConfig(userAccount.schoolFirebaseConfig, userAccount.userId),
           ]);
-          const teacherSubjects = allSubjects.filter(s => s.teacherId === userAccount.userId);
+          const subjectStudents = await schoolDatabaseService.getStudentsForSubjects(userAccount.schoolFirebaseConfig, teacherSubjects);
           setSubjects(teacherSubjects);
-          setStudents(allStudents);
+          setStudents(subjectStudents);
           setTeacherConfig(teacherData);
         } catch (error) {
           console.error('Error loading data:', error);
@@ -135,10 +135,15 @@ export default function GradesPage() {
     return { startMinutes: startH * 60 + startM };
   };
 
-  const handleDownloadAllGrades = async (classroomFilter?: string) => {
-    const subjectsToDownload = classroomFilter && classroomFilter !== 'all'
-      ? subjects.filter(s => s.classroom === classroomFilter)
-      : subjects;
+  const handleDownloadExcel = async () => {
+    if (selectedSubjectsForDownload.length === 0) {
+      alert('กรุณาเลือกวิชาที่ต้องการดาวน์โหลด');
+      return;
+    }
+
+    const subjectsToDownload = uniqueSubjects.filter(s => 
+      selectedSubjectsForDownload.includes(`${s.subjectId}|||${s.classroom}`)
+    );
 
     if (subjectsToDownload.length === 0) {
       alert('ไม่มีข้อมูลวิชาที่จะดาวน์โหลด');
@@ -163,7 +168,12 @@ export default function GradesPage() {
           ]);
 
           const studentsInClass = students
-            .filter(s => s.class === subject.classroom)
+            .filter(s => {
+              if (subject.subjectType === 'elective' && Array.isArray(subject.studentIds) && subject.studentIds.length > 0) {
+                return subject.studentIds.includes(s.studentId);
+              }
+              return s.class === subject.classroom;
+            })
             .sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0));
 
           if (studentsInClass.length === 0) continue;
@@ -186,10 +196,12 @@ export default function GradesPage() {
           };
 
           const sheetName = `${subject.subjectName} (${subject.classroom})`.substring(0, 31).replace(/[:\\/?*[\]]/g, '_');
-          const worksheet = workbook.addWorksheet(sheetName);
+          const worksheet = workbook.addWorksheet(sheetName, {
+            views: [{ showGridLines: true }]
+          });
 
           // Define columns and headers
-          const headerRow1: any[] = ['เลขที่', 'ชื่อ'];
+          const headerRow1: any[] = ['เลขที่', 'ชื่อ - สกุล'];
           const headerRow2: any[] = ['', ''];
           
           // Helper to find scores
@@ -203,7 +215,7 @@ export default function GradesPage() {
               headerRow2.push(`${a.title} (เต็ม ${a.maxScore})`);
             });
             headerRow1.push(group.name);
-            headerRow2.push(`คะแนนสุทธิ (ทอนเหลือ ${group.rawScore})`);
+            headerRow2.push(`คะแนนสุทธิ (${group.rawScore})`);
           });
 
           // Add Ungrouped VISIBLE assignments
@@ -223,23 +235,41 @@ export default function GradesPage() {
           const row1 = worksheet.addRow(headerRow1);
           const row2 = worksheet.addRow(headerRow2);
 
-          // Styling headers
-          [row1, row2].forEach(row => {
-            row.eachCell((cell) => {
-              cell.font = { bold: true };
-              cell.alignment = { vertical: 'middle', horizontal: 'center' };
-              cell.border = {
-                top: { style: 'thin' },
-                left: { style: 'thin' },
-                bottom: { style: 'thin' },
-                right: { style: 'thin' }
-              };
-              cell.fill = {
-                type: 'pattern',
-                pattern: 'solid',
-                fgColor: { argb: 'F3F4F6' }
-              };
-            });
+          row1.height = 32;
+          row2.height = 30;
+
+          // Styling header cells with Sarabun font size 16-18 and soft palette
+          row1.eachCell((cell, colNumber) => {
+            cell.font = { name: 'Sarabun', size: 18, bold: true, color: { argb: 'FF1F2937' } };
+            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+            cell.border = {
+              top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+              left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+              bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+              right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+            };
+            // Dynamic Header color based on section
+            if (colNumber <= 2) {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } }; // Slate-200
+            } else {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } }; // Slate-100
+            }
+          });
+
+          row2.eachCell((cell, colNumber) => {
+            cell.font = { name: 'Sarabun', size: 16, bold: true, color: { argb: 'FF374151' } };
+            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+            cell.border = {
+              top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+              left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+              bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+              right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+            };
+            if (colNumber <= 2) {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+            } else {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+            }
           });
 
           // Add Student Data
@@ -305,55 +335,104 @@ export default function GradesPage() {
             );
 
             const dataRow = worksheet.addRow(rowData);
-            dataRow.eachCell((cell) => {
+            dataRow.height = 26;
+            dataRow.eachCell((cell, colIndex) => {
+              cell.font = { name: 'Sarabun', size: 16, color: { argb: 'FF1F2937' } };
               cell.border = {
-                top: { style: 'thin' },
-                left: { style: 'thin' },
-                bottom: { style: 'thin' },
-                right: { style: 'thin' }
+                top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+                left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+                bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+                right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
               };
+              if (colIndex === 1) {
+                cell.alignment = { vertical: 'middle', horizontal: 'center' };
+              } else if (colIndex === 2) {
+                cell.alignment = { vertical: 'middle', horizontal: 'left' };
+              } else {
+                cell.alignment = { vertical: 'middle', horizontal: 'center' };
+              }
             });
           });
 
-          // Apply Styling for Groups (Orange colors)
-          let currentCol = 3; // Starting after No. and Name
+          // Apply Beautiful Styling for Groups & Summaries
+          let currentCol = 3;
           groupsList.forEach(group => {
             const groupAsms = assignmentsList.filter(a => a.groupId === group.id && a.isVisible);
             
-            // Individual assignments in group (Light Orange)
+            // Header colors for group
+            row1.getCell(currentCol).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEDD5' } }; // Orange-100
+            
+            // Individual assignments in group
             groupAsms.forEach(() => {
               worksheet.getColumn(currentCol).eachCell((cell, rowNumber) => {
-                if (rowNumber > 0) {
-                  cell.fill = {
-                    type: 'pattern',
-                    pattern: 'solid',
-                    fgColor: { argb: 'FFF7ED' } // Orange-50
-                  };
+                if (rowNumber === 2) {
+                  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF7ED' } }; // Orange-50
+                } else if (rowNumber > 2) {
+                  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFDF9' } };
                 }
               });
               currentCol++;
             });
 
-            // Group Net Score column (Orange)
+            // Group Net Score column (Highlighted Orange)
             worksheet.getColumn(currentCol).eachCell((cell, rowNumber) => {
-              if (rowNumber > 0) {
-                cell.fill = {
-                  type: 'pattern',
-                  pattern: 'solid',
-                  fgColor: { argb: 'FFEDD5' } // Orange-100
-                };
-                if (rowNumber > 2) cell.font = { bold: true };
+              if (rowNumber === 1 || rowNumber === 2) {
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFED7AA' } }; // Orange-200
+                cell.font = { name: 'Sarabun', size: rowNumber === 1 ? 18 : 16, bold: true, color: { argb: 'FF9A3412' } };
+              } else if (rowNumber > 2) {
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEDD5' } }; // Orange-100
+                cell.font = { name: 'Sarabun', size: 16, bold: true, color: { argb: 'FF7C2D12' } };
               }
             });
             currentCol++;
           });
 
-          // Adjust column widths
-          worksheet.columns.forEach(column => {
-            column.width = 15;
+          // Style Ungrouped
+          ungroupedVisible.forEach(() => {
+            worksheet.getColumn(currentCol).eachCell((cell, rowNumber) => {
+              if (rowNumber === 1 || rowNumber === 2) {
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0F2FE' } }; // Sky-100
+              }
+            });
+            currentCol++;
           });
-          worksheet.getColumn(1).width = 8;
-          worksheet.getColumn(2).width = 25;
+
+          // Style Summaries (คะแนนเก็บรวม, กลางภาค, ปลายภาค, รวมทั้งหมด, เกรด)
+          const summaryColsCount = 5;
+          for (let i = 0; i < summaryColsCount; i++) {
+            const colIdx = currentCol + i;
+            const isTotalOrGrade = i >= 3;
+            worksheet.getColumn(colIdx).eachCell((cell, rowNumber) => {
+              if (rowNumber === 1 || rowNumber === 2) {
+                cell.fill = { 
+                  type: 'pattern', 
+                  pattern: 'solid', 
+                  fgColor: { argb: isTotalOrGrade ? 'FFBBF7D0' : 'FFDBEAFE' } // Emerald-200 or Blue-100
+                };
+                cell.font = { 
+                  name: 'Sarabun', 
+                  size: rowNumber === 1 ? 18 : 16, 
+                  bold: true, 
+                  color: { argb: isTotalOrGrade ? 'FF065F46' : 'FF1E40AF' } 
+                };
+              } else if (rowNumber > 2) {
+                if (isTotalOrGrade) {
+                  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } }; // Emerald-100
+                  cell.font = { name: 'Sarabun', size: 16, bold: true, color: { argb: 'FF064E3B' } };
+                } else {
+                  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0FDF4' } };
+                  cell.font = { name: 'Sarabun', size: 16, color: { argb: 'FF1F2937' } };
+                }
+              }
+            });
+          }
+
+          // Adjust column widths to comfortably fit Sarabun size 16-18
+          worksheet.columns.forEach(column => {
+            column.width = 20;
+          });
+          worksheet.getColumn(1).width = 10;
+          worksheet.getColumn(2).width = 30;
 
         } catch (subjectError) {
           console.error(`Error processing subject ${subject.subjectName}:`, subjectError);
@@ -366,7 +445,8 @@ export default function GradesPage() {
 
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      saveAs(blob, `Nexore_Grades_Report_${new Date().toLocaleDateString('th-TH').replace(/\//g, '-')}.xlsx`);
+      saveAs(blob, `รายงานคะแนน_${new Date().toLocaleDateString('th-TH').replace(/\//g, '-')}.xlsx`);
+      setShowDownloadModal(false);
 
     } catch (error) {
       console.error('Error downloading grades:', error);
@@ -379,7 +459,12 @@ export default function GradesPage() {
   const handleSelectSubject = async (subject: SubjectData) => {
     setSelectedSubject(subject);
     const matched = students
-      .filter(s => s.class === subject.classroom)
+      .filter(s => {
+        if (subject.subjectType === 'elective' && Array.isArray(subject.studentIds) && subject.studentIds.length > 0) {
+          return subject.studentIds.includes(s.studentId);
+        }
+        return s.class === subject.classroom;
+      })
       .sort((a, b) => {
         const numA = parseInt(a.number) || 0;
         const numB = parseInt(b.number) || 0;
@@ -476,50 +561,59 @@ export default function GradesPage() {
     }
   };
 
-  const calculateDetailedStudentScore = (studentId: string) => {
-    if (!gradeConfig) return { total: 0, collected: 0, midterm: 0, final: 0, isExceeding: false };
+  // Memoize score calculations for high performance during table renders
+  const detailedScoresMap = useMemo(() => {
+    const map = new Map<string, { total: number; collected: number; midterm: number; final: number; isExceeding: boolean }>();
+    if (!gradeConfig) return map;
     
-    const score = studentScores.find(s => s.studentId === studentId);
-    if (!score) return { total: 0, collected: 0, midterm: 0, final: 0, isExceeding: false };
-
-    // 1. Calculate Grouped Scores (Normalized to Group rawScore)
-    let groupedPoints = 0;
+    // Pre-calculate visible assignments per group to avoid recalculating per student
+    const groupAssignmentsMap = new Map<string, { totalMax: number; assignments: Assignment[] }>();
     assignmentGroups.forEach(group => {
       const groupAssignments = assignments.filter(a => a.groupId === group.id && a.isVisible);
-      if (groupAssignments.length > 0) {
-        const totalMax = groupAssignments.reduce((sum, a) => sum + a.maxScore, 0);
-        const studentRaw = groupAssignments.reduce((sum, a) => sum + (score.assignmentScores[a.id] || 0), 0);
-        if (totalMax > 0) {
-          groupedPoints += (studentRaw / totalMax) * group.rawScore;
-        }
-      }
+      const totalMax = groupAssignments.reduce((sum, a) => sum + a.maxScore, 0);
+      groupAssignmentsMap.set(group.id, { totalMax, assignments: groupAssignments });
     });
 
-    // 2. Calculate Ungrouped Scores (Raw Points - NO NORMALIZATION)
-    // As per requirement: "Direct Sum" for ungrouped assignments
     const ungroupedAssignments = assignments.filter(a => !a.groupId && a.isVisible);
-    const ungroupedPoints = ungroupedAssignments.reduce((sum, a) => sum + (score.assignmentScores[a.id] || 0), 0);
-    
-    // finalCollected is the direct sum of normalized group points and raw ungrouped points
-    let finalCollected = groupedPoints + ungroupedPoints;
-    
-    // Check if exceeding collected proportion
-    const isExceeding = finalCollected > gradeConfig.proportions.collected;
 
-    // 3. Midterm and Final (Direct Raw Scores)
-    const midterm = score.midtermScore;
-    const final = score.finalScore;
-    
-    const total = Math.round((finalCollected + midterm + final) * 100) / 100;
-    
-    return {
-      total,
-      collected: Math.round(finalCollected * 100) / 100,
-      midterm,
-      final,
-      isExceeding
-    };
-  };
+    for (const score of studentScores) {
+      let groupedPoints = 0;
+      assignmentGroups.forEach(group => {
+        const gData = groupAssignmentsMap.get(group.id);
+        if (gData && gData.assignments.length > 0 && gData.totalMax > 0) {
+          let studentRaw = 0;
+          for (const a of gData.assignments) {
+            studentRaw += (score.assignmentScores[a.id] || 0);
+          }
+          groupedPoints += (studentRaw / gData.totalMax) * group.rawScore;
+        }
+      });
+
+      let ungroupedPoints = 0;
+      for (const a of ungroupedAssignments) {
+        ungroupedPoints += (score.assignmentScores[a.id] || 0);
+      }
+
+      const finalCollected = groupedPoints + ungroupedPoints;
+      const isExceeding = finalCollected > gradeConfig.proportions.collected;
+      const midterm = score.midtermScore || 0;
+      const final = score.finalScore || 0;
+      const total = Math.round((finalCollected + midterm + final) * 100) / 100;
+
+      map.set(score.studentId, {
+        total,
+        collected: Math.round(finalCollected * 100) / 100,
+        midterm,
+        final,
+        isExceeding
+      });
+    }
+    return map;
+  }, [gradeConfig, studentScores, assignmentGroups, assignments]);
+
+  const calculateDetailedStudentScore = useCallback((studentId: string) => {
+    return detailedScoresMap.get(studentId) || { total: 0, collected: 0, midterm: 0, final: 0, isExceeding: false };
+  }, [detailedScoresMap]);
 
   const getGradeFromScore = (totalScore: number, config?: GradeConfig | null) => {
     const targetConfig = config || gradeConfig;
@@ -823,8 +917,11 @@ export default function GradesPage() {
                   <motion.button
                     whileHover={{ scale: 1.08 }}
                     whileTap={{ scale: 0.92 }}
-                    onClick={() => setShowDownloadModal(true)}
-                    disabled={subjects.length === 0}
+                    onClick={() => {
+                      setSelectedSubjectsForDownload(uniqueSubjects.map(s => `${s.subjectId}|||${s.classroom}`));
+                      setShowDownloadModal(true);
+                    }}
+                    disabled={uniqueSubjects.length === 0}
                     title="ดาวน์โหลด Excel (Google Sheets)"
                     className={`p-3 rounded-2xl border transition-all flex items-center justify-center shadow-sm hover:shadow-md ${
                       isDark 
@@ -1880,89 +1977,114 @@ export default function GradesPage() {
         {/* Download Modal */}
         <AnimatePresence>
           {showDownloadModal && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-              onClick={() => setShowDownloadModal(false)}
-            >
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
               <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.95, opacity: 0 }}
-                className={`w-full max-w-md rounded-3xl shadow-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'}`}
-                onClick={(e) => e.stopPropagation()}
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                className={`w-full max-w-lg rounded-3xl p-6 shadow-2xl ${isDark ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'}`}
               >
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    เลือกระดับชั้นที่ต้องการดาวน์โหลด
-                  </h3>
-                  <button
+                  <div className="flex items-center gap-2">
+                    <div className={`p-2 rounded-xl ${isDark ? 'bg-emerald-950/40' : 'bg-emerald-50'}`}>
+                      <GoogleSheetsIcon size={24} />
+                    </div>
+                    <h3 className="text-xl font-bold">ดาวน์โหลดรายงานคะแนน</h3>
+                  </div>
+                  <button 
                     onClick={() => setShowDownloadModal(false)}
-                    className={`p-2 rounded-xl transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}
+                    className={`p-2 rounded-xl transition-colors ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
                   >
                     <X size={20} />
                   </button>
                 </div>
 
-                <div className="space-y-3">
-                  <button
-                    onClick={() => {
-                      setSelectedClassroomForDownload('all');
-                      setShowDownloadModal(false);
-                      handleDownloadAllGrades('all');
-                    }}
-                    disabled={isDownloading}
-                    className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
-                      selectedClassroomForDownload === 'all'
-                        ? isDark
-                          ? 'bg-emerald-600/20 border-emerald-500 text-emerald-400'
-                          : 'bg-emerald-50 border-emerald-500 text-emerald-700'
-                        : isDark
-                          ? 'bg-gray-700/50 border-gray-600 hover:bg-gray-700 text-gray-300'
-                          : 'bg-gray-50 border-gray-200 hover:bg-gray-100 text-gray-700'
-                    } disabled:opacity-50`}
-                  >
-                    <div className="font-bold">ทุกห้องเรียน</div>
-                    <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>ดาวน์โหลดข้อมูลทุกระดับชั้น</div>
-                  </button>
-
-                  {sortedClassrooms.map((classroom) => (
-                    <button
-                      key={classroom}
-                      onClick={() => {
-                        setSelectedClassroomForDownload(classroom);
-                        setShowDownloadModal(false);
-                        handleDownloadAllGrades(classroom);
-                      }}
-                      disabled={isDownloading}
-                      className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
-                        selectedClassroomForDownload === classroom
-                          ? isDark
-                            ? 'bg-emerald-600/20 border-emerald-500 text-emerald-400'
-                            : 'bg-emerald-50 border-emerald-500 text-emerald-700'
-                          : isDark
-                            ? 'bg-gray-700/50 border-gray-600 hover:bg-gray-700 text-gray-300'
-                            : 'bg-gray-50 border-gray-200 hover:bg-gray-100 text-gray-700'
-                      } disabled:opacity-50`}
-                    >
-                      <div className="font-bold">ระดับชั้น {classroom}</div>
-                      <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        {groupedByClassroom[classroom]?.length || 0} วิชา
+                <div className="space-y-6">
+                  {/* Subject Selection */}
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="text-sm font-bold opacity-70">เลือกวิชาที่ต้องการ</label>
+                      <div className="flex gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSubjectsForDownload(uniqueSubjects.map(s => `${s.subjectId}|||${s.classroom}`))}
+                          className="text-red-500 hover:underline font-semibold"
+                        >
+                          เลือกทั้งหมด
+                        </button>
+                        <span className="opacity-40">|</span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSubjectsForDownload([])}
+                          className="opacity-70 hover:underline"
+                        >
+                          ล้าง
+                        </button>
                       </div>
-                    </button>
-                  ))}
-                </div>
-
-                {isDownloading && (
-                  <div className="mt-4 flex items-center justify-center gap-2 text-sm text-gray-500">
-                    <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                    กำลังดาวน์โหลด...
+                    </div>
+                    <div className={`max-h-60 overflow-y-auto rounded-2xl p-2 border ${isDark ? 'bg-gray-900/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                      {uniqueSubjects.map((subject) => {
+                        const key = `${subject.subjectId}|||${subject.classroom}`;
+                        const isSelected = selectedSubjectsForDownload.includes(key);
+                        return (
+                          <label 
+                            key={key}
+                            className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
+                              isSelected 
+                                ? (isDark ? 'bg-red-950/30 text-red-400' : 'bg-red-50 text-red-600') 
+                                : (isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-100')
+                            }`}
+                          >
+                            <input 
+                              type="checkbox" 
+                              checked={isSelected}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedSubjectsForDownload(prev => [...prev, key]);
+                                } else {
+                                  setSelectedSubjectsForDownload(prev => prev.filter(k => k !== key));
+                                }
+                              }}
+                              className="w-5 h-5 rounded-lg border-2 border-gray-400 text-red-600 focus:ring-red-500"
+                            />
+                            <div className="flex-1">
+                              <div className="font-bold">{subject.subjectName}</div>
+                              <div className="text-xs opacity-70">ห้อง {subject.classroom}</div>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
-                )}
+
+                  {/* Action Buttons */}
+                  <div className="pt-2 space-y-3">
+                    <button
+                      onClick={handleDownloadExcel}
+                      disabled={isDownloading || selectedSubjectsForDownload.length === 0}
+                      className={`w-full py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg ${
+                        isDownloading || selectedSubjectsForDownload.length === 0
+                          ? 'bg-gray-500 cursor-not-allowed text-white'
+                          : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-900/20'
+                      }`}
+                    >
+                      {isDownloading ? (
+                        <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <GoogleSheetsIcon size={22} />
+                      )}
+                      {isDownloading ? 'กำลังสร้างไฟล์...' : `ดาวน์โหลด Excel (${selectedSubjectsForDownload.length} วิชา)`}
+                    </button>
+                    <button
+                      onClick={() => setShowDownloadModal(false)}
+                      className="w-full py-3 rounded-2xl font-bold opacity-60 hover:opacity-100 transition-all text-sm"
+                    >
+                      ยกเลิก
+                    </button>
+                  </div>
+                </div>
               </motion.div>
-            </motion.div>
+            </div>
           )}
         </AnimatePresence>
       </div>

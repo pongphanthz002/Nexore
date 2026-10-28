@@ -1,11 +1,12 @@
 import { UserIdentity } from '@/types';
+import { STORAGE_KEYS as KEYS } from '@/config/storage.keys';
 
 const STORAGE_KEYS = {
-  USER_IDENTITY: 'nexore_user_identity',
-  MASTER_REGISTRY_CONFIG: 'nexore_master_registry_config',
-  SCHOOL_QR_CODE: 'nexore_school_qr_code',
-  TEACHER_NODES: 'nexore_teacher_nodes',
-  STUDENT_DATA: 'nexore_student_data',
+  USER_IDENTITY: KEYS.USER_IDENTITY,
+  MASTER_REGISTRY_CONFIG: KEYS.MASTER_REGISTRY_CONFIG,
+  SCHOOL_QR_CODE: KEYS.SCHOOL_QR_CODE,
+  TEACHER_NODES: KEYS.TEACHER_NODES,
+  STUDENT_DATA: KEYS.STUDENT_DATA,
 } as const;
 
 class StorageService {

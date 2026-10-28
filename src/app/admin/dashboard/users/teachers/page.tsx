@@ -23,7 +23,6 @@ export default function TeachersManagement() {
   const [pendingTeachersData, setPendingTeachersData] = useState<any[]>([]);
   const [isDark, setIsDark] = useState(false);
   const [showUID, setShowUID] = useState(false);
-  const [showFirebaseConfigInline, setShowFirebaseConfigInline] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editTeacherData, setEditTeacherData] = useState({
     teacherId: '',
@@ -458,7 +457,8 @@ export default function TeachersManagement() {
           newTeacherData.email,
           userAccount.schoolId,
           undefined,
-          'teacher'
+          'teacher',
+          newTeacherData.teacherId
         );
       }
 
@@ -683,7 +683,6 @@ export default function TeachersManagement() {
           className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
           onClick={() => {
             setShowPopup(false);
-            setShowFirebaseConfigInline(false);
           }}
         >
           <motion.div
@@ -693,26 +692,7 @@ export default function TeachersManagement() {
             onClick={(e) => e.stopPropagation()}
             className={`rounded-2xl p-6 max-w-md w-full shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
           >
-            {/* Firebase Config View */}
-            {showFirebaseConfigInline ? (
-              <div>
-                <div className="flex items-center gap-3 mb-4">
-                  <button
-                    onClick={() => setShowFirebaseConfigInline(false)}
-                    className={`p-2 rounded-lg ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
-                  >
-                    <ArrowLeft size={20} className={isDark ? 'text-gray-400' : 'text-gray-600'} />
-                  </button>
-                  <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
-                    Firebase Config
-                  </h3>
-                </div>
-                <pre className={`p-4 rounded-xl overflow-x-auto text-xs ${isDark ? 'bg-gray-900 text-green-400' : 'bg-black text-green-400'}`}>
-                  <code>{JSON.stringify(selectedTeacher.firebaseConfig, null, 2)}</code>
-                </pre>
-              </div>
-            ) : (
-              <>
+            <>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
                     รายละเอียดครู
@@ -720,7 +700,6 @@ export default function TeachersManagement() {
                   <button
                     onClick={() => {
                       setShowPopup(false);
-                      setShowFirebaseConfigInline(false);
                     }}
                     className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-100 text-gray-400 hover:text-gray-600'}`}
                   >
@@ -758,14 +737,16 @@ export default function TeachersManagement() {
                       )}
                     </div>
                   )}
-                  {selectedTeacher.firebaseConfig && (
-                    <div
-                      onClick={() => setShowFirebaseConfigInline(true)}
-                      className={`cursor-pointer ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'} p-2 rounded-lg transition-colors`}
-                    >
-                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Firebase Config</p>
-                    </div>
-                  )}
+                  <div>
+                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>ฐานข้อมูลครู</p>
+                    <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>
+                      {selectedTeacher.firebaseConfig
+                        ? 'เชื่อมต่อฐานข้อมูลครูแล้ว'
+                        : selectedTeacher.uid
+                          ? 'ใช้ฐานข้อมูลโรงเรียน'
+                          : 'ยังไม่ได้ลงทะเบียนใช้ระบบ'}
+                    </p>
+                  </div>
                 </div>
                 <div className="flex gap-3 mt-6">
                   <motion.button
@@ -789,8 +770,7 @@ export default function TeachersManagement() {
                     </motion.button>
                   )}
                 </div>
-              </>
-            )}
+            </>
           </motion.div>
         </motion.div>
       )}

@@ -95,7 +95,7 @@ export default function AdminSetup() {
             schoolId: schoolHub.id,
             updatedAt: new Date(),
           };
-          await schoolDatabaseService.saveAdminWhitelist(schoolHub.schoolFirebaseConfig, [adminData]);
+          await schoolDatabaseService.saveAdminWhitelist(schoolHub.schoolFirebaseConfig!, [adminData]);
           console.log('Admin data saved to school database successfully');
         } catch (error) {
           console.error('Error saving admin data to school database:', error);
@@ -189,7 +189,7 @@ export default function AdminSetup() {
         id: user.email,
         email: user.email,
         schoolId: schoolHub.id,
-        schoolFirebaseConfig: schoolHub.schoolFirebaseConfig,
+        schoolFirebaseConfig: schoolHub.schoolFirebaseConfig!,
         role: 'admin',
         userId: schoolHub.id,
         name: config.schoolName || 'Admin',
@@ -202,7 +202,7 @@ export default function AdminSetup() {
       await storageService.setMasterRegistryConfig({
         schoolProjectId: config.schoolProjectId,
         schoolName: config.schoolName,
-        schoolFirebaseConfig: schoolHub.schoolFirebaseConfig,
+        schoolFirebaseConfig: schoolHub.schoolFirebaseConfig!,
       });
 
       setStep(3);

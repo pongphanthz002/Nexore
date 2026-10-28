@@ -91,7 +91,7 @@ export default function TeacherDashboard() {
       
       // Parallel loading: subjects and teacher config
       const [subjects, teacherConfig] = await Promise.all([
-        schoolDatabaseService.getAllSubjects(userAccount.schoolFirebaseConfig),
+        schoolDatabaseService.getSubjectsForTeacher(userAccount.schoolFirebaseConfig, userAccount.userId),
         schoolDatabaseService.getTeacherConfig(userAccount.schoolFirebaseConfig, userAccount.userId)
       ]);
 
@@ -111,11 +111,14 @@ export default function TeacherDashboard() {
         // 1. Must be teacher's own subject
         if (subject.teacherId !== userAccount.userId) return false;
         
-        // 2. Must be today
-        if (subject.day !== today) return false;
+        // 2. Must be today (support multi-day schedules)
+        const activeSchedule = subject.schedules && subject.schedules.length > 0
+          ? subject.schedules.find(sch => sch.day === today)
+          : (subject.day === today ? subject : null);
+        if (!activeSchedule) return false;
         
         // 3. Must be in time range
-        if (!isTimeInRange(subject.time)) return false;
+        if (!isTimeInRange(activeSchedule.time)) return false;
         
         // 4. Must NOT have been checked today
         const alreadyChecked = todayAttendance.some(att => 
@@ -124,6 +127,9 @@ export default function TeacherDashboard() {
         );
         
         return !alreadyChecked;
+      }).map(subject => {
+        const activeSchedule = subject.schedules?.find(sch => sch.day === today);
+        return activeSchedule ? { ...subject, day: activeSchedule.day, time: activeSchedule.time, duration: activeSchedule.duration || subject.duration } : subject;
       });
       
       setCurrentSubjects(current);

@@ -64,10 +64,7 @@ export default function StudentSchedulePage() {
       }
 
       // Get student data from school database
-      const studentData = await schoolDatabaseService.getStudentData(
-        userAccount.schoolFirebaseConfig,
-        userAccount?.userId || ''
-      );
+      const studentData = await schoolDatabaseService.getStudentForAccount(userAccount.schoolFirebaseConfig, userAccount);
 
       if (!studentData) {
         setError('ไม่พบข้อมูลนักเรียน');
