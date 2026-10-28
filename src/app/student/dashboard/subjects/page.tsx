@@ -496,6 +496,9 @@ export default function StudentSubjectsPage() {
                     >
                       <div className="flex-1 pr-4 min-w-0">
                         <p className={`font-bold text-xl leading-tight truncate ${item.score === "" ? 'text-red-600' : (isDarkMode ? 'text-slate-200' : 'text-slate-700')}`}>{item.label}</p>
+                        {item.score === "" && (
+                          <p className="text-xs font-bold text-red-500 mt-1">งานค้าง</p>
+                        )}
                         {item.score === "" && item.description && (
                           <p className="text-sm font-bold leading-relaxed italic text-red-500/80 mt-1">{item.description}</p>
                         )}
@@ -505,7 +508,7 @@ export default function StudentSubjectsPage() {
                       </div>
                       <div className="shrink-0 flex items-center gap-1">
                         <span className={`font-black text-2xl tracking-tighter ${item.score === "" ? 'text-red-600' : 'text-indigo-500'}`}>
-                          {item.score === "" ? '0' : <CountUp value={item.score} duration={0.8} />}
+                          {item.score === "" ? '–' : <CountUp value={item.score} duration={0.8} />}
                         </span>
                         {item.max && <span className="text-sm font-bold text-slate-400 uppercase">/ {item.max}</span>}
                       </div>

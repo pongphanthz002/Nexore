@@ -1,22 +1,29 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useEffect, Fragment, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { schoolDatabaseService, SubjectData, StudentData } from '@/services/school-database.service';
-import { 
-  teacherDatabaseService, AttendanceRecord, AttendanceData, 
-  GradeConfig, Assignment, AssignmentGroup, StudentScore, GradeThreshold 
+import {
+  teacherDatabaseService, GradeConfig, Assignment, AssignmentGroup, StudentScore
 } from '@/services/teacher-database.service';
+import type { FirebaseConfig } from '@/types/firebase.types';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
-import { 
-  ChevronLeft, Clock, Users, ClipboardList, Save, CheckCircle2, 
-  FileDown, Download, X, Calendar, Plus, Edit2, Trash2, Settings, 
-  Info, AlertCircle, TrendingUp, BookOpen, Folder, FolderOpen,
-  Eye, EyeOff, MoreVertical, GraduationCap, Target, Layers, Sparkles
+import {
+  ChevronLeft, ClipboardList, Save, X, Plus, Edit2, Settings,
+  TrendingUp, BookOpen, Folder, Users, GraduationCap, Target, Layers, Sparkles,
+  Undo2, Redo2, Check, AlertCircle
 } from 'lucide-react';
 import { animate } from 'framer-motion';
+import {
+  assignmentIdsInOrder, buildColumns, collectedCapacity, computeBreakdown, defaultGradeConfig,
+  getFieldValue, isScored, type ScoreField,
+} from '@/lib/grade-calculation';
+import { addSubjectSheet } from '@/lib/grade-export';
+import { useScoreAutosave, type QueuedScoreCell } from '@/hooks/useScoreAutosave';
+import ScoreGrid, { formatScore, type CellEdit, type ScoreGridActions } from '@/components/ScoreGrid';
+import MobileScoreEntry from '@/components/MobileScoreEntry';
 import GoogleSheetsIcon from '@/components/GoogleSheetsIcon';
 
 // --- CountUp Component ---
@@ -38,6 +45,65 @@ const CountUp = ({ value, duration = 1.0 }: { value: string | number, duration?:
   return <span>{count % 1 === 0 ? count : count.toFixed(1)}</span>;
 };
 
+type HistoryEntry = { studentId: string; field: ScoreField; before: number | null; after: number | null };
+const MAX_UNDO = 50;
+const FINISH_TIMEOUT_MS = 10_000;
+
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(false);
+  useEffect(() => {
+    const mql = window.matchMedia(query);
+    const update = () => setMatches(mql.matches);
+    update();
+    mql.addEventListener('change', update);
+    return () => mql.removeEventListener('change', update);
+  }, [query]);
+  return matches;
+}
+
+function withField(score: StudentScore, field: ScoreField, value: number | null): StudentScore {
+  const next: StudentScore = { ...score, assignmentScores: { ...(score.assignmentScores || {}) }, updatedAt: new Date() };
+  if (field === 'midterm') {
+    if (value === null) delete next.midtermScore; else next.midtermScore = value;
+  } else if (field === 'final') {
+    if (value === null) delete next.finalScore; else next.finalScore = value;
+  } else if (value === null) {
+    delete next.assignmentScores[field.slice(2)];
+  } else {
+    next.assignmentScores[field.slice(2)] = value;
+  }
+  return next;
+}
+
+/**
+ * Rewrite `order` to the display order (optionally from an explicit id order first),
+ * drop groups without assignments and keep each group's `assignmentIds` in sync.
+ */
+function normalizeStructure(nextAssignments: Assignment[], nextGroups: AssignmentGroup[], idOrder?: string[]) {
+  let list = nextAssignments;
+  if (idOrder) {
+    const pos = new Map(idOrder.map((id, i) => [id, i]));
+    list = list.map(a => (pos.has(a.id) ? { ...a, order: pos.get(a.id)! } : a));
+  }
+  const groups = nextGroups.filter(g => list.some(a => a.groupId === g.id));
+  const ids = assignmentIdsInOrder(buildColumns(list, groups));
+  const orderOf = new Map(ids.map((id, i) => [id, i]));
+  list = list.map(a => ({
+    ...a,
+    order: orderOf.get(a.id) ?? a.order,
+    groupId: a.groupId && groups.some(g => g.id === a.groupId) ? a.groupId : '',
+  }));
+  const normalizedGroups = groups.map(g => {
+    const members = ids.filter(id => list.find(a => a.id === id)?.groupId === g.id);
+    return {
+      ...g,
+      assignmentIds: members,
+      scaledPosition: g.scaledPosition === undefined ? undefined : Math.min(g.scaledPosition, members.length),
+    };
+  });
+  return { assignments: list, groups: normalizedGroups };
+}
+
 export default function GradesPage() {
   const { userAccount } = useAuth();
   const [isDark, setIsDark] = useState(false);
@@ -57,18 +123,61 @@ export default function GradesPage() {
   const [loadingGrades, setLoadingGrades] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
-  const [showGroupModal, setShowGroupModal] = useState(false);
-  const [editingGroup, setEditingGroup] = useState<AssignmentGroup | null>(null);
   const [isScoreEditing, setIsScoreEditing] = useState(false);
-  const [originalScores, setOriginalScores] = useState<StudentScore[]>([]);
-  const [selectedGroupAssignments, setSelectedGroupAssignments] = useState<string[]>([]);
-  const [selectedGroup, setSelectedGroup] = useState<AssignmentGroup | null>(null);
-  const [isGroupScoreEditing, setIsGroupScoreEditing] = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
+  const [isFinishing, setIsFinishing] = useState(false);
+  const [invalidCells, setInvalidCells] = useState<Map<string, string>>(new Map());
+  const [toast, setToast] = useState<string | null>(null);
+  const [historySize, setHistorySize] = useState({ undo: 0, redo: 0 });
+  const [isOnline, setIsOnline] = useState(true);
   const [selectedStudent, setSelectedStudent] = useState<StudentData | null>(null);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [selectedSubjectsForDownload, setSelectedSubjectsForDownload] = useState<string[]>([]);
   const [isDownloading, setIsDownloading] = useState(false);
+
+  const isMobile = useMediaQuery('(max-width: 767px)');
+  const finePointer = useMediaQuery('(pointer: fine)');
+
+  // Latest values for handlers that run between renders (rapid edits, undo, autosave)
+  const scoresRef = useRef(studentScores);
+  scoresRef.current = studentScores;
+  const structureRef = useRef({ assignments, groups: assignmentGroups });
+  structureRef.current = { assignments, groups: assignmentGroups };
+  const undoStack = useRef<HistoryEntry[][]>([]);
+  const redoStack = useRef<HistoryEntry[][]>([]);
+
+  const gradeDbConfig: FirebaseConfig | undefined = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
+  const gradeDbConfigRef = useRef(gradeDbConfig);
+  gradeDbConfigRef.current = gradeDbConfig;
+
+  const autosave = useScoreAutosave(async (cells: QueuedScoreCell[]) => {
+    const config = gradeDbConfigRef.current;
+    if (!config) throw new Error('Firebase configuration not found');
+    const bySubject = new Map<string, QueuedScoreCell[]>();
+    for (const c of cells) {
+      const key = `${c.subjectId}\u0000${c.classroom}`;
+      bySubject.set(key, [...(bySubject.get(key) ?? []), c]);
+    }
+    for (const list of Array.from(bySubject.values())) {
+      await teacherDatabaseService.saveScoreCells(config, list[0].subjectId, list[0].classroom, list);
+    }
+  });
+
+  useEffect(() => {
+    const update = () => setIsOnline(navigator.onLine);
+    update();
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    return () => {
+      window.removeEventListener('online', update);
+      window.removeEventListener('offline', update);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains('dark'));
@@ -102,38 +211,14 @@ export default function GradesPage() {
     loadData();
   }, [userAccount]);
 
-  const [nowMinutes, setNowMinutes] = useState(0);
-
-  useEffect(() => {
-    const getNowMinutes = () => {
-      const now = new Date();
-      return now.getHours() * 60 + now.getMinutes();
-    };
-    setNowMinutes(getNowMinutes());
-    const interval = setInterval(() => setNowMinutes(getNowMinutes()), 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const getCurrentDayThai = () => {
-    const dayMap: Record<number, string> = {
-      0: 'อาทิตย์', 1: 'จันทร์', 2: 'อังคาร', 3: 'พุธ', 4: 'พฤหัสบดี', 5: 'ศุกร์', 6: 'เสาร์',
-    };
-    return dayMap[new Date().getDay()] || '';
-  };
-
-  const parseTimeRange = (time: string) => {
-    if (!time) return null;
-    const normalized = time.replace(/\./g, ':').replace(/\s+/g, '');
-    const parts = normalized.split('-');
-    if (parts.length < 1) return null;
-    const startPart = parts[0];
-    const startSplit = startPart.split(':');
-    if (startSplit.length < 2) return null;
-    const startH = parseInt(startSplit[0]);
-    const startM = parseInt(startSplit[1]);
-    if (isNaN(startH) || isNaN(startM)) return null;
-    return { startMinutes: startH * 60 + startM };
-  };
+  const studentsForSubject = (subject: SubjectData) => students
+    .filter(s => {
+      if (subject.subjectType === 'elective' && Array.isArray(subject.studentIds) && subject.studentIds.length > 0) {
+        return subject.studentIds.includes(s.studentId);
+      }
+      return s.class === subject.classroom;
+    })
+    .sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0));
 
   const handleDownloadExcel = async () => {
     if (selectedSubjectsForDownload.length === 0) {
@@ -141,7 +226,7 @@ export default function GradesPage() {
       return;
     }
 
-    const subjectsToDownload = uniqueSubjects.filter(s => 
+    const subjectsToDownload = uniqueSubjects.filter(s =>
       selectedSubjectsForDownload.includes(`${s.subjectId}|||${s.classroom}`)
     );
 
@@ -151,289 +236,28 @@ export default function GradesPage() {
     }
     setIsDownloading(true);
     try {
-      const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
-      if (!firebaseConfig) throw new Error('Firebase configuration not found');
-
-      const dbService = teacherConfig?.firebaseConfig ? teacherDatabaseService : schoolDatabaseService;
+      if (!gradeDbConfig) throw new Error('Firebase configuration not found');
       const workbook = new ExcelJS.Workbook();
 
       for (const subject of subjectsToDownload) {
         try {
-          // Fetch all data for this subject
-          const [assignmentsList, groupsList, scoresList, configResult] = await Promise.all([
-            dbService.getAssignments(firebaseConfig, subject.subjectId, subject.classroom),
-            dbService.getAssignmentGroups(firebaseConfig, subject.subjectId, subject.classroom),
-            dbService.getStudentScores(firebaseConfig, subject.subjectId, subject.classroom),
-            dbService.getGradeConfig(firebaseConfig, subject.subjectId)
-          ]);
-
-          const studentsInClass = students
-            .filter(s => {
-              if (subject.subjectType === 'elective' && Array.isArray(subject.studentIds) && subject.studentIds.length > 0) {
-                return subject.studentIds.includes(s.studentId);
-              }
-              return s.class === subject.classroom;
-            })
-            .sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0));
-
+          const studentsInClass = studentsForSubject(subject);
           if (studentsInClass.length === 0) continue;
-
-          // Ensure we have a config for calculations with proper thresholds
-          const currentGradeConfig = configResult || {
-            subjectId: subject.subjectId,
-            proportions: { collected: 60, midterm: 20, final: 20 },
-            thresholds: [
-              { grade: '4', minScore: 80, color: 'text-green-500' },
-              { grade: '3.5', minScore: 75, color: 'text-green-500' },
-              { grade: '3', minScore: 70, color: 'text-green-500' },
-              { grade: '2.5', minScore: 65, color: 'text-yellow-500' },
-              { grade: '2', minScore: 60, color: 'text-yellow-500' },
-              { grade: '1.5', minScore: 55, color: 'text-orange-500' },
-              { grade: '1', minScore: 50, color: 'text-orange-500' },
-              { grade: '0', minScore: 0, color: 'text-red-500' }
-            ],
-            updatedAt: new Date()
-          };
-
-          const sheetName = `${subject.subjectName} (${subject.classroom})`.substring(0, 31).replace(/[:\\/?*[\]]/g, '_');
-          const worksheet = workbook.addWorksheet(sheetName, {
-            views: [{ showGridLines: true }]
+          const [assignmentsList, groupsList, scoresList, configResult] = await Promise.all([
+            teacherDatabaseService.getAssignments(gradeDbConfig, subject.subjectId, subject.classroom),
+            teacherDatabaseService.getAssignmentGroups(gradeDbConfig, subject.subjectId, subject.classroom),
+            teacherDatabaseService.getStudentScores(gradeDbConfig, subject.subjectId, subject.classroom),
+            teacherDatabaseService.getGradeConfig(gradeDbConfig, subject.subjectId)
+          ]);
+          addSubjectSheet(workbook, {
+            subjectName: subject.subjectName,
+            classroom: subject.classroom,
+            students: studentsInClass,
+            assignments: assignmentsList,
+            groups: groupsList,
+            scores: scoresList,
+            config: configResult || defaultGradeConfig(subject.subjectId),
           });
-
-          // Define columns and headers
-          const headerRow1: any[] = ['เลขที่', 'ชื่อ - สกุล'];
-          const headerRow2: any[] = ['', ''];
-          
-          // Helper to find scores
-          const findScore = (studentId: string) => scoresList.find(s => s.studentId === studentId);
-
-          // Add Grouped Assignments
-          groupsList.forEach(group => {
-            const groupAsms = assignmentsList.filter(a => a.groupId === group.id && a.isVisible);
-            groupAsms.forEach(a => {
-              headerRow1.push(group.name);
-              headerRow2.push(`${a.title} (เต็ม ${a.maxScore})`);
-            });
-            headerRow1.push(group.name);
-            headerRow2.push(`คะแนนสุทธิ (${group.rawScore})`);
-          });
-
-          // Add Ungrouped VISIBLE assignments
-          const ungroupedVisible = assignmentsList.filter(a => !a.groupId && a.isVisible);
-          ungroupedVisible.forEach(a => {
-            headerRow1.push('งานทั่วไป');
-            headerRow2.push(`${a.title} (เต็ม ${a.maxScore})`);
-          });
-
-          // Summary headers
-          const summaryHeaders = ['คะแนนเก็บรวม', 'กลางภาค', 'ปลายภาค', 'รวมทั้งหมด', 'เกรด'];
-          summaryHeaders.forEach(h => {
-            headerRow1.push('สรุปคะแนน');
-            headerRow2.push(h);
-          });
-
-          const row1 = worksheet.addRow(headerRow1);
-          const row2 = worksheet.addRow(headerRow2);
-
-          row1.height = 32;
-          row2.height = 30;
-
-          // Styling header cells with Sarabun font size 16-18 and soft palette
-          row1.eachCell((cell, colNumber) => {
-            cell.font = { name: 'Sarabun', size: 18, bold: true, color: { argb: 'FF1F2937' } };
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-            cell.border = {
-              top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-              left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-              bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-              right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
-            };
-            // Dynamic Header color based on section
-            if (colNumber <= 2) {
-              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } }; // Slate-200
-            } else {
-              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } }; // Slate-100
-            }
-          });
-
-          row2.eachCell((cell, colNumber) => {
-            cell.font = { name: 'Sarabun', size: 16, bold: true, color: { argb: 'FF374151' } };
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-            cell.border = {
-              top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-              left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-              bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-              right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
-            };
-            if (colNumber <= 2) {
-              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
-            } else {
-              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
-            }
-          });
-
-          // Add Student Data
-          studentsInClass.forEach(student => {
-            const score = findScore(student.studentId);
-            const rowData: any[] = [student.number, student.name];
-
-            // Add Grouped Scores
-            groupsList.forEach(group => {
-              const groupAsms = assignmentsList.filter(a => a.groupId === group.id && a.isVisible);
-              groupAsms.forEach(a => {
-                rowData.push(score?.assignmentScores?.[a.id] || 0);
-              });
-              
-              // Calculate Group Net Score
-              const totalMax = groupAsms.reduce((sum, a) => sum + a.maxScore, 0);
-              const studentRaw = groupAsms.reduce((sum, a) => sum + (score?.assignmentScores?.[a.id] || 0), 0);
-              const normalized = totalMax > 0 ? (studentRaw / totalMax) * group.rawScore : 0;
-              rowData.push(Math.round(normalized * 100) / 100);
-            });
-
-            // Add Ungrouped Scores
-            ungroupedVisible.forEach(a => {
-              rowData.push(score?.assignmentScores?.[a.id] || 0);
-            });
-
-            // Calculate Summary
-            const calcLocalScore = () => {
-              let groupedPoints = 0;
-              groupsList.forEach(group => {
-                const gAsms = assignmentsList.filter(a => a.groupId === group.id && a.isVisible);
-                if (gAsms.length > 0) {
-                  const tMax = gAsms.reduce((sum, a) => sum + a.maxScore, 0);
-                  const sRaw = gAsms.reduce((sum, a) => sum + (score?.assignmentScores?.[a.id] || 0), 0);
-                  if (tMax > 0) groupedPoints += (sRaw / tMax) * group.rawScore;
-                }
-              });
-              const ugPoints = assignmentsList.filter(a => !a.groupId && a.isVisible).reduce((sum, a) => sum + (score?.assignmentScores?.[a.id] || 0), 0);
-              const finalCol = groupedPoints + ugPoints;
-              const mt = score?.midtermScore || 0;
-              const fn = score?.finalScore || 0;
-              const tot = Math.round((finalCol + mt + fn) * 100) / 100;
-              return { total: tot, collected: finalCol, midterm: mt, final: fn };
-            };
-
-            const breakdown = calcLocalScore();
-            
-            // Calculate grade using the same logic as getGradeFromScore
-            const calculateGrade = (totalScore: number, config: any) => {
-              if (!config || !config.thresholds) return '0';
-              const threshold = config.thresholds
-                .sort((a: any, b: any) => b.minScore - a.minScore)
-                .find((t: any) => totalScore >= t.minScore);
-              return threshold ? threshold.grade : '0';
-            };
-
-            rowData.push(
-              Math.round(breakdown.collected * 100) / 100, 
-              score?.midtermScore || 0, 
-              score?.finalScore || 0, 
-              breakdown.total, 
-              calculateGrade(breakdown.total, currentGradeConfig)
-            );
-
-            const dataRow = worksheet.addRow(rowData);
-            dataRow.height = 26;
-            dataRow.eachCell((cell, colIndex) => {
-              cell.font = { name: 'Sarabun', size: 16, color: { argb: 'FF1F2937' } };
-              cell.border = {
-                top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-                left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-                bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-                right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
-              };
-              if (colIndex === 1) {
-                cell.alignment = { vertical: 'middle', horizontal: 'center' };
-              } else if (colIndex === 2) {
-                cell.alignment = { vertical: 'middle', horizontal: 'left' };
-              } else {
-                cell.alignment = { vertical: 'middle', horizontal: 'center' };
-              }
-            });
-          });
-
-          // Apply Beautiful Styling for Groups & Summaries
-          let currentCol = 3;
-          groupsList.forEach(group => {
-            const groupAsms = assignmentsList.filter(a => a.groupId === group.id && a.isVisible);
-            
-            // Header colors for group
-            row1.getCell(currentCol).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEDD5' } }; // Orange-100
-            
-            // Individual assignments in group
-            groupAsms.forEach(() => {
-              worksheet.getColumn(currentCol).eachCell((cell, rowNumber) => {
-                if (rowNumber === 2) {
-                  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF7ED' } }; // Orange-50
-                } else if (rowNumber > 2) {
-                  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFDF9' } };
-                }
-              });
-              currentCol++;
-            });
-
-            // Group Net Score column (Highlighted Orange)
-            worksheet.getColumn(currentCol).eachCell((cell, rowNumber) => {
-              if (rowNumber === 1 || rowNumber === 2) {
-                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFED7AA' } }; // Orange-200
-                cell.font = { name: 'Sarabun', size: rowNumber === 1 ? 18 : 16, bold: true, color: { argb: 'FF9A3412' } };
-              } else if (rowNumber > 2) {
-                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEDD5' } }; // Orange-100
-                cell.font = { name: 'Sarabun', size: 16, bold: true, color: { argb: 'FF7C2D12' } };
-              }
-            });
-            currentCol++;
-          });
-
-          // Style Ungrouped
-          ungroupedVisible.forEach(() => {
-            worksheet.getColumn(currentCol).eachCell((cell, rowNumber) => {
-              if (rowNumber === 1 || rowNumber === 2) {
-                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0F2FE' } }; // Sky-100
-              }
-            });
-            currentCol++;
-          });
-
-          // Style Summaries (คะแนนเก็บรวม, กลางภาค, ปลายภาค, รวมทั้งหมด, เกรด)
-          const summaryColsCount = 5;
-          for (let i = 0; i < summaryColsCount; i++) {
-            const colIdx = currentCol + i;
-            const isTotalOrGrade = i >= 3;
-            worksheet.getColumn(colIdx).eachCell((cell, rowNumber) => {
-              if (rowNumber === 1 || rowNumber === 2) {
-                cell.fill = { 
-                  type: 'pattern', 
-                  pattern: 'solid', 
-                  fgColor: { argb: isTotalOrGrade ? 'FFBBF7D0' : 'FFDBEAFE' } // Emerald-200 or Blue-100
-                };
-                cell.font = { 
-                  name: 'Sarabun', 
-                  size: rowNumber === 1 ? 18 : 16, 
-                  bold: true, 
-                  color: { argb: isTotalOrGrade ? 'FF065F46' : 'FF1E40AF' } 
-                };
-              } else if (rowNumber > 2) {
-                if (isTotalOrGrade) {
-                  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } }; // Emerald-100
-                  cell.font = { name: 'Sarabun', size: 16, bold: true, color: { argb: 'FF064E3B' } };
-                } else {
-                  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0FDF4' } };
-                  cell.font = { name: 'Sarabun', size: 16, color: { argb: 'FF1F2937' } };
-                }
-              }
-            });
-          }
-
-          // Adjust column widths to comfortably fit Sarabun size 16-18
-          worksheet.columns.forEach(column => {
-            column.width = 20;
-          });
-          worksheet.getColumn(1).width = 10;
-          worksheet.getColumn(2).width = 30;
-
         } catch (subjectError) {
           console.error(`Error processing subject ${subject.subjectName}:`, subjectError);
         }
@@ -458,61 +282,38 @@ export default function GradesPage() {
 
   const handleSelectSubject = async (subject: SubjectData) => {
     setSelectedSubject(subject);
-    const matched = students
-      .filter(s => {
-        if (subject.subjectType === 'elective' && Array.isArray(subject.studentIds) && subject.studentIds.length > 0) {
-          return subject.studentIds.includes(s.studentId);
-        }
-        return s.class === subject.classroom;
-      })
-      .sort((a, b) => {
-        const numA = parseInt(a.number) || 0;
-        const numB = parseInt(b.number) || 0;
-        return numA - numB;
-      });
+    const matched = studentsForSubject(subject);
     setFilteredStudents(matched);
-    
-    // Load grading data
-    await handleOpenGrades(subject, matched);
+    await handleOpenGrades(subject);
   };
 
-  const handleOpenGrades = async (targetSubject: SubjectData, targetStudents: StudentData[]) => {
-    const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
-    if (!firebaseConfig) return;
+  const handleOpenGrades = async (targetSubject: SubjectData) => {
+    if (!gradeDbConfig) return;
 
     setLoadingGrades(true);
+    setInvalidCells(new Map());
+    undoStack.current = [];
+    redoStack.current = [];
+    setHistorySize({ undo: 0, redo: 0 });
     try {
-      const dbService = teacherConfig?.firebaseConfig ? teacherDatabaseService : schoolDatabaseService;
-      
       const [config, assignmentsList, groupsList, scoresList] = await Promise.all([
-        dbService.getGradeConfig(firebaseConfig, targetSubject.subjectId),
-        dbService.getAssignments(firebaseConfig, targetSubject.subjectId, targetSubject.classroom),
-        dbService.getAssignmentGroups(firebaseConfig, targetSubject.subjectId, targetSubject.classroom),
-        dbService.getStudentScores(firebaseConfig, targetSubject.subjectId, targetSubject.classroom)
+        teacherDatabaseService.getGradeConfig(gradeDbConfig, targetSubject.subjectId),
+        teacherDatabaseService.getAssignments(gradeDbConfig, targetSubject.subjectId, targetSubject.classroom),
+        teacherDatabaseService.getAssignmentGroups(gradeDbConfig, targetSubject.subjectId, targetSubject.classroom),
+        teacherDatabaseService.getStudentScores(gradeDbConfig, targetSubject.subjectId, targetSubject.classroom)
       ]);
 
-      if (config) {
-        setGradeConfig(config);
-      } else {
-        const defaultConfig: GradeConfig = {
-          subjectId: targetSubject.subjectId,
-          proportions: { collected: 60, midterm: 20, final: 20 },
-          thresholds: [
-            { grade: '4', minScore: 80, color: 'text-green-500' },
-            { grade: '3.5', minScore: 75, color: 'text-green-400' },
-            { grade: '3', minScore: 70, color: 'text-emerald-500' },
-            { grade: '2.5', minScore: 65, color: 'text-emerald-400' },
-            { grade: '2', minScore: 60, color: 'text-yellow-500' },
-            { grade: '1.5', minScore: 55, color: 'text-yellow-400' },
-            { grade: '1', minScore: 50, color: 'text-orange-500' },
-            { grade: '0', minScore: 0, color: 'text-red-500' }
-          ],
-          updatedAt: new Date()
-        };
-        setGradeConfig(defaultConfig);
+      setGradeConfig(config || defaultGradeConfig(targetSubject.subjectId));
+
+      // Older assignments have no column order yet: fix it once to the order they show in
+      let list = assignmentsList;
+      if (list.some(a => typeof a.order !== 'number')) {
+        list = normalizeStructure(list, groupsList).assignments;
+        teacherDatabaseService.updateAssignments(gradeDbConfig, list.map(a => ({ id: a.id, fields: { order: a.order } })))
+          .catch(err => console.error('Error saving assignment order:', err));
       }
 
-      setAssignments(assignmentsList);
+      setAssignments(list);
       setAssignmentGroups(groupsList);
       setStudentScores(scoresList);
     } catch (error) {
@@ -522,36 +323,244 @@ export default function GradesPage() {
     }
   };
 
-  const toggleGroupExpand = (groupId: string) => {
-    setExpandedGroups(prev => 
-      prev.includes(groupId) 
-        ? prev.filter(id => id !== groupId) 
-        : [...prev, groupId]
-    );
+  // ---------------------------------------------------------------- score edits
+
+  const applyScoreChanges = (changes: CellEdit[], mode: 'edit' | 'history') => {
+    if (!selectedSubject) return [];
+    const byId = new Map(scoresRef.current.map(s => [s.studentId, s]));
+    const applied: HistoryEntry[] = [];
+    for (const change of changes) {
+      const existing = byId.get(change.studentId);
+      const before = getFieldValue(existing, change.field) ?? null;
+      if (before === change.value) continue;
+      const base: StudentScore = existing ?? {
+        studentId: change.studentId,
+        subjectId: selectedSubject.subjectId,
+        classroom: selectedSubject.classroom,
+        assignmentScores: {},
+        updatedAt: new Date(),
+      };
+      byId.set(change.studentId, withField(base, change.field, change.value));
+      applied.push({ studentId: change.studentId, field: change.field, before, after: change.value });
+    }
+    if (applied.length === 0) return applied;
+
+    const next = Array.from(byId.values());
+    scoresRef.current = next;
+    setStudentScores(next);
+    autosave.queue(applied.map(h => ({
+      studentId: h.studentId,
+      field: h.field,
+      value: h.after,
+      subjectId: selectedSubject.subjectId,
+      classroom: selectedSubject.classroom,
+    })));
+    if (mode === 'edit') {
+      undoStack.current = [...undoStack.current, applied].slice(-MAX_UNDO);
+      redoStack.current = [];
+      setHistorySize({ undo: undoStack.current.length, redo: 0 });
+    }
+    return applied;
   };
 
-  const getGroupScore = (studentId: string, group: AssignmentGroup) => {
-    const score = studentScores.find(s => s.studentId === studentId);
-    if (!score) return 0;
-    
-    const groupAssignments = assignments.filter(a => a.groupId === group.id && a.isVisible);
-    if (groupAssignments.length === 0) return 0;
-    
-    const totalMax = groupAssignments.reduce((sum, a) => sum + a.maxScore, 0);
-    const studentRaw = groupAssignments.reduce((sum, a) => sum + (score.assignmentScores[a.id] || 0), 0);
-    
-    if (totalMax === 0) return 0;
-    const normalized = (studentRaw / totalMax) * group.rawScore;
-    return Math.round(normalized * 100) / 100;
+  const handleScoreEdits = (edits: CellEdit[]) => { applyScoreChanges(edits, 'edit'); };
+
+  const handleInvalid = (entries: Array<{ key: string; text: string | null }>) => {
+    setInvalidCells(prev => {
+      const next = new Map(prev);
+      for (const { key, text } of entries) {
+        if (text === null) next.delete(key); else next.set(key, text);
+      }
+      return next;
+    });
+  };
+
+  const stepHistory = (direction: 'undo' | 'redo') => {
+    const from = direction === 'undo' ? undoStack : redoStack;
+    const to = direction === 'undo' ? redoStack : undoStack;
+    const entry = from.current[from.current.length - 1];
+    if (!entry) return;
+    from.current = from.current.slice(0, -1);
+    applyScoreChanges(entry.map(h => ({
+      studentId: h.studentId,
+      field: h.field,
+      value: direction === 'undo' ? h.before : h.after,
+    })), 'history');
+    to.current = [...to.current, entry].slice(-MAX_UNDO);
+    handleInvalid(entry.map(h => ({ key: `${h.studentId}|${h.field}`, text: null })));
+    setHistorySize({ undo: undoStack.current.length, redo: redoStack.current.length });
+  };
+
+  const handleStartEditing = () => {
+    setInvalidCells(new Map());
+    setIsScoreEditing(true);
+  };
+
+  const handleFinishEditing = async () => {
+    if (invalidCells.size > 0 && !confirm(`มี ${invalidCells.size} ช่องที่คะแนนไม่ถูกต้องและยังไม่ได้บันทึก ออกจากโหมดกรอกคะแนนเลยไหม?`)) return;
+    setIsFinishing(true);
+    const saved = await Promise.race([
+      autosave.flush(),
+      new Promise<boolean>(resolve => setTimeout(() => resolve(false), FINISH_TIMEOUT_MS)),
+    ]);
+    setIsFinishing(false);
+    if (!saved) {
+      alert('ยังบันทึกคะแนนไม่ครบ ระบบจะลองบันทึกต่อให้อัตโนมัติ กรุณาตรวจสอบอินเทอร์เน็ตแล้วกด "เสร็จสิ้น" อีกครั้ง');
+      return;
+    }
+    setInvalidCells(new Map());
+    setIsScoreEditing(false);
+  };
+
+  // ---------------------------------------------------------------- columns and groups
+
+  /** Apply a new assignment/group structure locally, then save only what changed. */
+  const persistStructure = async (next: { assignments: Assignment[]; groups: AssignmentGroup[] }) => {
+    if (!gradeDbConfig) return;
+    const prev = structureRef.current;
+    structureRef.current = next;
+    setAssignments(next.assignments);
+    setAssignmentGroups(next.groups);
+
+    const assignmentUpdates = next.assignments.flatMap(a => {
+      const p = prev.assignments.find(x => x.id === a.id);
+      if (!p || (p.order === a.order && (p.groupId || '') === (a.groupId || ''))) return [];
+      return [{ id: a.id, fields: { order: a.order, groupId: a.groupId || '' } }];
+    });
+    const groupsToSave = next.groups.filter(g => {
+      const p = prev.groups.find(x => x.id === g.id);
+      return !p || p.name !== g.name || p.rawScore !== g.rawScore || p.scaledPosition !== g.scaledPosition
+        || p.assignmentIds.join() !== g.assignmentIds.join();
+    });
+    const groupsToDelete = prev.groups.filter(p => !next.groups.some(g => g.id === p.id));
+
+    try {
+      await Promise.all([
+        assignmentUpdates.length ? teacherDatabaseService.updateAssignments(gradeDbConfig, assignmentUpdates) : null,
+        ...groupsToSave.map(g => teacherDatabaseService.saveAssignmentGroup(gradeDbConfig, g)),
+        ...groupsToDelete.map(g => teacherDatabaseService.deleteAssignmentGroup(gradeDbConfig, g.id)),
+      ]);
+    } catch (error) {
+      console.error('Error saving columns:', error);
+      alert('บันทึกการจัดคอลัมน์ไม่สำเร็จ กำลังโหลดข้อมูลล่าสุด');
+      if (selectedSubject) handleOpenGrades(selectedSubject);
+    }
+  };
+
+  const displayOrder = () => {
+    const { assignments: list, groups } = structureRef.current;
+    return assignmentIdsInOrder(buildColumns(list, groups));
+  };
+
+  const gridActions: ScoreGridActions = {
+    editAssignment: a => { setEditingAssignment(a); setShowAssignmentModal(true); },
+    toggleVisibility: a => { handleToggleVisibility(a); },
+    groupAssignments: (ids, name, rawScore) => {
+      if (!selectedSubject || ids.length === 0) return;
+      const { assignments: list, groups } = structureRef.current;
+      const groupId = `grp_${Date.now()}`;
+      const moved = list.filter(a => ids.includes(a.id) && a.groupId && groups.some(g => g.id === a.groupId));
+
+      // Gather the selected assignments where the first of them is
+      const order = displayOrder();
+      const selected = order.filter(id => ids.includes(id));
+      const insertAt = order.slice(0, order.indexOf(selected[0])).filter(id => !ids.includes(id)).length;
+      const idOrder = order.filter(id => !ids.includes(id));
+      idOrder.splice(insertAt, 0, ...selected);
+
+      const newGroup: AssignmentGroup = {
+        id: groupId,
+        subjectId: selectedSubject.subjectId,
+        classroom: selectedSubject.classroom,
+        name,
+        rawScore,
+        assignmentIds: selected,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      persistStructure(normalizeStructure(
+        list.map(a => (ids.includes(a.id) ? { ...a, groupId } : a)),
+        [...groups, newGroup],
+        idOrder,
+      ));
+      if (moved.length) {
+        setToast(moved.map(a => `ย้าย '${a.title}' ออกจากกลุ่ม ${groups.find(g => g.id === a.groupId)?.name}`).join(' · '));
+      }
+    },
+    editGroup: (group, name, rawScore) => {
+      const { assignments: list, groups } = structureRef.current;
+      persistStructure({ assignments: list, groups: groups.map(g => (g.id === group.id ? { ...g, name, rawScore } : g)) });
+    },
+    removeFromGroup: a => {
+      const { assignments: list, groups } = structureRef.current;
+      const order = displayOrder().filter(id => id !== a.id);
+      const lastMember = [...order].reverse().find(id => list.find(x => x.id === id)?.groupId === a.groupId);
+      order.splice(lastMember ? order.indexOf(lastMember) + 1 : order.length, 0, a.id);
+      persistStructure(normalizeStructure(list.map(x => (x.id === a.id ? { ...x, groupId: '' } : x)), groups, order));
+    },
+    ungroup: group => {
+      if (!confirm(`ยกเลิกกลุ่ม "${group.name}"? งานในกลุ่มยังอยู่ครบ แต่จะไม่ถูกทอนคะแนนอีก`)) return;
+      const { assignments: list, groups } = structureRef.current;
+      persistStructure(normalizeStructure(
+        list.map(a => (a.groupId === group.id ? { ...a, groupId: '' } : a)),
+        groups.filter(g => g.id !== group.id),
+        displayOrder(),
+      ));
+    },
+    deleteAssignment: async a => {
+      if (!gradeDbConfig) return;
+      const scored = scoresRef.current.filter(s => isScored(s.assignmentScores?.[a.id])).length;
+      const detail = scored > 0 ? `\nมีนักเรียนกรอกคะแนนงานนี้แล้ว ${scored} คน คะแนนเหล่านี้จะไม่ถูกนับอีก` : '';
+      if (!confirm(`ลบงาน "${a.title}"?${detail}`)) return;
+      try {
+        await teacherDatabaseService.deleteAssignment(gradeDbConfig, a.id);
+        const { assignments: list, groups } = structureRef.current;
+        persistStructure(normalizeStructure(list.filter(x => x.id !== a.id), groups));
+      } catch (error) {
+        console.error('Error deleting assignment:', error);
+        alert('เกิดข้อผิดพลาดในการลบชิ้นงาน');
+      }
+    },
+    renameAssignment: async (a, title) => {
+      if (!gradeDbConfig) return;
+      const updated = { ...a, title, updatedAt: new Date() };
+      setAssignments(prev => prev.map(x => (x.id === a.id ? updated : x)));
+      try {
+        await teacherDatabaseService.updateAssignments(gradeDbConfig, [{ id: a.id, fields: { title } }]);
+      } catch (error) {
+        console.error('Error renaming assignment:', error);
+        alert('เปลี่ยนชื่องานไม่สำเร็จ');
+      }
+    },
+    addAssignment: (title, maxScore) => { handleSaveAssignment({ title, maxScore }, null); },
+    setExamMax: async (exam, max) => {
+      if (!gradeDbConfig || !gradeConfig) return;
+      const next: GradeConfig = { ...gradeConfig, [exam === 'midterm' ? 'midtermMax' : 'finalMax']: max };
+      setGradeConfig(next);
+      try {
+        await teacherDatabaseService.saveGradeConfig(gradeDbConfig, next);
+      } catch (error) {
+        console.error('Error saving exam max:', error);
+        alert('บันทึกคะแนนเต็มข้อสอบไม่สำเร็จ');
+      }
+    },
+    reorder: (idOrder, scaledPositions) => {
+      const { assignments: list, groups } = structureRef.current;
+      const nextGroups = groups.map(g => {
+        const memberCount = idOrder.filter(id => list.find(a => a.id === id)?.groupId === g.id).length;
+        const pos = scaledPositions[g.id];
+        if (pos === undefined || (g.scaledPosition === undefined && pos === memberCount)) return g;
+        return { ...g, scaledPosition: pos };
+      });
+      persistStructure(normalizeStructure(list, nextGroups, idOrder));
+    },
   };
 
   const handleSaveGradeConfig = async (newConfig: GradeConfig) => {
-    const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
-    if (!firebaseConfig) return;
+    if (!gradeDbConfig) return;
 
     try {
-      const dbService = teacherConfig?.firebaseConfig ? teacherDatabaseService : schoolDatabaseService;
-      await dbService.saveGradeConfig(firebaseConfig, newConfig);
+      await teacherDatabaseService.saveGradeConfig(gradeDbConfig, newConfig);
       setGradeConfig(newConfig);
       setShowGradeConfigModal(false);
       alert('บันทึกการตั้งค่าคะแนนสำเร็จ');
@@ -561,198 +570,37 @@ export default function GradesPage() {
     }
   };
 
-  // Memoize score calculations for high performance during table renders
-  const detailedScoresMap = useMemo(() => {
-    const map = new Map<string, { total: number; collected: number; midterm: number; final: number; isExceeding: boolean }>();
-    if (!gradeConfig) return map;
-    
-    // Pre-calculate visible assignments per group to avoid recalculating per student
-    const groupAssignmentsMap = new Map<string, { totalMax: number; assignments: Assignment[] }>();
-    assignmentGroups.forEach(group => {
-      const groupAssignments = assignments.filter(a => a.groupId === group.id && a.isVisible);
-      const totalMax = groupAssignments.reduce((sum, a) => sum + a.maxScore, 0);
-      groupAssignmentsMap.set(group.id, { totalMax, assignments: groupAssignments });
-    });
-
-    const ungroupedAssignments = assignments.filter(a => !a.groupId && a.isVisible);
-
-    for (const score of studentScores) {
-      let groupedPoints = 0;
-      assignmentGroups.forEach(group => {
-        const gData = groupAssignmentsMap.get(group.id);
-        if (gData && gData.assignments.length > 0 && gData.totalMax > 0) {
-          let studentRaw = 0;
-          for (const a of gData.assignments) {
-            studentRaw += (score.assignmentScores[a.id] || 0);
-          }
-          groupedPoints += (studentRaw / gData.totalMax) * group.rawScore;
-        }
-      });
-
-      let ungroupedPoints = 0;
-      for (const a of ungroupedAssignments) {
-        ungroupedPoints += (score.assignmentScores[a.id] || 0);
-      }
-
-      const finalCollected = groupedPoints + ungroupedPoints;
-      const isExceeding = finalCollected > gradeConfig.proportions.collected;
-      const midterm = score.midtermScore || 0;
-      const final = score.finalScore || 0;
-      const total = Math.round((finalCollected + midterm + final) * 100) / 100;
-
-      map.set(score.studentId, {
-        total,
-        collected: Math.round(finalCollected * 100) / 100,
-        midterm,
-        final,
-        isExceeding
-      });
-    }
-    return map;
-  }, [gradeConfig, studentScores, assignmentGroups, assignments]);
-
-  const calculateDetailedStudentScore = useCallback((studentId: string) => {
-    return detailedScoresMap.get(studentId) || { total: 0, collected: 0, midterm: 0, final: 0, isExceeding: false };
-  }, [detailedScoresMap]);
-
-  const getGradeFromScore = (totalScore: number, config?: GradeConfig | null) => {
-    const targetConfig = config || gradeConfig;
-    if (!targetConfig) return '0';
-    const threshold = targetConfig.thresholds
-      .sort((a, b) => b.minScore - a.minScore)
-      .find(t => totalScore >= t.minScore);
-    return threshold ? threshold.grade : '0';
-  };
-
-  const getGradeColor = (grade: string) => {
-    if (!gradeConfig) return 'text-gray-500';
-    const threshold = gradeConfig.thresholds.find(t => t.grade === grade);
-    return threshold ? threshold.color : 'text-gray-500';
-  };
-
-  const handleScoreChange = (studentId: string, type: 'midterm' | 'final' | 'assignment', value: string, assignmentId?: string) => {
-    const numericValue = Math.max(0, parseFloat(value) || 0);
-    setStudentScores(prev => {
-      const existing = prev.find(s => s.studentId === studentId);
-      if (existing) {
-        return prev.map(s => {
-          if (s.studentId === studentId) {
-            if (type === 'midterm') return { ...s, midtermScore: numericValue, updatedAt: new Date() };
-            if (type === 'final') return { ...s, finalScore: numericValue, updatedAt: new Date() };
-            if (type === 'assignment' && assignmentId) {
-              return { 
-                ...s, 
-                assignmentScores: { ...s.assignmentScores, [assignmentId]: numericValue },
-                updatedAt: new Date()
-              };
-            }
-          }
-          return s;
-        });
-      } else {
-        const newScore: StudentScore = {
-          studentId,
-          subjectId: selectedSubject?.subjectId || '',
-          classroom: selectedSubject?.classroom || '',
-          assignmentScores: type === 'assignment' && assignmentId ? { [assignmentId]: numericValue } : {},
-          midtermScore: type === 'midterm' ? numericValue : 0,
-          finalScore: type === 'final' ? numericValue : 0,
-          updatedAt: new Date()
-        };
-        return [...prev, newScore];
-      }
-    });
-  };
-
-  const handleToggleEdit = () => {
-    if (!isScoreEditing) {
-      setOriginalScores([...studentScores]);
-    }
-    setIsScoreEditing(!isScoreEditing);
-  };
-
-  const handleCancelEdit = () => {
-    setStudentScores(originalScores);
-    setIsScoreEditing(false);
-  };
-
-  const handleSaveAllScores = async () => {
-    const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
-    if (!firebaseConfig) return;
-    setLoadingGrades(true);
-    try {
-      const dbService = teacherConfig?.firebaseConfig ? teacherDatabaseService : schoolDatabaseService;
-      await Promise.all(studentScores.map(score => dbService.saveStudentScore(firebaseConfig, score)));
-      setIsScoreEditing(false);
-      alert('บันทึกคะแนนทั้งหมดสำเร็จ');
-    } catch (error) {
-      console.error('Error saving scores:', error);
-      alert('เกิดข้อผิดพลาดในการบันทึกคะแนน');
-    } finally {
-      setLoadingGrades(false);
-    }
-  };
-
   const handleToggleVisibility = async (assignment: Assignment) => {
-    const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
-    if (!firebaseConfig) return;
+    if (!gradeDbConfig) return;
     try {
-      const dbService = teacherConfig?.firebaseConfig ? teacherDatabaseService : schoolDatabaseService;
       const updated = { ...assignment, isVisible: !assignment.isVisible, updatedAt: new Date() };
-      await dbService.saveAssignment(firebaseConfig, updated);
       setAssignments(prev => prev.map(a => a.id === assignment.id ? updated : a));
+      await teacherDatabaseService.updateAssignments(gradeDbConfig, [{ id: assignment.id, fields: { isVisible: updated.isVisible } }]);
     } catch (error) {
       console.error('Error toggling visibility:', error);
     }
   };
 
-  const handleMoveToGroup = async (assignmentId: string, groupId: string) => {
-    const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
-    if (!firebaseConfig) return;
+  const handleSaveAssignment = async (data: Partial<Assignment>, editing: Assignment | null) => {
+    if (!gradeDbConfig || !selectedSubject) return;
     try {
-      const dbService = teacherConfig?.firebaseConfig ? teacherDatabaseService : schoolDatabaseService;
-      const assignment = assignments.find(a => a.id === assignmentId);
-      if (!assignment) return;
-
-      const updated = { ...assignment, groupId, updatedAt: new Date() };
-      await dbService.saveAssignment(firebaseConfig, updated);
-      setAssignments(prev => prev.map(a => a.id === assignmentId ? updated : a));
-      
-      // Also update groups
-      setAssignmentGroups(prev => prev.map(g => {
-        if (g.id === groupId) {
-          return { ...g, assignmentIds: Array.from(new Set([...g.assignmentIds, assignmentId])) };
-        }
-        if (g.id === assignment.groupId) {
-          return { ...g, assignmentIds: g.assignmentIds.filter(id => id !== assignmentId) };
-        }
-        return g;
-      }));
-    } catch (error) {
-      console.error('Error moving assignment:', error);
-      alert('เกิดข้อผิดพลาดในการย้ายกลุ่ม');
-    }
-  };
-
-  const handleSaveAssignment = async (data: Partial<Assignment>) => {
-    const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
-    if (!firebaseConfig || !selectedSubject) return;
-    try {
-      const dbService = teacherConfig?.firebaseConfig ? teacherDatabaseService : schoolDatabaseService;
+      const list = structureRef.current.assignments;
+      const nextOrder = list.reduce((max, a) => Math.max(max, a.order ?? -1), -1) + 1;
       const newAssignment: Assignment = {
-        id: editingAssignment?.id || `asm_${Date.now()}`,
+        id: editing?.id || `asm_${Date.now()}`,
         subjectId: selectedSubject.subjectId,
         classroom: selectedSubject.classroom,
         title: data.title || '',
-        description: data.description || '',
-        deadline: data.deadline || '',
+        description: data.description ?? editing?.description ?? '',
+        deadline: data.deadline ?? editing?.deadline ?? '',
         maxScore: data.maxScore || 0,
-        groupId: data.groupId || '',
-        isVisible: data.isVisible ?? editingAssignment?.isVisible ?? true,
-        createdAt: editingAssignment?.createdAt || new Date(),
+        groupId: editing?.groupId || '',
+        isVisible: data.isVisible ?? editing?.isVisible ?? true,
+        order: editing?.order ?? nextOrder,
+        createdAt: editing?.createdAt || new Date(),
         updatedAt: new Date()
       };
-      await dbService.saveAssignment(firebaseConfig, newAssignment);
+      await teacherDatabaseService.saveAssignment(gradeDbConfig, newAssignment);
       setAssignments(prev => {
         const index = prev.findIndex(a => a.id === newAssignment.id);
         if (index >= 0) {
@@ -770,90 +618,20 @@ export default function GradesPage() {
     }
   };
 
-  const handleDeleteAssignment = async (id: string) => {
-    if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการลบชิ้นงานนี้?')) return;
-    const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
-    if (!firebaseConfig) return;
-    try {
-      const dbService = teacherConfig?.firebaseConfig ? teacherDatabaseService : schoolDatabaseService;
-      await dbService.deleteAssignment(firebaseConfig, id);
-      setAssignments(prev => prev.filter(a => a.id !== id));
-    } catch (error) {
-      console.error('Error deleting assignment:', error);
-      alert('เกิดข้อผิดพลาดในการลบชิ้นงาน');
-    }
-  };
+  const scoresById = useMemo(() => new Map(studentScores.map(s => [s.studentId, s])), [studentScores]);
+  const capacity = useMemo(() => collectedCapacity(assignments, assignmentGroups), [assignments, assignmentGroups]);
 
-  const handleSaveGroup = async (data: Partial<AssignmentGroup>) => {
-    const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
-    if (!firebaseConfig || !selectedSubject) return;
-    try {
-      const dbService = teacherConfig?.firebaseConfig ? teacherDatabaseService : schoolDatabaseService;
-      const newGroup: AssignmentGroup = {
-        id: editingGroup?.id || `grp_${Date.now()}`,
-        subjectId: selectedSubject.subjectId,
-        classroom: selectedSubject.classroom,
-        name: data.name || '',
-        rawScore: data.rawScore || 0,
-        assignmentIds: data.assignmentIds || [],
-        createdAt: editingGroup?.createdAt || new Date(),
-        updatedAt: new Date()
-      };
-      await dbService.saveAssignmentGroup(firebaseConfig, newGroup);
-      const updatedAssignments = await Promise.all(assignments.map(async (a) => {
-        const isInGroup = newGroup.assignmentIds.includes(a.id);
-        const wasInGroup = a.groupId === newGroup.id;
-        if (isInGroup && a.groupId !== newGroup.id) {
-          const updated = { ...a, groupId: newGroup.id };
-          await dbService.saveAssignment(firebaseConfig, updated);
-          return updated;
-        } else if (!isInGroup && wasInGroup) {
-          const updated = { ...a, groupId: '' };
-          await dbService.saveAssignment(firebaseConfig, updated);
-          return updated;
-        }
-        return a;
-      }));
-      setAssignments(updatedAssignments);
-      setAssignmentGroups(prev => {
-        const index = prev.findIndex(g => g.id === newGroup.id);
-        if (index >= 0) {
-          const updated = [...prev];
-          updated[index] = newGroup;
-          return updated;
-        }
-        return [...prev, newGroup];
-      });
-      setShowGroupModal(false);
-      setEditingGroup(null);
-    } catch (error) {
-      console.error('Error saving group:', error);
-      alert('เกิดข้อผิดพลาดในการบันทึกกลุ่ม');
+  const saveStatusLabel = (() => {
+    if (!isOnline && autosave.unsavedCount > 0) return { text: `ออฟไลน์ — ค้าง ${autosave.unsavedCount} ช่อง จะบันทึกเมื่อกลับมาออนไลน์`, tone: 'amber' };
+    switch (autosave.status) {
+      case 'pending': return { text: `รอบันทึก ${autosave.unsavedCount} ช่อง`, tone: 'gray' };
+      case 'saving': return { text: 'กำลังบันทึก…', tone: 'blue' };
+      case 'saved': return { text: 'บันทึกแล้ว ✓', tone: 'green' };
+      case 'offline': return { text: 'ออฟไลน์ — จะบันทึกเมื่อกลับมาออนไลน์', tone: 'amber' };
+      case 'error': return { text: 'บันทึกไม่สำเร็จ — กำลังลองใหม่', tone: 'red' };
+      default: return { text: 'บันทึกอัตโนมัติ', tone: 'gray' };
     }
-  };
-
-  const handleDeleteGroup = async (id: string) => {
-    if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการลบกลุ่มนี้? (ชิ้นงานในกลุ่มจะยังคงอยู่แต่จะถูกแยกออกมา)')) return;
-    const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
-    if (!firebaseConfig) return;
-    try {
-      const dbService = teacherConfig?.firebaseConfig ? teacherDatabaseService : schoolDatabaseService;
-      await dbService.deleteAssignmentGroup(firebaseConfig, id);
-      const updatedAssignments = await Promise.all(assignments.map(async (a) => {
-        if (a.groupId === id) {
-          const updated = { ...a, groupId: '' };
-          await dbService.saveAssignment(firebaseConfig, updated);
-          return updated;
-        }
-        return a;
-      }));
-      setAssignments(updatedAssignments);
-      setAssignmentGroups(prev => prev.filter(g => g.id !== id));
-    } catch (error) {
-      console.error('Error deleting group:', error);
-      alert('เกิดข้อผิดพลาดในการลบกลุ่ม');
-    }
-  };
+  })();
 
   // Group subjects by unique subjectName + classroom, then sort by classroom
   const uniqueSubjects = subjects
@@ -991,466 +769,158 @@ export default function GradesPage() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 50 }}
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
+              className={`rounded-2xl p-4 md:p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
             >
-              <div className="flex items-center gap-3 mb-6">
+              <div className="flex flex-wrap items-center gap-3 mb-4">
                 <motion.button
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                   onClick={() => {
-                    if (isScoreEditing) {
-                      handleCancelEdit();
-                    } else if (selectedGroup) {
-                      setSelectedGroup(null);
-                    } else {
-                      setSelectedSubject(null);
-                    }
+                    if (isScoreEditing) handleFinishEditing();
+                    else setSelectedSubject(null);
                   }}
                   className={`p-2 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
                 >
                   <ChevronLeft size={24} />
                 </motion.button>
-                <div>
-                  <h1 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    {selectedGroup ? `กลุ่ม: ${selectedGroup.name}` : selectedSubject.subjectName}
+                <div className="min-w-0">
+                  <h1 className={`text-2xl font-bold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    {selectedSubject.subjectName}
                   </h1>
                   <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                    {selectedGroup ? `ทอนเหลือ ${selectedGroup.rawScore} คะแนน` : `ห้อง ${selectedSubject.classroom} | ${filteredStudents.length} คน`}
+                    ห้อง {selectedSubject.classroom} | {filteredStudents.length} คน
+                    {gradeConfig && ` | เก็บ ${gradeConfig.proportions.collected} · กลาง ${gradeConfig.proportions.midterm} · ปลาย ${gradeConfig.proportions.final}`}
                   </p>
                 </div>
-                {!selectedGroup && isScoreEditing && (
-                  <div className="ml-auto flex items-center gap-2">
+
+                <div className="ml-auto flex flex-wrap items-center gap-2">
+                  {!isScoreEditing ? (
                     <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
-                      onClick={() => setShowGradeConfigModal(true)}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
-                        isDark 
-                          ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      <Settings size={18} />
-                      ตั้งค่าเกรด
-                    </motion.button>
-                  </div>
-                )}
-              </div>
-
-              {/* Statistics Overview */}
-              {!selectedGroup && (
-                <div className="mb-6 relative">
-                  {loadingGrades && (
-                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/50 dark:bg-gray-800/50 backdrop-blur-[1px] rounded-2xl">
-                      <div className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-700 rounded-xl shadow-lg">
-                        <div className="w-5 h-5 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                        <span className="text-sm font-bold">กำลังโหลดข้อมูล...</span>
-                      </div>
-                    </div>
-                  )}
-                  {/* แสดงเฉพาะสัดส่วนคะแนน */}
-                  <div className={`p-4 rounded-2xl ${isDark ? 'bg-blue-900/20 border border-blue-900/30' : 'bg-blue-50 border border-blue-100'}`}>
-                    <div className="flex items-center gap-2 mb-1 text-sm font-bold text-blue-500 uppercase tracking-wider">
-                      <TrendingUp size={16} />
-                      สัดส่วนคะแนน
-                    </div>
-                    <div className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                      เก็บ: {gradeConfig?.proportions.collected}% | กลาง: {gradeConfig?.proportions.midterm}% | ปลาย: {gradeConfig?.proportions.final}%
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Assignment Management Buttons */}
-              <div className="flex flex-wrap gap-3 mb-6">
-                {!isScoreEditing ? (
-                  <>
-                    <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={handleToggleEdit}
-                      className="flex items-center gap-2 px-6 py-2 bg-amber-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-amber-500/20 ml-auto"
+                      onClick={handleStartEditing}
+                      disabled={loadingGrades}
+                      className="flex items-center gap-2 px-6 py-2 bg-amber-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-amber-500/20 disabled:opacity-50"
                     >
                       <Edit2 size={18} />
                       กรอกคะแนน
                     </motion.button>
-                  </>
-                ) : (
-                  <>
-                    <div className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border ${isDark ? 'border-amber-500/50 text-amber-500 bg-amber-500/10' : 'border-amber-200 text-amber-600 bg-amber-50'}`}>
-                      <Info size={18} />
-                      กำลังอยู่ในโหมดกรอกคะแนน
-                    </div>
-                    
-                    <div className="flex flex-wrap gap-2">
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => {
-                          setEditingAssignment(null);
-                          setShowAssignmentModal(true);
-                        }}
-                        className="flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-red-500/20 transition-all"
+                  ) : (
+                    <>
+                      <span
+                        className={`px-3 py-2 rounded-xl text-xs font-bold ${{
+                          gray: isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600',
+                          blue: isDark ? 'bg-blue-900/40 text-blue-300' : 'bg-blue-50 text-blue-600',
+                          green: isDark ? 'bg-emerald-900/40 text-emerald-300' : 'bg-emerald-50 text-emerald-600',
+                          amber: isDark ? 'bg-amber-900/40 text-amber-300' : 'bg-amber-50 text-amber-700',
+                          red: isDark ? 'bg-red-900/40 text-red-300' : 'bg-red-50 text-red-600',
+                        }[saveStatusLabel.tone]}`}
                       >
-                        <Plus size={18} />
-                        เพิ่มชิ้นงาน
-                      </motion.button>
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => {
-                          setEditingGroup(null);
-                          setShowGroupModal(true);
-                        }}
-                        className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-500/20"
+                        {saveStatusLabel.text}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => stepHistory('undo')}
+                        disabled={historySize.undo === 0}
+                        title="ย้อนกลับ (Ctrl+Z)"
+                        className={`p-2 rounded-xl disabled:opacity-30 ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}
                       >
-                        <Settings size={18} />
-                        จัดการกลุ่มคะแนน
-                      </motion.button>
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
+                        <Undo2 size={18} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => stepHistory('redo')}
+                        disabled={historySize.redo === 0}
+                        title="ทำซ้ำ (Ctrl+Shift+Z)"
+                        className={`p-2 rounded-xl disabled:opacity-30 ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}
+                      >
+                        <Redo2 size={18} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setEditingAssignment(null); setShowAssignmentModal(true); }}
+                        className="flex items-center gap-1 px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-bold"
+                      >
+                        <Plus size={16} />
+                        เพิ่มงาน
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setShowGradeConfigModal(true)}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
-                          isDark 
-                            ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
+                        className={`flex items-center gap-1 px-3 py-2 rounded-xl text-sm font-bold ${isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                       >
-                        <Settings size={18} />
+                        <Settings size={16} />
                         ตั้งค่าเกรด
-                      </motion.button>
-                    </div>
-
-                    <div className="ml-auto flex gap-2">
+                      </button>
                       <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
-                        onClick={handleCancelEdit}
-                        className={`flex items-center gap-2 px-6 py-2 rounded-xl text-sm font-bold transition-all ${isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                        onClick={handleFinishEditing}
+                        disabled={isFinishing}
+                        className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/20 disabled:opacity-60"
                       >
-                        ยกเลิก
+                        {isFinishing ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Check size={18} />}
+                        เสร็จสิ้น
                       </motion.button>
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={handleSaveAllScores}
-                        disabled={loadingGrades}
-                        className="flex items-center gap-2 px-6 py-2 bg-emerald-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/20"
-                      >
-                        <Save size={18} />
-                        บันทึกคะแนนทั้งหมด
-                      </motion.button>
-                    </div>
-                  </>
-                )}
+                    </>
+                  )}
+                </div>
               </div>
 
-              {filteredStudents.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className={isDark ? 'border-b border-gray-600' : 'border-b border-gray-200'}>
-                        <th className={`sticky left-0 z-20 py-3 px-4 text-left text-sm font-medium ${isDark ? 'bg-gray-800 text-gray-300' : 'bg-white text-gray-600'}`}>เลขที่</th>
-                        <th className={`sticky left-12 z-20 py-3 px-4 text-left text-sm font-medium border-r ${isDark ? 'bg-gray-800 text-gray-300 border-gray-700' : 'bg-white text-gray-600 border-gray-100'}`}>ชื่อ</th>
-                        
-                        {!selectedGroup && (
-                          <>
-                            <th className={`py-3 px-4 text-center text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>เกรด</th>
-                            <th className={`py-3 px-4 text-center text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>คะแนนรวม</th>
-                            
-                            {isScoreEditing && (
-                              <>
-                                <th className={`py-3 px-4 text-center text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>เก็บ ({gradeConfig?.proportions.collected})</th>
-                                <th className={`py-3 px-4 text-center text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>กลางภาค ({gradeConfig?.proportions.midterm})</th>
-                                <th className={`py-3 px-4 text-center text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>ปลายภาค ({gradeConfig?.proportions.final})</th>
-                                
-                                {/* Assignment Groups (Folders) */}
-                                {assignmentGroups.map(group => (
-                                  <th key={group.id} className={`py-3 px-4 text-center text-xs font-bold whitespace-nowrap min-w-[120px] transition-all relative ${
-                                    isDark 
-                                      ? 'bg-purple-900/10 text-purple-400 border-x border-purple-500/20' 
-                                      : 'bg-purple-50 text-purple-600 border-x border-purple-100'
-                                  }`}>
-                                    <div className={`absolute top-0 left-0 w-full h-1 ${isDark ? 'bg-purple-500/30' : 'bg-purple-200'}`} />
-                                    <button 
-                                      onClick={() => setSelectedGroup(group)}
-                                      className="flex items-center justify-center gap-2 w-full hover:scale-105 transition-transform"
-                                    >
-                                      <Folder size={16} />
-                                      <div className="flex flex-col items-center">
-                                        <span className="max-w-[100px] overflow-hidden text-ellipsis">{group.name}</span>
-                                        <span className="text-[9px] opacity-70 uppercase tracking-tighter">ทอนเหลือ {group.rawScore}</span>
-                                      </div>
-                                    </button>
-                                  </th>
-                                ))}
-
-                                {/* Ungrouped Assignments */}
-                                {assignments.filter(a => !a.groupId).map(a => (
-                                  <th key={a.id} className={`py-3 px-2 text-center text-xs font-medium whitespace-nowrap min-w-[120px] group relative transition-all ${
-                                    isDark ? 'text-gray-300 border-b border-gray-700' : 'text-gray-700 border-b border-gray-100'
-                                  } ${!a.isVisible ? 'opacity-40 grayscale' : ''}`}>
-                                    <div className="flex flex-col items-center gap-1">
-                                      <div className="flex items-center gap-1">
-                                        <span className="max-w-[80px] overflow-hidden text-ellipsis font-bold">{a.title}</span>
-                                        <button 
-                                          onClick={() => handleToggleVisibility(a)}
-                                          className={`p-1 rounded-full transition-colors ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-200'}`}
-                                        >
-                                          {a.isVisible ? <Eye size={12} className="text-blue-500" /> : <EyeOff size={12} className="text-gray-400" />}
-                                        </button>
-                                      </div>
-                                      <span className="opacity-50 text-[10px]">เต็ม {a.maxScore}</span>
-                                      
-                                      <div className="flex items-center gap-1 mt-1">
-                                        <button 
-                                          onClick={() => {
-                                            setEditingAssignment(a);
-                                            setShowAssignmentModal(true);
-                                          }}
-                                          className="p-1.5 bg-blue-500/10 text-blue-500 rounded-lg hover:bg-blue-500 hover:text-white transition-all"
-                                        >
-                                          <Edit2 size={10} />
-                                        </button>
-                                        
-                                        <div className="relative group/menu">
-                                          <button className="p-1.5 bg-gray-500/10 text-gray-500 rounded-lg hover:bg-gray-500 hover:text-white transition-all">
-                                            < MoreVertical size={10} />
-                                          </button>
-                                          <div className={`absolute top-full left-1/2 -translate-x-1/2 mt-1 hidden group-hover/menu:block z-[60] min-w-[140px] rounded-xl shadow-xl border p-1 ${
-                                            isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'
-                                          }`}>
-                                            <div className="text-[8px] font-black uppercase opacity-50 px-2 py-1">ย้ายกลุ่ม</div>
-                                            {assignmentGroups.map(g => (
-                                              <button 
-                                                key={g.id}
-                                                onClick={() => handleMoveToGroup(a.id, g.id)}
-                                                className={`w-full text-left px-2 py-1.5 rounded-lg text-[10px] hover:bg-purple-500/10 hover:text-purple-500 transition-colors ${a.groupId === g.id ? 'bg-purple-500/10 text-purple-500 font-bold' : ''}`}
-                                              >
-                                                {g.name}
-                                              </button>
-                                            ))}
-                                          </div>
-                                        </div>
-                                      </div>
-
-                                      {(a.description || a.deadline) && (
-                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 rounded-lg bg-gray-900 text-white text-[10px] opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 shadow-xl border border-gray-700 text-left">
-                                          {a.description && <div className="mb-1">{a.description}</div>}
-                                          {a.deadline && <div className="text-blue-400">กำหนดส่ง: {new Date(a.deadline).toLocaleDateString('th-TH')}</div>}
-                                          <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-gray-900"></div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </th>
-                                ))}
-                              </>
-                            )}
-                          </>
-                        )}
-
-                        {selectedGroup && (
-                          <>
-                            <th className={`py-3 px-4 text-center text-sm font-bold bg-purple-500/10 text-purple-500 border-x border-purple-500/20`}>
-                              คะแนนทอน ({selectedGroup.rawScore})
-                            </th>
-                            {assignments.filter(a => a.groupId === selectedGroup.id).map(a => (
-                              <th key={a.id} className={`py-3 px-2 text-center text-xs font-medium whitespace-nowrap min-w-[120px] group relative transition-all ${
-                                isDark ? 'text-gray-300 border-b border-gray-700' : 'text-gray-700 border-b border-gray-100'
-                              } ${!a.isVisible ? 'opacity-40 grayscale' : ''}`}>
-                                <div className="flex flex-col items-center gap-1">
-                                  <div className="flex items-center gap-1">
-                                    <span className="max-w-[80px] overflow-hidden text-ellipsis font-bold">{a.title}</span>
-                                    <button 
-                                      onClick={() => handleToggleVisibility(a)}
-                                      className={`p-1 rounded-full transition-colors ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-200'}`}
-                                    >
-                                      {a.isVisible ? <Eye size={12} className="text-blue-500" /> : <EyeOff size={12} className="text-gray-400" />}
-                                    </button>
-                                  </div>
-                                  <span className="opacity-50 text-[10px]">เต็ม {a.maxScore}</span>
-                                  
-                                  <div className="flex items-center gap-1 mt-1">
-                                    <button 
-                                      onClick={() => {
-                                        setEditingAssignment(a);
-                                        setShowAssignmentModal(true);
-                                      }}
-                                      className="p-1.5 bg-blue-500/10 text-blue-500 rounded-lg hover:bg-blue-500 hover:text-white transition-all"
-                                    >
-                                      <Edit2 size={10} />
-                                    </button>
-                                    
-                                    <div className="relative group/menu">
-                                      <button className="p-1.5 bg-gray-500/10 text-gray-500 rounded-lg hover:bg-gray-500 hover:text-white transition-all">
-                                        <MoreVertical size={10} />
-                                      </button>
-                                      <div className={`absolute top-full left-1/2 -translate-x-1/2 mt-1 hidden group-hover/menu:block z-[60] min-w-[140px] rounded-xl shadow-xl border p-1 ${
-                                        isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'
-                                      }`}>
-                                        <div className="text-[8px] font-black uppercase opacity-50 px-2 py-1">ย้ายกลุ่ม</div>
-                                        <button 
-                                          onClick={() => handleMoveToGroup(a.id, '')}
-                                          className={`w-full text-left px-2 py-1.5 rounded-lg text-[10px] hover:bg-red-500/10 hover:text-red-500 transition-colors`}
-                                        >
-                                          ออกจากกลุ่ม
-                                        </button>
-                                        {assignmentGroups.filter(g => g.id !== selectedGroup.id).map(g => (
-                                          <button 
-                                            key={g.id}
-                                            onClick={() => handleMoveToGroup(a.id, g.id)}
-                                            className={`w-full text-left px-2 py-1.5 rounded-lg text-[10px] hover:bg-purple-500/10 hover:text-purple-500 transition-colors`}
-                                          >
-                                            {g.name}
-                                          </button>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </th>
-                            ))}
-                          </>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredStudents.map((student, index) => {
-                        const scoreBreakdown = calculateDetailedStudentScore(student.studentId);
-                        const grade = getGradeFromScore(scoreBreakdown.total);
-                        const gradeColor = getGradeColor(grade);
-                        const studentScore = studentScores.find(s => s.studentId === student.studentId);
-
-                        return (
-                          <motion.tr
-                            key={student.studentId}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.03 }}
-                            className={isDark ? 'border-b border-gray-700' : 'border-b border-gray-100'}
-                          >
-                            <td className={`sticky left-0 z-10 py-3 px-4 text-sm ${isDark ? 'bg-gray-800 text-gray-300' : 'bg-white text-gray-700'}`}>{student.number || '-'}</td>
-                            <td 
-                              className={`sticky left-12 z-10 py-3 px-4 text-sm font-bold border-r cursor-pointer hover:text-blue-500 transition-colors ${isDark ? 'bg-gray-800 text-white border-gray-700' : 'bg-white text-gray-900 border-gray-100'}`}
-                              onClick={() => setSelectedStudent(student)}
-                            >
-                              {student.name}
-                            </td>
-                            
-                            {!selectedGroup && (
-                              <>
-                                <td className={`py-3 px-4 text-center text-lg font-black ${gradeColor}`}>
-                                  {grade}
-                                </td>
-                                <td className={`py-3 px-4 text-center text-sm font-black ${isDark ? 'text-white' : 'text-gray-900'}`}>{scoreBreakdown.total}</td>
-                                
-                                {isScoreEditing && (
-                                  <>
-                                    <td className={`py-3 px-4 text-center text-sm font-bold transition-colors ${
-                                      scoreBreakdown.isExceeding 
-                                        ? 'text-red-500 animate-pulse' 
-                                        : 'text-blue-500'
-                                    }`}>
-                                      {scoreBreakdown.collected}
-                                      {scoreBreakdown.isExceeding && (
-                                        <div className="text-[8px] uppercase font-black text-red-500 -mt-1">
-                                          เกิน {gradeConfig?.proportions.collected}
-                                        </div>
-                                      )}
-                                    </td>
-                                    <td className="py-3 px-4 text-center">
-                                      <input
-                                        type="number"
-                                        value={studentScore?.midtermScore ?? ''}
-                                        onFocus={(e) => e.target.select()}
-                                        onChange={(e) => handleScoreChange(student.studentId, 'midterm', e.target.value)}
-                                        className={`w-20 h-10 text-base text-center rounded-lg border font-bold ${
-                                          isDark 
-                                            ? 'bg-gray-700 border-gray-600 focus:border-blue-500 text-white' 
-                                            : 'bg-white border-gray-200 focus:border-blue-400 text-gray-900'
-                                        } focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all`}
-                                      />
-                                    </td>
-                                    <td className="py-3 px-4 text-center">
-                                      <input
-                                        type="number"
-                                        value={studentScore?.finalScore ?? ''}
-                                        onFocus={(e) => e.target.select()}
-                                        onChange={(e) => handleScoreChange(student.studentId, 'final', e.target.value)}
-                                        className={`w-20 h-10 text-base text-center rounded-lg border font-bold ${
-                                          isDark 
-                                            ? 'bg-gray-700 border-gray-600 focus:border-blue-500 text-white' 
-                                            : 'bg-white border-gray-200 focus:border-blue-400 text-gray-900'
-                                        } focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all`}
-                                      />
-                                    </td>
-                                    {assignmentGroups.map(group => (
-                                      <td key={group.id} className={`py-3 px-4 text-center text-sm font-bold border-x transition-colors ${
-                                        isDark ? 'bg-purple-900/5 text-purple-400 border-purple-500/10' : 'bg-purple-50/30 text-purple-600 border-purple-100'
-                                      }`}>
-                                        {getGroupScore(student.studentId, group)}
-                                      </td>
-                                    ))}
-
-                                    {assignments.filter(a => !a.groupId).map(a => (
-                                      <td key={a.id} className={`py-3 px-2 text-center transition-opacity ${!a.isVisible ? 'opacity-40' : ''}`}>
-                                        <input
-                                          type="number"
-                                          value={studentScore?.assignmentScores[a.id] ?? ''}
-                                          onFocus={(e) => e.target.select()}
-                                          onChange={(e) => handleScoreChange(student.studentId, 'assignment', e.target.value, a.id)}
-                                          className={`w-16 h-10 text-base text-center rounded-lg border font-bold ${
-                                            isDark 
-                                              ? 'bg-gray-700 border-gray-600 focus:border-blue-500 text-white' 
-                                              : 'bg-white border-gray-200 focus:border-blue-400 text-gray-900'
-                                          } focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all`}
-                                        />
-                                      </td>
-                                    ))}
-                                  </>
-                                )}
-                              </>
-                            )}
-
-                            {selectedGroup && (
-                              <>
-                                <td className={`py-3 px-4 text-center text-sm font-bold border-x bg-purple-500/5 text-purple-500 border-purple-500/10`}>
-                                  {getGroupScore(student.studentId, selectedGroup)}
-                                </td>
-                                {assignments.filter(a => a.groupId === selectedGroup.id).map(a => (
-                                  <td key={a.id} className={`py-3 px-2 text-center transition-opacity ${!a.isVisible ? 'opacity-40' : ''}`}>
-                                    {isScoreEditing ? (
-                                      <input
-                                        type="number"
-                                        value={studentScore?.assignmentScores[a.id] ?? ''}
-                                        onFocus={(e) => e.target.select()}
-                                        onChange={(e) => handleScoreChange(student.studentId, 'assignment', e.target.value, a.id)}
-                                        className={`w-16 h-10 text-base text-center rounded-lg border font-bold ${
-                                          isDark 
-                                            ? 'bg-gray-700 border-gray-600 focus:border-purple-500 text-white' 
-                                            : 'bg-white border-gray-200 focus:border-purple-400 text-gray-900'
-                                        } focus:outline-none focus:ring-2 focus:ring-purple-500/20 transition-all`}
-                                      />
-                                    ) : (
-                                      <span className={`text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                                        {a.isVisible ? (studentScore?.assignmentScores[a.id] ?? 0) : '-'}
-                                      </span>
-                                    )}
-                                  </td>
-                                ))}
-                              </>
-                            )}
-                          </motion.tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+              {gradeConfig && capacity > gradeConfig.proportions.collected && (
+                <div className={`mb-3 flex items-center gap-2 px-3 py-2 rounded-xl text-sm ${isDark ? 'bg-amber-900/30 text-amber-300' : 'bg-amber-50 text-amber-700'}`}>
+                  <AlertCircle size={16} />
+                  งานเก็บที่แสดงให้นักเรียนเห็นเต็มรวม {formatScore(capacity)} คะแนน เกินสัดส่วนคะแนนเก็บ {gradeConfig.proportions.collected} — ลองจัดกลุ่มแล้ว &quot;ปรับคะแนน&quot;
                 </div>
-              ) : (
+              )}
+
+              {isScoreEditing && !isMobile && (
+                <p className={`mb-3 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  คลิกช่องแล้วพิมพ์ได้เลย · Enter ลง · Tab ขวา · วางจาก Excel ด้วย Ctrl+V · ลากคลุมหัวงาน (หรือ Shift+คลิก) แล้วคลิกขวา → &quot;ปรับคะแนน&quot;
+                  {finePointer ? ' · ลาก ⋮⋮ ที่หัวคอลัมน์เพื่อย้าย' : ' · กดค้างที่หัวคอลัมน์เพื่อเปิดเมนู'}
+                </p>
+              )}
+
+              {loadingGrades || !gradeConfig ? (
+                <div className="flex items-center justify-center gap-2 py-16">
+                  <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-sm font-bold">กำลังโหลดข้อมูล...</span>
+                </div>
+              ) : filteredStudents.length === 0 ? (
                 <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                   ไม่พบนักเรียนในห้องนี้
                 </div>
+              ) : isScoreEditing && isMobile ? (
+                <MobileScoreEntry
+                  isDark={isDark}
+                  students={filteredStudents}
+                  assignments={assignments}
+                  groups={assignmentGroups}
+                  scores={scoresById}
+                  config={gradeConfig}
+                  invalid={invalidCells}
+                  onEdit={handleScoreEdits}
+                  onInvalid={handleInvalid}
+                />
+              ) : (
+                <ScoreGrid
+                  isDark={isDark}
+                  editable={isScoreEditing}
+                  allowReorder={finePointer}
+                  students={filteredStudents}
+                  assignments={assignments}
+                  groups={assignmentGroups}
+                  scores={scoresById}
+                  config={gradeConfig}
+                  invalid={invalidCells}
+                  onEdit={handleScoreEdits}
+                  onInvalid={handleInvalid}
+                  onUndo={() => stepHistory('undo')}
+                  onRedo={() => stepHistory('redo')}
+                  onStudentClick={setSelectedStudent}
+                  notify={setToast}
+                  actions={gridActions}
+                />
               )}
             </motion.div>
           )}
@@ -1481,9 +951,8 @@ export default function GradesPage() {
                     description: formData.get('description') as string,
                     deadline: formData.get('deadline') as string,
                     maxScore: parseFloat(formData.get('maxScore') as string),
-                    groupId: formData.get('groupId') as string,
                     isVisible: formData.get('isVisible') === 'on',
-                  });
+                  }, editingAssignment);
                 }} className="space-y-5">
                   <div>
                     <label className="block text-sm font-bold mb-2 opacity-70">ชื่อชิ้นงาน</label>
@@ -1502,15 +971,6 @@ export default function GradesPage() {
                       <label className="block text-sm font-bold mb-2 opacity-70">กำหนดส่ง</label>
                       <input name="deadline" type="date" defaultValue={editingAssignment?.deadline} className={`w-full h-12 px-4 text-base rounded-xl border ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-gray-200'} focus:outline-none focus:ring-2 focus:ring-blue-500/20`} />
                     </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold mb-2 opacity-70">กลุ่มคะแนน</label>
-                    <select name="groupId" defaultValue={editingAssignment?.groupId || ''} className={`w-full h-12 px-4 text-base rounded-xl border ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-gray-200'} focus:outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none`}>
-                      <option value="">ไม่ระบุกลุ่ม (นับเป็นคะแนนดิบโดยตรง)</option>
-                      {assignmentGroups.map(g => (
-                        <option key={g.id} value={g.id}>{g.name} (ทอนเหลือ {g.rawScore} คะแนน)</option>
-                      ))}
-                    </select>
                   </div>
                   <div className="pt-4 flex items-center gap-3">
                     <label className="flex items-center gap-3 cursor-pointer group">
@@ -1532,129 +992,11 @@ export default function GradesPage() {
                   </div>
                   <div className="pt-4 flex gap-3">
                     {editingAssignment && (
-                      <button type="button" onClick={() => handleDeleteAssignment(editingAssignment.id)} className="h-14 flex-1 rounded-2xl bg-red-500/10 text-red-500 font-bold hover:bg-red-500/20 transition-all">ลบชิ้นงาน</button>
+                      <button type="button" onClick={() => { setShowAssignmentModal(false); gridActions.deleteAssignment(editingAssignment); }} className="h-14 flex-1 rounded-2xl bg-red-500/10 text-red-500 font-bold hover:bg-red-500/20 transition-all">ลบชิ้นงาน</button>
                     )}
                     <button type="submit" className="h-14 flex-[2] rounded-2xl bg-red-500 text-white font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-500/20">บันทึกข้อมูล</button>
                   </div>
                 </form>
-              </motion.div>
-            </div>
-          )}
-
-          {/* Group Modal */}
-          {showGroupModal && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                className={`w-full max-w-2xl rounded-3xl p-6 shadow-2xl ${isDark ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'}`}
-              >
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl font-bold">จัดการกลุ่มคะแนน</h3>
-                  <button onClick={() => setShowGroupModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full">
-                    <X size={20} />
-                  </button>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <h4 className="font-bold text-sm opacity-70">กลุ่มที่มีอยู่</h4>
-                    <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
-                      {assignmentGroups.map(group => (
-                        <div key={group.id} className={`p-3 rounded-xl border ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-gray-200'} flex items-center justify-between`}>
-                          <div>
-                            <div className="font-bold">{group.name}</div>
-                            <div className="text-xs opacity-60">ทอนเหลือ {group.rawScore} คะแนน | {group.assignmentIds.length} ชิ้นงาน</div>
-                          </div>
-                          <div className="flex gap-1">
-                            <button onClick={() => {
-                              setEditingGroup(group);
-                              setSelectedGroupAssignments(group.assignmentIds);
-                            }} className="p-2 hover:bg-blue-500/10 text-blue-500 rounded-lg"><Edit2 size={16} /></button>
-                            <button onClick={() => handleDeleteGroup(group.id)} className="p-2 hover:bg-red-500/10 text-red-500 rounded-lg"><Trash2 size={16} /></button>
-                          </div>
-                        </div>
-                      ))}
-                      {assignmentGroups.length === 0 && <div className="text-center py-8 opacity-50 text-sm italic">ยังไม่มีกลุ่มคะแนน</div>}
-                    </div>
-                  </div>
-
-                  <div className={`p-4 rounded-2xl ${isDark ? 'bg-gray-900/50' : 'bg-gray-50'} border ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
-                    <h4 className="font-bold text-sm mb-4 flex items-center gap-2">
-                      <Plus size={16} className="text-purple-500" />
-                      {editingGroup ? 'แก้ไขกลุ่ม' : 'สร้างกลุ่มใหม่'}
-                    </h4>
-                    <form onSubmit={(e) => {
-                      e.preventDefault();
-                      const formData = new FormData(e.currentTarget);
-                      handleSaveGroup({
-                        name: formData.get('name') as string,
-                        rawScore: parseFloat(formData.get('rawScore') as string),
-                        assignmentIds: selectedGroupAssignments
-                      });
-                    }} className="space-y-4">
-                      <div>
-                        <label className="block text-xs font-bold mb-2 opacity-70 uppercase tracking-wider">ชื่อกลุ่ม</label>
-                        <input name="name" defaultValue={editingGroup?.name} required className={`w-full h-12 px-4 text-base rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} focus:outline-none focus:ring-2 focus:ring-purple-500/20`} placeholder="เช่น งานเก็บก่อนกลางภาค" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold mb-2 opacity-70 uppercase tracking-wider">คะแนนที่จะทอนให้เหลือ (เช่น 5 หรือ 10)</label>
-                        <input name="rawScore" type="number" step="any" defaultValue={editingGroup?.rawScore || 5} required className={`w-full h-12 px-4 text-base rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} focus:outline-none focus:ring-2 focus:ring-purple-500/20`} />
-                        <p className="text-[10px] mt-1.5 opacity-50 italic">ระบบจะนำคะแนนดิบของงานทั้งหมดในกลุ่มมารวมกันแล้วหารให้เหลือตามที่กำหนด</p>
-                      </div>
-                      <div>
-                        <div className="flex justify-between items-center mb-2">
-                          <label className="block text-xs font-bold opacity-70 uppercase tracking-wider">เลือกชิ้นงานเข้ากลุ่ม</label>
-                          <div className="text-[10px] font-bold text-purple-500">
-                            รวมคะแนนดิบ: {
-                              assignments
-                                .filter(a => selectedGroupAssignments.includes(a.id))
-                                .reduce((sum, a) => sum + a.maxScore, 0)
-                            } คะแนน
-                          </div>
-                        </div>
-                        <div className="space-y-2 max-h-[150px] overflow-y-auto pr-2 bg-white/5 rounded-xl p-2">
-                          {assignments.map(a => (
-                            <label key={a.id} className={`flex items-center gap-3 p-3 rounded-xl hover:bg-purple-500/10 cursor-pointer transition-colors border ${isDark ? 'border-transparent' : 'border-gray-100'}`}>
-                              <input 
-                                type="checkbox" 
-                                name={`asm_${a.id}`} 
-                                checked={selectedGroupAssignments.includes(a.id)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedGroupAssignments(prev => [...prev, a.id]);
-                                  } else {
-                                    setSelectedGroupAssignments(prev => prev.filter(id => id !== a.id));
-                                  }
-                                }}
-                                className="w-5 h-5 rounded-lg border-gray-300 text-purple-600 focus:ring-purple-500" 
-                              />
-                              <div className="flex-1 min-w-0">
-                                <div className="text-sm font-bold truncate">{a.title}</div>
-                                <div className="text-[10px] opacity-50">เต็ม {a.maxScore} คะแนน</div>
-                              </div>
-                            </label>
-                          ))}
-                          {assignments.length === 0 && <div className="text-center py-4 text-xs opacity-50 italic">ยังไม่มีชิ้นงานให้เลือก</div>}
-                        </div>
-                      </div>
-                      <div className="pt-2">
-                        <button type="submit" className="w-full h-14 rounded-2xl bg-purple-600 text-white font-bold hover:bg-purple-700 transition-all shadow-lg shadow-purple-500/20 flex items-center justify-center gap-2">
-                          <Save size={20} />
-                          {editingGroup ? 'อัปเดตกลุ่มคะแนน' : 'บันทึกกลุ่มใหม่'}
-                        </button>
-                        <button type="button" onClick={() => {
-                          setShowGroupModal(false);
-                          setEditingGroup(null);
-                          setSelectedGroupAssignments([]);
-                        }} className="w-full h-10 mt-2 text-sm font-bold opacity-50 hover:opacity-100 transition-all">
-                          ปิดหน้าต่าง
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                </div>
               </motion.div>
             </div>
           )}
@@ -1828,11 +1170,11 @@ export default function GradesPage() {
                 {/* Modal Content */}
                 <div className="flex-1 overflow-y-auto p-6 space-y-6">
                   {(() => {
-                    const breakdown = calculateDetailedStudentScore(selectedStudent.studentId);
-                    const grade = getGradeFromScore(breakdown.total);
-                    const gradeColor = getGradeColor(grade);
-                    const score = studentScores.find(s => s.studentId === selectedStudent.studentId);
-                    const unsentCount = assignments.filter(a => a.isVisible && !((score?.assignmentScores?.[a.id] || 0) > 0)).length;
+                    const score = scoresById.get(selectedStudent.studentId);
+                    const breakdown = computeBreakdown(score, assignments, assignmentGroups, gradeConfig);
+                    const grade = breakdown.grade;
+                    const unsentCount = breakdown.pending;
+                    const scoreOf = (a: Assignment) => getFieldValue(score, `a:${a.id}`);
 
                     const mainCardGradient = isDark
                       ? 'bg-gradient-to-br from-[#111827] via-[#1F2937] to-[#030712]'
@@ -1892,7 +1234,7 @@ export default function GradesPage() {
                           {assignmentGroups.map(group => {
                             const groupAsms = assignments.filter(a => a.groupId === group.id && a.isVisible);
                             if (groupAsms.length === 0) return null;
-                            const groupScore = getGroupScore(selectedStudent.studentId, group);
+                            const groupScore = breakdown.groups[group.id] ?? 0;
 
                             return (
                               <div key={group.id} className={`rounded-3xl border ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-white border-slate-100'} shadow-sm overflow-hidden`}>
@@ -1914,11 +1256,11 @@ export default function GradesPage() {
                                     <div key={a.id} className={`p-4 rounded-xl border flex items-center justify-between ${isDark ? 'bg-slate-900/50 border-slate-700' : 'bg-slate-50 border-slate-200/50'}`}>
                                       <div className="flex-1 min-w-0 pr-4">
                                         <p className={`font-bold text-sm truncate ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{a.title}</p>
-                                        {!((score?.assignmentScores?.[a.id] || 0) > 0) && <p className="text-[10px] font-bold text-rose-500 uppercase mt-0.5">ยังไม่ส่ง</p>}
+                                        {scoreOf(a) === undefined && <p className="text-[10px] font-bold text-rose-500 uppercase mt-0.5">งานค้าง</p>}
                                       </div>
                                       <div className="text-right shrink-0">
-                                        <span className={`font-black text-lg ${(score?.assignmentScores?.[a.id] || 0) > 0 ? 'text-indigo-500' : 'text-rose-500'}`}>
-                                          {score?.assignmentScores?.[a.id] || 0}
+                                        <span className={`font-black text-lg ${scoreOf(a) !== undefined ? 'text-indigo-500' : 'text-rose-500'}`}>
+                                          {scoreOf(a) !== undefined ? formatScore(scoreOf(a)) : '–'}
                                         </span>
                                         <span className="text-[10px] font-bold text-slate-400 uppercase ml-1">/ {a.maxScore}</span>
                                       </div>
@@ -1945,11 +1287,11 @@ export default function GradesPage() {
                                   <div key={a.id} className={`p-4 rounded-xl border flex items-center justify-between ${isDark ? 'bg-slate-900/50 border-slate-700' : 'bg-slate-50 border-slate-200/50'}`}>
                                     <div className="flex-1 min-w-0 pr-4">
                                       <p className={`font-bold text-sm truncate ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{a.title}</p>
-                                      {!((score?.assignmentScores?.[a.id] || 0) > 0) && <p className="text-[10px] font-bold text-rose-500 uppercase mt-0.5">ยังไม่ส่ง</p>}
+                                      {scoreOf(a) === undefined && <p className="text-[10px] font-bold text-rose-500 uppercase mt-0.5">งานค้าง</p>}
                                     </div>
                                     <div className="text-right shrink-0">
-                                      <span className={`font-black text-lg ${(score?.assignmentScores?.[a.id] || 0) > 0 ? 'text-indigo-500' : 'text-rose-500'}`}>
-                                        {score?.assignmentScores?.[a.id] || 0}
+                                      <span className={`font-black text-lg ${scoreOf(a) !== undefined ? 'text-indigo-500' : 'text-rose-500'}`}>
+                                        {scoreOf(a) !== undefined ? formatScore(scoreOf(a)) : '–'}
                                       </span>
                                       <span className="text-[10px] font-bold text-slate-400 uppercase ml-1">/ {a.maxScore}</span>
                                     </div>

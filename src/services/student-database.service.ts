@@ -1,7 +1,8 @@
 import { firebaseManager } from '@/lib/firebase';
 import { collection, doc, getDocs, getDoc, query, where, Firestore } from 'firebase/firestore';
 import { schoolDatabaseService, StudentData, SubjectData, TeacherFirebaseConfig } from './school-database.service';
-import { teacherDatabaseService, AttendanceData, AttendanceRecord, StudentScore, Assignment, GradeConfig } from './teacher-database.service';
+import { teacherDatabaseService, AttendanceData, AttendanceRecord, StudentScore, Assignment, AssignmentGroup, GradeConfig } from './teacher-database.service';
+import { buildColumns, computeBreakdown, isScored } from '@/lib/grade-calculation';
 import { TtlCache } from '@/lib/firestore-helpers';
 import { firestoreService } from './firestore.service';
 import type { FirebaseConfig } from '@/types/firebase.types';
@@ -316,27 +317,25 @@ class StudentDatabaseService {
     const scoreProcessPromises = scoresSnap.docs.map(async (scoreDoc) => {
       const scoreData = scoreDoc.data() as StudentScore;
 
-      // Fetch assignments and gradeConfig in parallel
-      const [assignmentsSnap, gradeConfigSnap] = await Promise.all([
+      // Fetch assignments, groups and gradeConfig in parallel
+      const [assignmentsSnap, groupsSnap, gradeConfigSnap] = await Promise.all([
         getDocs(query(
           collection(teacherDB, 'assignments'),
           where('isVisible', '==', true),
           where('subjectId', '==', scoreData.subjectId)
         )),
+        getDocs(query(collection(teacherDB, 'assignmentGroups'), where('subjectId', '==', scoreData.subjectId))),
         getDoc(doc(teacherDB, 'gradeConfigs', scoreData.subjectId)),
       ]);
 
-      const assignments = assignmentsSnap.docs.map(d => d.data() as Assignment);
+      const inClassroom = <T extends { classroom?: string }>(item: T) => !item.classroom || item.classroom === scoreData.classroom;
+      const assignments = assignmentsSnap.docs.map(d => d.data() as Assignment).filter(inClassroom);
+      const groups = groupsSnap.docs.map(d => d.data() as AssignmentGroup).filter(inClassroom);
       const gradeConfig = gradeConfigSnap.exists() ? gradeConfigSnap.data() as GradeConfig : null;
 
-      // Calculate total score and grade
-      const totalScore = this.calculateTotalScore(scoreData, gradeConfig);
-      const grade = this.calculateGrade(totalScore, gradeConfig);
-
-      // Count unsent assignments
-      const unsentCount = assignments.filter(
-        assignment => !scoreData.assignmentScores[assignment.id]
-      ).length;
+      // Same calculation as the teacher's grade sheet
+      const breakdown = computeBreakdown(scoreData, assignments, groups, gradeConfig);
+      const ordered = buildColumns(assignments, groups).flatMap(c => (c.kind === 'assignment' ? [c.assignment] : []));
 
       // Look up subject name from subjects list
       const subjectInfo = subjects.find(s => s.subjectId === scoreData.subjectId);
@@ -345,13 +344,13 @@ class StudentDatabaseService {
         subjectId: scoreData.subjectId,
         subjectName: subjectInfo?.subjectName || '',
         classroom: scoreData.classroom,
-        collectedScore: this.calculateCollectedScore(scoreData, assignments),
-        midtermScore: scoreData.midtermScore || 0,
-        finalScore: scoreData.finalScore || 0,
-        totalScore,
-        grade,
-        unsent: unsentCount,
-        details: this.buildGradeDetails(scoreData, assignments),
+        collectedScore: breakdown.collected,
+        midtermScore: breakdown.midterm,
+        finalScore: breakdown.final,
+        totalScore: breakdown.total,
+        grade: breakdown.grade,
+        unsent: breakdown.pending,
+        details: this.buildGradeDetails(scoreData, ordered),
       };
     });
 
@@ -466,64 +465,14 @@ class StudentDatabaseService {
   }
 
   /**
-   * Helper: Calculate total score based on grade config
-   */
-  private calculateTotalScore(scoreData: StudentScore, gradeConfig: GradeConfig | null): number {
-    if (!gradeConfig) {
-      // Default proportions if no config
-      return (scoreData.midtermScore || 0) + (scoreData.finalScore || 0) + 
-             Object.values(scoreData.assignmentScores).reduce((sum, score) => sum + score, 0);
-    }
-
-    const collectedScore = Object.values(scoreData.assignmentScores).reduce((sum, score) => sum + score, 0);
-    const weightedCollected = (collectedScore / 100) * gradeConfig.proportions.collected;
-    const weightedMidterm = ((scoreData.midtermScore || 0) / 100) * gradeConfig.proportions.midterm;
-    const weightedFinal = ((scoreData.finalScore || 0) / 100) * gradeConfig.proportions.final;
-
-    return weightedCollected + weightedMidterm + weightedFinal;
-  }
-
-  /**
-   * Helper: Calculate collected score from assignments
-   */
-  private calculateCollectedScore(scoreData: StudentScore, assignments: Assignment[]): number {
-    return Object.values(scoreData.assignmentScores).reduce((sum, score) => sum + score, 0);
-  }
-
-  /**
-   * Helper: Calculate grade based on total score
-   */
-  private calculateGrade(totalScore: number, gradeConfig: GradeConfig | null): string {
-    if (!gradeConfig || !gradeConfig.thresholds) {
-      // Default grading scale
-      if (totalScore >= 80) return '4';
-      if (totalScore >= 75) return '3.5';
-      if (totalScore >= 70) return '3';
-      if (totalScore >= 65) return '2.5';
-      if (totalScore >= 60) return '2';
-      if (totalScore >= 55) return '1.5';
-      if (totalScore >= 50) return '1';
-      return '0';
-    }
-
-    // Use custom thresholds
-    const sortedThresholds = [...gradeConfig.thresholds].sort((a, b) => b.minScore - a.minScore);
-    for (const threshold of sortedThresholds) {
-      if (totalScore >= threshold.minScore) {
-        return threshold.grade;
-      }
-    }
-    return '0';
-  }
-
-  /**
    * Helper: Build grade details array
    */
   private buildGradeDetails(scoreData: StudentScore, assignments: Assignment[]): any[] {
     return assignments.map(assignment => ({
       chapter: 'บทเรียน',
       label: assignment.title,
-      score: scoreData.assignmentScores[assignment.id]?.toString() || '',
+      // '' = not entered yet (pending); a stored 0 is shown as 0
+      score: isScored(scoreData.assignmentScores?.[assignment.id]) ? String(scoreData.assignmentScores[assignment.id]) : '',
       max: assignment.maxScore.toString(),
       description: assignment.description,
       deadline: assignment.deadline || null,

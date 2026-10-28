@@ -82,6 +82,9 @@ export interface GradeConfig {
     midterm: number;  // e.g. 20
     final: number;    // e.g. 20
   };
+  /** Full marks of the midterm/final exam papers; scaled to the proportion. Defaults to the proportion. */
+  midtermMax?: number;
+  finalMax?: number;
   thresholds: GradeThreshold[];
   updatedAt: Date;
 }
@@ -96,6 +99,8 @@ export interface Assignment {
   maxScore: number;
   groupId?: string;
   isVisible: boolean;
+  /** Column position in the grade sheet (falls back to createdAt) */
+  order?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -107,6 +112,8 @@ export interface AssignmentGroup {
   name: string;
   rawScore: number; // The target score after scaling (e.g., 5 points)
   assignmentIds: string[];
+  /** Where the scaled column sits inside the group's block: after this many assignments (default: all) */
+  scaledPosition?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -115,9 +122,11 @@ export interface StudentScore {
   studentId: string;
   subjectId: string;
   classroom: string;
-  assignmentScores: Record<string, number>; // assignmentId -> score
-  midtermScore: number;
-  finalScore: number;
+  /** assignmentId -> score. A missing key means "not entered yet" (0 is a real score). */
+  assignmentScores: Record<string, number>;
+  /** Missing = not entered yet */
+  midtermScore?: number;
+  finalScore?: number;
   updatedAt: Date;
 }
 
@@ -495,10 +504,10 @@ class TeacherDatabaseService {
   async saveGradeConfig(teacherFirebaseConfig: FirebaseConfig, config: GradeConfig): Promise<void> {
     const database = this.getTeacherDB(teacherFirebaseConfig);
     const configRef = doc(database, 'gradeConfigs', config.subjectId);
-    await setDoc(configRef, {
+    await setDoc(configRef, stripUndefined({
       ...config,
       updatedAt: new Date()
-    });
+    }));
   }
 
   async getAssignments(teacherFirebaseConfig: FirebaseConfig, subjectId: string, classroom: string): Promise<Assignment[]> {
@@ -522,11 +531,11 @@ class TeacherDatabaseService {
   async saveAssignment(teacherFirebaseConfig: FirebaseConfig, assignment: Assignment): Promise<void> {
     const database = this.getTeacherDB(teacherFirebaseConfig);
     const assignmentRef = doc(database, 'assignments', assignment.id);
-    await setDoc(assignmentRef, {
+    await setDoc(assignmentRef, stripUndefined({
       ...assignment,
       createdAt: assignment.createdAt || new Date(),
       updatedAt: new Date()
-    });
+    }));
   }
 
   async deleteAssignment(teacherFirebaseConfig: FirebaseConfig, assignmentId: string): Promise<void> {
@@ -555,11 +564,11 @@ class TeacherDatabaseService {
   async saveAssignmentGroup(teacherFirebaseConfig: FirebaseConfig, group: AssignmentGroup): Promise<void> {
     const database = this.getTeacherDB(teacherFirebaseConfig);
     const groupRef = doc(database, 'assignmentGroups', group.id);
-    await setDoc(groupRef, {
+    await setDoc(groupRef, stripUndefined({
       ...group,
       createdAt: group.createdAt || new Date(),
       updatedAt: new Date()
-    });
+    }));
   }
 
   async deleteAssignmentGroup(teacherFirebaseConfig: FirebaseConfig, groupId: string): Promise<void> {
@@ -586,12 +595,75 @@ class TeacherDatabaseService {
 
   async saveStudentScore(teacherFirebaseConfig: FirebaseConfig, score: StudentScore): Promise<void> {
     const database = this.getTeacherDB(teacherFirebaseConfig);
-    const scoreId = `${score.subjectId}_${score.classroom.replace(/\//g, '-')}_${score.studentId}`;
-    const scoreRef = doc(database, 'studentScores', scoreId);
+    const scoreRef = doc(database, 'studentScores', scoreDocId(score.subjectId, score.classroom, score.studentId));
     await setDoc(scoreRef, {
       ...score,
       updatedAt: new Date()
     });
   }
+
+  /**
+   * Save individual score cells. Each cell is merged into its student's document, so two
+   * devices editing different cells never overwrite each other. `value: null` clears a cell
+   * (back to "not entered"). All cells go in one batch (callers keep it under 500 students).
+   */
+  async saveScoreCells(
+    teacherFirebaseConfig: FirebaseConfig,
+    subjectId: string,
+    classroom: string,
+    cells: ScoreCellWrite[],
+  ): Promise<void> {
+    if (cells.length === 0) return;
+    const database = this.getTeacherDB(teacherFirebaseConfig);
+    const byStudent = new Map<string, Record<string, unknown>>();
+    for (const cell of cells) {
+      const patch = byStudent.get(cell.studentId) ?? { assignmentScores: {} as Record<string, unknown> };
+      const value = cell.value === null ? deleteField() : cell.value;
+      if (cell.field === 'midterm') patch.midtermScore = value;
+      else if (cell.field === 'final') patch.finalScore = value;
+      else (patch.assignmentScores as Record<string, unknown>)[cell.field.slice(2)] = value;
+      byStudent.set(cell.studentId, patch);
+    }
+    const batch = writeBatch(database);
+    byStudent.forEach((patch, studentId) => {
+      batch.set(doc(database, 'studentScores', scoreDocId(subjectId, classroom, studentId)), {
+        ...patch,
+        studentId,
+        subjectId,
+        classroom,
+        updatedAt: new Date(),
+      }, { merge: true });
+    });
+    await batch.commit();
+  }
+
+  /** Update some fields of several assignments in one batch (order, groupId, visibility, …). */
+  async updateAssignments(
+    teacherFirebaseConfig: FirebaseConfig,
+    updates: Array<{ id: string; fields: Partial<Pick<Assignment, 'order' | 'groupId' | 'isVisible' | 'title' | 'maxScore'>> }>,
+  ): Promise<void> {
+    const database = this.getTeacherDB(teacherFirebaseConfig);
+    for (const chunk of chunkArray(updates, 450)) {
+      const batch = writeBatch(database);
+      chunk.forEach(({ id, fields }) => batch.set(doc(database, 'assignments', id), stripUndefined({ ...fields, updatedAt: new Date() }), { merge: true }));
+      await batch.commit();
+    }
+  }
+}
+
+export interface ScoreCellWrite {
+  studentId: string;
+  /** `a:<assignmentId>`, `midterm` or `final` */
+  field: `a:${string}` | 'midterm' | 'final';
+  value: number | null;
+}
+
+/** Firestore rejects `undefined` values; optional fields that are unset are simply left out. */
+function stripUndefined<T extends object>(data: T): T {
+  return Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined)) as T;
+}
+
+function scoreDocId(subjectId: string, classroom: string, studentId: string): string {
+  return `${subjectId}_${String(classroom).replace(/\//g, '-')}_${studentId}`;
 }
 export const teacherDatabaseService = new TeacherDatabaseService();
