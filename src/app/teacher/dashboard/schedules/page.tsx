@@ -17,6 +17,7 @@ import * as XLSX from 'xlsx';
 import GoogleSheetsIcon from '@/components/GoogleSheetsIcon';
 import Modal, { ModalHeader } from '@/components/Modal';
 import AttendanceStatusSelect from '@/components/AttendanceStatusSelect';
+import SubjectPicker from '@/components/SubjectPicker';
 import { useTheme } from '@/contexts/ThemeContext';
 
 // Parse "08:30-09:30" → { startMinutes, endMinutes }
@@ -803,44 +804,12 @@ function SchedulesContent() {
               </div>
               
               {allUniqueSubjects.length > 0 ? (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {allUniqueSubjects.map((subject) => (
-                      <motion.div
-                        key={`${subject.subjectName}-${subject.classroom}`}
-                        whileHover={{ scale: 1.01, y: -2 }}
-                        whileTap={{ scale: 0.99 }}
-                        onClick={() => handleSelectSubject(subject, 'all')}
-                        className="p-4 rounded-2xl cursor-pointer bg-surface shadow-neu transition-shadow active:shadow-neu-in-sm"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                              {subject.subjectName}
-                            </div>
-                            <div className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                              ห้อง {subject.classroom}
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <motion.button
-                              whileHover={{ scale: 1.05 }}
-                              whileTap={{ scale: 0.95 }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSelectSubject(subject, 'all');
-                                handleOpenAttendance(subject);
-                              }}
-                              className={`p-2 rounded-xl shadow-neu-sm ${isDark ? 'bg-red-950/30 text-red-400' : 'bg-red-50 text-red-700'}`}
-                            >
-                              <ClipboardList size={20} />
-                            </motion.button>
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
+                <SubjectPicker
+                  subjects={subjects}
+                  teacher={teacherConfig ? { teacherId: teacherConfig.teacherId, name: teacherConfig.name, defaultRoom: teacherConfig.defaultRoom } : null}
+                  countStudents={s => matchStudents(s).length}
+                  onSelect={s => handleSelectSubject(s, 'all')}
+                />
               ) : (
                 <div className="flex flex-col items-center justify-center py-20 rounded-[3rem] shadow-neu-in">
                   <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 bg-surface shadow-neu`}>

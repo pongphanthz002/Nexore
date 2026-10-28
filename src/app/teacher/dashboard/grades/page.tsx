@@ -11,7 +11,7 @@ import type { FirebaseConfig } from '@/types/firebase.types';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import {
-  ChevronLeft, ClipboardList, Save, Plus, Edit2, Settings,
+  ChevronLeft, Save, Plus, Edit2, Settings,
   TrendingUp, BookOpen, Undo2, Redo2, Check, AlertCircle
 } from 'lucide-react';
 import {
@@ -26,6 +26,7 @@ import MobileScoreEntry from '@/components/MobileScoreEntry';
 import GoogleSheetsIcon from '@/components/GoogleSheetsIcon';
 import Modal, { ModalHeader } from '@/components/Modal';
 import StudentSubjectSheet from '@/components/StudentSubjectSheet';
+import SubjectPicker from '@/components/SubjectPicker';
 import { buildHueMap } from '@/lib/timetable';
 import { useTheme } from '@/contexts/ThemeContext';
 
@@ -662,14 +663,6 @@ export default function GradesPage() {
     }, [] as SubjectData[])
     .sort((a, b) => a.classroom.localeCompare(b.classroom, 'th'));
 
-  // Group by classroom for section headers
-  const groupedByClassroom = uniqueSubjects.reduce((acc, subject) => {
-    if (!acc[subject.classroom]) acc[subject.classroom] = [];
-    acc[subject.classroom].push(subject);
-    return acc;
-  }, {} as Record<string, SubjectData[]>);
-
-  const sortedClassrooms = Object.keys(groupedByClassroom).sort((a, b) => a.localeCompare(b, 'th'));
 
   if (loading) {
     return (
@@ -729,38 +722,12 @@ export default function GradesPage() {
               </div>
 
               {uniqueSubjects.length > 0 ? (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {uniqueSubjects.map((subject) => (
-                      <motion.div
-                        key={`${subject.subjectName}-${subject.classroom}`}
-                        whileHover={{ scale: 1.01, y: -2 }}
-                        whileTap={{ scale: 0.99 }}
-                        onClick={() => handleSelectSubject(subject)}
-                        className="p-4 rounded-2xl cursor-pointer bg-surface shadow-neu transition-shadow active:shadow-neu-in-sm"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-4">
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                              isDark ? 'bg-red-950/30 text-red-400' : 'bg-red-50 text-red-600'
-                            }`}>
-                              <ClipboardList size={24} />
-                            </div>
-                            <div>
-                              <div className={`font-bold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                {subject.subjectName}
-                              </div>
-                              <div className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                ห้อง {subject.classroom}
-                              </div>
-                            </div>
-                          </div>
-                          <ChevronLeft className="rotate-180 opacity-30" size={20} />
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
+                <SubjectPicker
+                  subjects={subjects}
+                  teacher={teacherConfig ? { teacherId: teacherConfig.teacherId, name: teacherConfig.name, defaultRoom: teacherConfig.defaultRoom } : null}
+                  countStudents={s => studentsForSubject(s).length}
+                  onSelect={handleSelectSubject}
+                />
               ) : (
                 <div className="flex flex-col items-center justify-center py-20 rounded-[3rem] shadow-neu-in">
                   <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 bg-surface shadow-neu`}>

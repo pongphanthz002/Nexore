@@ -214,3 +214,40 @@ export function attendanceHref(entry: TimetableEntry): string {
   const ids = entry.subjects.map(s => s.subjectId).join(',');
   return `/teacher/dashboard/schedules?mode=attendance&subjectIds=${encodeURIComponent(ids)}&hours=${entry.hours}`;
 }
+
+// ---------------------------------------------------------------------------
+// Subject picker (grades and attendance pages)
+// ---------------------------------------------------------------------------
+
+/** One subject the teacher teaches, with every room it is taught to. */
+export interface SubjectGroup {
+  key: string;
+  subjectName: string;
+  subjectCode: string;
+  hue: SubjectHue;
+  /** One subject per classroom, sorted by classroom. */
+  rooms: SubjectData[];
+}
+
+/** Subjects grouped by name and code (one room each, the first doc wins), sorted by name. */
+export function subjectGroups(subjects: SubjectData[], hues: Map<string, SubjectHue>): SubjectGroup[] {
+  const byKey = new Map<string, SubjectGroup>();
+  for (const subject of subjects) {
+    const key = `${subject.subjectName}|${subject.subjectCode || ''}`;
+    let group = byKey.get(key);
+    if (!group) {
+      group = { key, subjectName: subject.subjectName, subjectCode: subject.subjectCode || '', hue: hues.get(subject.subjectName) || 'blue', rooms: [] };
+      byKey.set(key, group);
+    }
+    if (!group.rooms.some(r => r.classroom === subject.classroom)) group.rooms.push(subject);
+  }
+  const groups = Array.from(byKey.values());
+  for (const g of groups) g.rooms.sort((a, b) => a.classroom.localeCompare(b.classroom, 'th', { numeric: true }));
+  return groups.sort((a, b) => a.subjectName.localeCompare(b.subjectName, 'th') || a.subjectCode.localeCompare(b.subjectCode, 'th'));
+}
+
+/** A period of today relative to now (minutes since midnight). */
+export function periodState(entry: { start: number; end: number }, now: number): 'past' | 'current' | 'upcoming' {
+  if (now >= entry.end) return 'past';
+  return now >= entry.start ? 'current' : 'upcoming';
+}

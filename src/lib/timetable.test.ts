@@ -9,8 +9,10 @@ import {
   dateOfWeekday,
   entriesForDay,
   formatMinutes,
+  periodState,
   parseTimeRange,
   rangeTicks,
+  subjectGroups,
   visibleDays,
   weekRange,
   type TimetableEntry,
@@ -147,5 +149,35 @@ describe('attendance bar', () => {
   it('links to the attendance page with every room of the period', () => {
     expect(attendanceHref(entry(510, 560, rooms)))
       .toBe('/teacher/dashboard/schedules?mode=attendance&subjectIds=S1%2CS2&hours=1');
+  });
+});
+
+describe('subjectGroups', () => {
+  it('groups rooms of one subject, drops duplicate rooms and sorts', () => {
+    const list = [
+      subject('a', { classroom: '4/10' }),
+      subject('b', { classroom: '4/2' }),
+      subject('c', { classroom: '4/2' }),
+      subject('d', { subjectName: 'ฟิสิกส์', classroom: '5/1' }),
+    ];
+    const groups = subjectGroups(list, buildHueMap(list));
+    expect(groups.map(g => g.subjectName)).toEqual(['คณิตศาสตร์', 'ฟิสิกส์']);
+    expect(groups[0].rooms.map(r => r.subjectId)).toEqual(['b', 'a']);
+    expect(groups[0].hue).toBe('blue');
+    expect(groups[1].hue).toBe('green');
+  });
+
+  it('keeps subjects with the same name but different codes apart', () => {
+    const list = [subject('a', { subjectCode: 'ค31101' }), subject('b', { subjectCode: 'ค31201' })];
+    expect(subjectGroups(list, buildHueMap(list))).toHaveLength(2);
+  });
+});
+
+describe('periodState', () => {
+  const p = { start: 600, end: 650 };
+  it('is upcoming, current, then past', () => {
+    expect(periodState(p, 599)).toBe('upcoming');
+    expect(periodState(p, 600)).toBe('current');
+    expect(periodState(p, 650)).toBe('past');
   });
 });
