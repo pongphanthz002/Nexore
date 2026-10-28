@@ -748,7 +748,7 @@ export default function ProfilePage() {
               <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
                 teacherSubjects.length > 0
                   ? isDark ? 'bg-red-950/40 text-red-400 border border-red-800/40' : 'bg-red-50 text-red-600 border border-red-200'
-                  : isDark ? 'bg-gray-700 text-gray-400' : 'bg-gray-100 text-gray-500'
+                  : isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'
               }`}>
                 {teacherSubjects.length} วิชา
               </span>

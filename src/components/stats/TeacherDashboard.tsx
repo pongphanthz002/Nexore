@@ -21,7 +21,7 @@ import { allowAction } from '@/lib/firestore-helpers';
  */
 
 const EASE = [0.2, 0.8, 0.2, 1] as const;
-const CARD = 'rounded-[24px] border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800 sm:p-6';
+const CARD = 'rounded-[24px] border border-gray-200 bg-white p-5 text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-50 sm:p-6';
 const META = 'text-gray-600 dark:text-gray-400';
 
 /** Pastel series, checked for colour-blind separation between every pair on the light surface. */

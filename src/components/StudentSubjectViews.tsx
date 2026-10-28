@@ -292,7 +292,7 @@ function StatTile({ label, value, max, entered = true }: { label: string; value:
       <p className="mt-1.5 tabular-nums sm:mt-2">
         {entered
           ? <span className="text-[26px] font-semibold leading-none sm:text-4xl">{fmt(value)}</span>
-          : <span className="text-[26px] font-semibold leading-none text-gray-300 dark:text-gray-600 sm:text-4xl">—</span>}
+          : <span className="text-[26px] font-semibold leading-none text-gray-500 dark:text-gray-400 sm:text-4xl">—</span>}
         <span className={`block text-sm sm:ml-1 sm:inline sm:text-lg ${META}`}>/ {fmt(max)}</span>
       </p>
       <div className="mt-auto pt-3">

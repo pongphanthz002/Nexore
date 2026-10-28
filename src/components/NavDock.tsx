@@ -65,7 +65,7 @@ export default function NavDock({ items, home }: { items: NavDockItem[]; home: s
               className="absolute left-1/2 top-[-30px] h-[76px] w-[76px] -translate-x-1/2 rounded-full border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900"
               style={{ clipPath: 'inset(30px -2px -2px -2px)' }}
             />
-            <span className="absolute left-1/2 top-[-22px] grid h-14 w-14 -translate-x-1/2 place-items-center rounded-full bg-gray-900 text-white shadow-[0_8px_18px_-8px_rgb(17_24_39/0.6)] dark:bg-white dark:text-gray-900">
+            <span className="absolute left-1/2 top-[-22px] grid h-14 w-14 -translate-x-1/2 place-items-center rounded-full bg-red-500 text-white shadow-[0_8px_18px_-6px_rgb(239_68_68/0.55)]">
               <AnimatePresence mode="popLayout" initial={false}>
                 <motion.span
                   key={active.path}
@@ -107,7 +107,7 @@ export default function NavDock({ items, home }: { items: NavDockItem[]; home: s
                 >
                   <Icon size={22} strokeWidth={1.8} />
                 </motion.span>
-                <span className={`max-w-full truncate px-1 text-[11px] leading-tight transition-colors ${on ? 'font-bold text-gray-900 dark:text-white' : 'font-medium'}`}>
+                <span className={`max-w-full truncate px-1 text-[11px] leading-tight transition-colors ${on ? 'font-bold text-red-600 dark:text-red-400' : 'font-medium'}`}>
                   {item.label}
                 </span>
               </button>
