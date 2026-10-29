@@ -47,7 +47,7 @@ export function SkeletonRows({ rows = 5, avatar = true, trailing = false }: { ro
             <Bone className={`h-4 ${i % 3 === 1 ? 'w-1/2' : 'w-2/5'}`} />
             <Bone className="h-3 w-1/4" />
           </span>
-          {trailing && <Bone className="h-9 w-[72px] flex-none" />}
+          {trailing && <Bone className="h-9 w-14 flex-none" />}
         </div>
       ))}
     </div>

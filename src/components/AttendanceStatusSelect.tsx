@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Check, ChevronDown } from 'lucide-react';
+import { Check } from 'lucide-react';
 import type { AttendanceRecord } from '@/services/teacher-database.service';
 
 type Status = AttendanceRecord['status'];
@@ -83,7 +83,7 @@ export default function AttendanceStatusSelect({ value, onChange, label, muted =
         aria-controls={listId}
         aria-label={`สถานะของ ${label}: ${value || 'ยังไม่เลือก'}${muted ? ' (ค่าเริ่มต้น)' : ''}`}
         whileTap={reduce ? undefined : { scale: 0.94 }}
-        className={`flex h-10 min-w-[72px] items-center justify-between gap-1 rounded-full pl-2.5 pr-1.5 text-[13px] font-semibold transition-[color,background-color,box-shadow] duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${open ? 'shadow-neu-in-sm' : 'shadow-neu-sm'} ${chip}`}
+        className={`flex h-10 min-w-[56px] items-center justify-center rounded-full px-2.5 text-[13px] font-semibold transition-[color,background-color,box-shadow] duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${open ? 'shadow-neu-in-sm' : 'shadow-neu-sm'} ${chip}`}
       >
         <AnimatePresence mode="popLayout" initial={false}>
           <motion.span
@@ -98,9 +98,6 @@ export default function AttendanceStatusSelect({ value, onChange, label, muted =
             {value || 'เลือก'}
           </motion.span>
         </AnimatePresence>
-        <motion.span animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.2 }} className="flex">
-          <ChevronDown size={14} />
-        </motion.span>
       </motion.button>
 
       <AnimatePresence>
