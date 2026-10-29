@@ -13,6 +13,7 @@ import { Edit, Save, X, Settings, Files, Eye, EyeOff, AlertTriangle, Loader2, Bo
 import { GoogleBasicSubjectIcon, GoogleElectiveSubjectIcon } from '@/components/GoogleSubjectIcons';
 import { useTheme } from '@/contexts/ThemeContext';
 import Modal from '@/components/Modal';
+import { buildHueMap, hueVars } from '@/lib/timetable';
 
 function emptySubjectForm(): {
   subjectName: string;
@@ -496,6 +497,7 @@ export default function ProfilePage() {
   // ---------------------------------------------------------------------------
 
   const currentTeacherDbConfig = teacherConfig?.firebaseConfig || null;
+  const subjectHues = buildHueMap(teacherSubjects);
   const normalizedConfigForm = normalizeFirebaseConfig(configFormData);
   const configFormKey = JSON.stringify(normalizedConfigForm);
   const isConfigValidated = validatedConfigKey === configFormKey;
@@ -586,234 +588,198 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className="px-4 pb-32 pt-2 text-gray-900 sm:px-6 dark:text-gray-50">
+      <div className="mx-auto max-w-3xl space-y-8">
 
-        {/* Profile Card */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          className={`rounded-2xl p-6 bg-surface shadow-neu-lg`}
-        >
-          <div className="flex items-center justify-between mb-6">
-            <h1 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              ข้อมูลส่วนตัว
-            </h1>
+        {/* Identity */}
+        <section className="rounded-2xl bg-surface p-5 shadow-neu-lg sm:p-6">
+          <div className="flex items-start gap-4">
+            {user?.photoURL ? (
+              // eslint-disable-next-line @next/next/no-img-element -- Google profile photo, external and tiny
+              <img src={user.photoURL} alt="" referrerPolicy="no-referrer" className="h-16 w-16 flex-none rounded-full object-cover shadow-neu-sm" />
+            ) : (
+              <span aria-hidden className="flex h-16 w-16 flex-none items-center justify-center rounded-full bg-surface text-2xl font-bold text-red-600 shadow-neu-in-sm dark:text-red-400">
+                {(userAccount?.name || '?').replace(/^(นาย|นางสาว|นาง|ครู)\s*/, '').charAt(0)}
+              </span>
+            )}
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-2xl font-bold leading-tight">{userAccount?.name || '-'}</h1>
+              <p className="truncate text-sm text-gray-500 dark:text-gray-400">{userAccount?.email || '-'}</p>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold">
+                <span className="rounded-full bg-red-500/10 px-2.5 py-0.5 text-red-700 dark:text-red-300">
+                  {userAccount?.role === 'admin' ? 'ผู้ดูแลระบบ' : 'ครู'}
+                </span>
+                {userAccount?.userId && (
+                  <span className="rounded-full bg-gray-500/10 px-2.5 py-0.5 font-mono text-gray-600 dark:text-gray-300">{userAccount.userId}</span>
+                )}
+              </div>
+            </div>
             {!isEditing && (
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+              <button
+                type="button"
                 onClick={() => setIsEditing(true)}
-                className={`p-2 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
+                aria-label="แก้ไขข้อมูลส่วนตัว"
+                className="flex h-11 w-11 flex-none items-center justify-center rounded-xl bg-surface text-gray-700 shadow-neu-sm active:shadow-neu-in-sm dark:text-gray-200"
               >
-                <Edit size={20} />
-              </motion.button>
+                <Pencil size={18} />
+              </button>
             )}
           </div>
 
-          <div className="space-y-4">
-            <div>
-              <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>ชื่อ</label>
-              {isEditing ? (
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className={`w-full mt-1 p-2 rounded-lg border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'}`}
-                />
-              ) : (
-                <p className={`text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>{userAccount?.name || '-'}</p>
-              )}
-            </div>
-
-            <div>
-              <label htmlFor="default-room" className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>ห้องประจำ</label>
-              {isEditing ? (
-                <>
-                  <input
-                    id="default-room"
-                    type="text"
-                    value={formData.defaultRoom}
-                    placeholder="เช่น 204, ห้องภาษา 2"
-                    onChange={(e) => setFormData({ ...formData, defaultRoom: e.target.value })}
-                    className={`w-full mt-1 p-2 rounded-lg border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'}`}
-                  />
-                  <p className={`mt-1 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>วิชาที่ไม่ได้ตั้งห้องที่สอนจะใช้ห้องนี้ นักเรียนจะเห็นห้องนี้ในตารางเรียน</p>
-                </>
-              ) : (
-                <p className={`text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>{teacherConfig?.defaultRoom || '-'}</p>
-              )}
-            </div>
-
-            <div>
-              <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>อีเมล</label>
-              <p className={`text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>{userAccount?.email || '-'}</p>
-            </div>
-
-            <div>
-              <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                เลขประจำตัวครู (Teacher ID)
-              </label>
-              {isEditing && userAccount?.role === 'admin' ? (
-                <div className="mt-1">
-                  <select
-                    value={selectedTeacherId || userAccount?.userId || ''}
-                    onChange={(e) => setSelectedTeacherId(e.target.value)}
-                    className={`w-full p-2 rounded-lg border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'}`}
-                  >
-                    <option value="">-- เลือกเลขประจำตัวครู --</option>
-                    {availableTeachers.map((teacher) => (
-                      <option key={teacher.teacherId} value={teacher.teacherId}>
-                        {teacher.name} ({teacher.teacherId})
-                      </option>
-                    ))}
-                  </select>
-                  {selectedTeacherId && selectedTeacherId !== userAccount?.userId && (
-                    <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={handleLinkTeacher}
-                      className="w-full mt-2 p-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm shadow-neu-sm transition-all"
-                    >
-                      ยืนยันการผูกข้อมูล
-                    </motion.button>
-                  )}
-                </div>
-              ) : (
-                <p className={`text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>{userAccount?.userId || '-'}</p>
-              )}
-            </div>
-          </div>
-
-          {/* Edit Actions */}
-          <AnimatePresence>
+          <AnimatePresence initial={false}>
             {isEditing && (
               <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 20 }}
-                className="flex gap-3 mt-6"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
               >
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={handleSave}
-                  className="flex-1 p-3 rounded-xl bg-red-500 hover:bg-red-600 text-white flex items-center justify-center gap-2 shadow-neu-sm transition-all"
-                >
-                  <Save size={20} />
-                  บันทึก
-                </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={handleCancel}
-                  className={`flex-1 p-3 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'} flex items-center justify-center gap-2`}
-                >
-                  <X size={20} />
-                  ยกเลิก
-                </motion.button>
+                <div className="mt-5 space-y-4">
+                  <div>
+                    <label htmlFor="profile-name" className="mb-1 block text-sm font-medium text-gray-600 dark:text-gray-300">ชื่อ</label>
+                    <input
+                      id="profile-name"
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      className="h-12 w-full rounded-xl border border-transparent bg-surface px-4 text-gray-900 shadow-neu-in-sm outline-none focus:border-red-400 dark:text-gray-50"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="default-room" className="mb-1 block text-sm font-medium text-gray-600 dark:text-gray-300">ห้องประจำ</label>
+                    <input
+                      id="default-room"
+                      type="text"
+                      value={formData.defaultRoom}
+                      placeholder="เช่น 204, ห้องภาษา 2"
+                      onChange={(e) => setFormData({ ...formData, defaultRoom: e.target.value })}
+                      className="h-12 w-full rounded-xl border border-transparent bg-surface px-4 text-gray-900 shadow-neu-in-sm outline-none focus:border-red-400 dark:text-gray-50"
+                    />
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">วิชาที่ไม่ได้ตั้งห้องที่สอนจะใช้ห้องนี้ นักเรียนจะเห็นห้องนี้ในตารางเรียน</p>
+                  </div>
+                  {userAccount?.role === 'admin' && (
+                    <div>
+                      <label htmlFor="link-teacher" className="mb-1 block text-sm font-medium text-gray-600 dark:text-gray-300">เลขประจำตัวครู (ผูกบัญชีนี้กับข้อมูลครู)</label>
+                      <select
+                        id="link-teacher"
+                        value={selectedTeacherId || userAccount?.userId || ''}
+                        onChange={(e) => setSelectedTeacherId(e.target.value)}
+                        className="h-12 w-full rounded-xl border border-transparent bg-surface px-3 text-gray-900 shadow-neu-in-sm outline-none focus:border-red-400 dark:text-gray-50"
+                      >
+                        <option value="">-- เลือกเลขประจำตัวครู --</option>
+                        {availableTeachers.map((teacher) => (
+                          <option key={teacher.teacherId} value={teacher.teacherId}>
+                            {teacher.name} ({teacher.teacherId})
+                          </option>
+                        ))}
+                      </select>
+                      {selectedTeacherId && selectedTeacherId !== userAccount?.userId && (
+                        <button
+                          type="button"
+                          onClick={handleLinkTeacher}
+                          className="mt-2 h-11 w-full rounded-xl bg-surface text-sm font-semibold text-red-700 shadow-neu-sm active:shadow-neu-in-sm dark:text-red-400"
+                        >
+                          ผูกบัญชีกับ {selectedTeacherId}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  <div className="flex gap-3 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleCancel}
+                      className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-surface font-semibold text-gray-700 shadow-neu-sm active:shadow-neu-in-sm dark:text-gray-200"
+                    >
+                      ยกเลิก
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSave}
+                      className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 font-semibold text-white shadow-neu-sm active:bg-red-700"
+                    >
+                      <Save size={18} />
+                      บันทึก
+                    </button>
+                  </div>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
-        </motion.div>
+        </section>
 
-        {/* Manage Subjects Menu Tile */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 300, damping: 30, delay: 0.05 }}
-        >
-          <motion.button
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.99 }}
+        {/* Teaching */}
+        <section>
+          <h2 className="mb-3 text-sm font-semibold text-gray-500 dark:text-gray-400">การสอน</h2>
+          <button
+            type="button"
             onClick={() => setShowManageSubjectsModal(true)}
-            className={`w-full p-5 rounded-2xl flex items-center justify-between bg-surface shadow-neu-lg transition-shadow active:shadow-neu-in-sm ${
-              isDark ? 'text-white' : 'text-gray-900'
-            }`}
+            className="w-full rounded-2xl bg-surface p-5 text-left shadow-neu-lg transition-shadow active:shadow-neu-in-sm"
           >
-            <div className="flex items-center gap-3.5">
-              <div className={`p-3 rounded-2xl ${isDark ? 'bg-red-950/40 text-red-400' : 'bg-red-50 text-red-600'}`}>
-                <BookOpen size={24} />
-              </div>
-              <div className="text-left">
-                <h2 className="font-bold text-lg leading-tight">จัดการวิชาเรียนที่สอน</h2>
-                <p className={`text-xs mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  เพิ่ม แก้ไข หรือลบรายวิชาพื้นฐานและเพิ่มเติม
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                teacherSubjects.length > 0
-                  ? isDark ? 'bg-red-950/40 text-red-400 border border-red-800/40' : 'bg-red-50 text-red-600 border border-red-200'
-                  : isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-600'
-              }`}>
-                {teacherSubjects.length} วิชา
+            <div className="flex items-center gap-3">
+              <span className="flex h-11 w-11 flex-none items-center justify-center rounded-xl text-red-600 shadow-neu-in-sm dark:text-red-400">
+                <BookOpen size={22} />
               </span>
-              <ChevronRight size={20} className={isDark ? 'text-gray-500' : 'text-gray-400'} />
-            </div>
-          </motion.button>
-        </motion.div>
-
-        {/* School ID Snippet */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 300, damping: 30, delay: 0.1 }}
-          className={`rounded-2xl p-6 bg-surface shadow-neu-lg`}
-        >
-          <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>School ID</h2>
-          {userAccount?.schoolId && (
-            <div className="relative p-4 rounded-2xl shadow-neu-in-sm font-mono text-sm">
-              <div className="flex items-center justify-between">
-                <p className="text-gray-800 dark:text-white">
-                  <span className="text-purple-600 dark:text-purple-400">School ID: </span>
-                  <span className="text-red-500 dark:text-red-400">{userAccount.schoolId}</span>
-                </p>
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={handleCopySchoolId}
-                  className="p-2 bg-gray-300 dark:bg-gray-600 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-all"
-                >
-                  <Files size={20} className={isDark ? 'text-white' : 'text-gray-900'} />
-                </motion.button>
+              <div className="min-w-0 flex-1">
+                <div className="text-lg font-bold leading-tight">วิชาที่สอน</div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                  {loadingSubjects && teacherSubjects.length === 0
+                    ? 'กำลังโหลด…'
+                    : `${new Set(teacherSubjects.map(s => s.subjectName)).size} วิชา · ${teacherSubjects.length} ห้อง · ห้องประจำ ${teacherConfig?.defaultRoom || '–'}`}
+                </div>
               </div>
+              <span className="flex-none text-sm font-semibold text-red-700 dark:text-red-400">จัดการ</span>
+              <ChevronRight size={18} className="flex-none text-gray-400" />
             </div>
-          )}
-        </motion.div>
+            {teacherSubjects.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {Array.from(subjectHues.entries()).map(([name, hue]) => (
+                  <span
+                    key={name}
+                    style={hueVars(hue, isDark)}
+                    className="timetable-block rounded-lg py-1 pl-3 pr-2.5 text-sm font-semibold text-[var(--st)]"
+                  >
+                    {name}
+                  </span>
+                ))}
+              </div>
+            )}
+          </button>
+        </section>
 
-        {/* Firebase Config Button */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 300, damping: 30, delay: 0.2 }}
-        >
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => { setShowConfigPopup(true); setShowConfigValues(false); setIsEditingConfig(false); resetConfigForm(); }}
-            className={`w-full p-4 rounded-2xl flex items-center justify-center gap-2 bg-surface shadow-neu-lg active:shadow-neu-in-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}
-          >
-            <Settings size={20} />
-            <span className="font-medium">Firebase Config</span>
-          </motion.button>
-        </motion.div>
-
-        {/* Copied Toast */}
-        {copied && (
-          <motion.div
-            initial={{ opacity: 0, y: 50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 50, scale: 0.9 }}
-            transition={{ type: "spring", stiffness: 400, damping: 25 }}
-            className="fixed bottom-32 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded-2xl shadow-neu z-50"
-          >
-            คัดลอกแล้ว!
-          </motion.div>
-        )}
+        {/* Account and system */}
+        <section>
+          <h2 className="mb-3 text-sm font-semibold text-gray-500 dark:text-gray-400">บัญชีและระบบ</h2>
+          <div className="divide-y divide-gray-300/50 overflow-hidden rounded-2xl bg-surface shadow-neu-lg dark:divide-white/5">
+            {userAccount?.schoolId && (
+              <button type="button" onClick={handleCopySchoolId} className="flex w-full items-center gap-3 p-4 text-left active:bg-black/5 dark:active:bg-white/5">
+                <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl shadow-neu-in-sm"><Files size={18} /></span>
+                <div className="min-w-0 flex-1">
+                  <div className="font-semibold">School ID</div>
+                  <div className="truncate font-mono text-sm text-gray-500 dark:text-gray-400">{userAccount.schoolId}</div>
+                </div>
+                <span className="flex-none text-sm font-semibold text-gray-500 dark:text-gray-400">{copied ? 'คัดลอกแล้ว' : 'คัดลอก'}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => { setShowConfigPopup(true); setShowConfigValues(false); setIsEditingConfig(false); resetConfigForm(); }}
+              className="flex w-full items-center gap-3 p-4 text-left active:bg-black/5 dark:active:bg-white/5"
+            >
+              <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl shadow-neu-in-sm"><Settings size={18} /></span>
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold">ฐานข้อมูลครู</div>
+                <div className="truncate text-sm text-gray-500 dark:text-gray-400">
+                  {!teacherConfig
+                    ? 'ยังไม่ได้ผูกบัญชีกับข้อมูลครู'
+                    : currentTeacherDbConfig
+                      ? <span className="font-mono">{currentTeacherDbConfig.projectId}</span>
+                      : 'ใช้ฐานข้อมูลของโรงเรียน'}
+                </div>
+              </div>
+              <ChevronRight size={18} className="flex-none text-gray-400" />
+            </button>
+          </div>
+        </section>
 
         {/* Link Teacher Confirmation Dialog */}
         <Modal open={showLinkConfirm} onClose={() => setShowLinkConfirm(false)} dismissible={!linkLoading}>

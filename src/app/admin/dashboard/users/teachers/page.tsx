@@ -9,6 +9,7 @@ import { firestoreService } from '@/services/firestore.service';
 import { teacherDatabaseService } from '@/services/teacher-database.service';
 import { runPool } from '@/lib/firestore-helpers';
 import UploadProgressModal, { UploadProgress } from '@/components/UploadProgressModal';
+import { ActionButton, AdminPageHeader, Initial, RosterRow, SearchWell, SectionCard, SelectionBar, StatusPill, UploadButton } from '@/components/admin/AdminUI';
 import * as XLSX from 'xlsx';
 import { Eye, EyeOff, Edit, RefreshCw, Trash2, Download, Upload, Plus, ArrowLeft, Search, X } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -509,7 +510,7 @@ export default function TeachersManagement() {
 
   if (loading && teachers.length === 0 && !uploadProgress) {
     return (
-      <div className={`min-h-screen p-6 pb-24 bg-surface`}>
+      <div className="min-h-screen bg-surface px-4 pb-28 pt-2 text-gray-900 sm:px-6 dark:text-gray-50">
         <h1 className={`text-3xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-800'}`}>จัดการข้อมูลครู</h1>
         <div className="animate-pulse space-y-4">
           <div className={`h-12 rounded-2xl bg-surface shadow-neu-lg`} />
@@ -532,7 +533,7 @@ export default function TeachersManagement() {
 
   return (
     <div 
-      className={`min-h-screen p-6 pb-24 bg-surface`}
+      className="min-h-screen bg-surface px-4 pb-28 pt-2 text-gray-900 sm:px-6 dark:text-gray-50"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -557,150 +558,50 @@ export default function TeachersManagement() {
           <ArrowLeft size={48} className="text-white opacity-50" />
         </motion.div>
       )}
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mb-6"
-      >
-        <h1 className={`text-3xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-800'}`}>
-          จัดการข้อมูลครู
-        </h1>
-        
-        {/* Search Header */}
-        <div className={`flex items-center gap-3 p-4 rounded-2xl bg-surface shadow-neu-in-sm`}>
-          {/* Back Button */}
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => router.push('/admin/dashboard/users')}
-            className={`p-2 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
-          >
-            <ArrowLeft size={20} />
-          </motion.button>
+      <div className="mx-auto max-w-5xl">
+        <AdminPageHeader
+          title="ครู"
+          subtitle={`${teachers.length} คน · ลงทะเบียนแล้ว ${teachers.filter(t => t.uid).length} คน`}
+          onBack={() => router.push('/admin/dashboard')}
+          actions={<>
+            <ActionButton icon={<Download size={18} />} label="ดาวน์โหลด" onClick={handleDownload} />
+            <UploadButton icon={<Upload size={18} />} label="อัปโหลด" onChange={handleUpload} />
+            <ActionButton icon={<Plus size={18} />} label="เพิ่มครู" onClick={() => setShowAddModal(true)} primary />
+          </>}
+        />
+        <SearchWell value={searchQuery} onChange={handleSearch} placeholder="ค้นหาชื่อ เลขประจำตัว หรืออีเมล" />
 
-          {/* Search Input */}
-          <div className="flex-1">
-            <input
-              type="text"
-              placeholder="ค้นหาครู..."
-              value={searchQuery}
-              onChange={(e) => handleSearch(e.target.value)}
-              className={`w-full px-4 py-2 rounded-xl outline-none ${isDark ? 'bg-surface shadow-neu-in-sm text-white placeholder-gray-400' : 'bg-surface shadow-neu-in-sm text-gray-700 placeholder-gray-500'}`}
-            />
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Teachers List Card */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className={`rounded-2xl p-6 bg-surface shadow-neu-lg`}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
-            รายชื่อครูทั้งหมด ({filteredTeachers.length})
-          </h2>
-          {selectedTeachers.size > 0 && (
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleDeleteSelectedTeachers}
-              className="flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-xl"
-            >
-              <Trash2 size={16} />
-              <span>ลบ {selectedTeachers.size} รายการ</span>
-            </motion.button>
-          )}
-        </div>
-        {filteredTeachers.length === 0 ? (
-          <p className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-            {searchQuery ? 'ไม่พบครูที่ค้นหา' : 'ยังไม่มีข้อมูลครู'}
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {filteredTeachers.map((teacher, index) => (
-              <motion.div
-                key={teacher.teacherId}
-                id={`teacher-${teacher.teacherId}`}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.3 + index * 0.05 }}
-                whileHover={{ scale: 1.01, x: 5 }}
-                whileTap={{ scale: 0.99 }}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  toggleTeacherSelection(teacher.teacherId);
-                }}
-                onTouchStart={() => handleTeacherTouchStart(teacher.teacherId)}
-                onTouchEnd={handleTeacherTouchEnd}
-                onTouchMove={handleTeacherTouchMove}
-                onClick={() => selectedTeachers.size > 0 ? toggleTeacherSelection(teacher.teacherId) : handleTeacherClick(teacher)}
-                className={`rounded-2xl p-4 cursor-pointer transition-all ${selectedTeachers.has(teacher.teacherId) ? 'bg-red-100 border-2 border-red-500' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm'}`}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>{teacher.name}</p>
-                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{teacher.teacherId}</p>
-                  </div>
-                  {selectedTeachers.has(teacher.teacherId) ? (
-                    <span className="text-red-500">✓</span>
-                  ) : (
-                    <span className="text-blue-500">→</span>
-                  )}
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        )}
-      </motion.div>
-
-      {/* Footer Dock */}
-      <motion.div
-        initial={{ y: 100 }}
-        animate={{ y: 0 }}
-        className="fixed bottom-0 left-0 right-0 z-40"
-      >
-        <div className={`dock-container relative px-6 py-3 bg-surface shadow-neu-lg`}>
-          <div className="flex items-center justify-center gap-6 max-w-4xl mx-auto">
-            {/* Download Button */}
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleDownload}
-              className={`flex items-center justify-center p-4 rounded-xl transition-colors w-24 ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
-            >
-              <Download size={28} />
-            </motion.button>
-
-            {/* Hero Action Button (Larger) */}
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setShowAddModal(true)}
-              className="hero-action-button relative z-50 flex items-center justify-center p-5 rounded-3xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white transition-all w-32"
-              style={{
-                boxShadow: 'var(--neu-raised)'
-              }}
-            >
-              <Plus size={32} />
-            </motion.button>
-
-            {/* Upload Button */}
-            <div className={`relative p-4 rounded-xl transition-colors w-24 flex items-center justify-center ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}>
-              <input
-                type="file"
-                accept=".xlsx"
-                onChange={handleUpload}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              />
-              <Upload size={28} className={isDark ? 'text-gray-300' : 'text-gray-700'} />
+        <SectionCard title={searchQuery ? `ผลการค้นหา ${filteredTeachers.length} คน` : undefined}>
+          {filteredTeachers.length === 0 ? (
+            <p className="py-8 text-center text-gray-500 dark:text-gray-400">
+              {searchQuery ? 'ไม่พบครูที่ค้นหา' : 'ยังไม่มีข้อมูลครู อัปโหลดไฟล์ Excel หรือกด "เพิ่มครู"'}
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {filteredTeachers.map(teacher => (
+                <RosterRow
+                  key={teacher.teacherId}
+                  leading={<Initial name={teacher.name} />}
+                  title={teacher.name}
+                  meta={teacher.teacherId}
+                  trailing={<StatusPill ok={!!teacher.uid}>{teacher.uid ? 'ลงทะเบียนแล้ว' : 'ยังไม่ลงทะเบียน'}</StatusPill>}
+                  selected={selectedTeachers.has(teacher.teacherId)}
+                  selecting={selectedTeachers.size > 0}
+                  onOpen={() => handleTeacherClick(teacher)}
+                  onToggle={() => toggleTeacherSelection(teacher.teacherId)}
+                  touch={{
+                    onTouchStart: () => handleTeacherTouchStart(teacher.teacherId),
+                    onTouchEnd: handleTeacherTouchEnd,
+                    onTouchMove: handleTeacherTouchMove,
+                  }}
+                />
+              ))}
             </div>
-          </div>
-        </div>
-      </motion.div>
+          )}
+        </SectionCard>
+      </div>
+
+      <SelectionBar count={selectedTeachers.size} onDelete={handleDeleteSelectedTeachers} onClear={() => setSelectedTeachers(new Set())} />
 
       {/* Popup */}
       <Modal open={showPopup && !!selectedTeacher} onClose={() => setShowPopup(false)} closeOnBackdrop={false}>

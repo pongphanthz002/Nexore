@@ -9,6 +9,7 @@ import { schoolDatabaseService } from '@/services/school-database.service';
 import { firestoreService } from '@/services/firestore.service';
 import { runPool } from '@/lib/firestore-helpers';
 import UploadProgressModal, { UploadProgress } from '@/components/UploadProgressModal';
+import { ActionButton, AdminPageHeader, RosterRow, SearchWell, SectionCard, SelectionBar, StatusPill, UploadButton } from '@/components/admin/AdminUI';
 import * as XLSX from 'xlsx';
 import { Download, Upload, Trash2, Edit, Eye, EyeOff, RefreshCw, Plus, ArrowLeft, Search, X } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -529,11 +530,10 @@ export default function StudentsManagement() {
     return acc;
   }, {});
 
-  // Sort each group by studentId
+  // Sort each class by number, then studentId
   Object.keys(groupedStudents).forEach(className => {
-    groupedStudents[className].sort((a: any, b: any) => {
-      return a.studentId.localeCompare(b.studentId);
-    });
+    groupedStudents[className].sort((a: any, b: any) =>
+      (parseInt(a.number) || 0) - (parseInt(b.number) || 0) || a.studentId.localeCompare(b.studentId));
   });
 
   // Group classes by base level (e.g., M.1/1, M.1/2, M.1/3 -> M.1)
@@ -549,11 +549,11 @@ export default function StudentsManagement() {
 
   // Sort classes within each group
   Object.keys(classGroups).forEach(baseLevel => {
-    classGroups[baseLevel].sort();
+    classGroups[baseLevel].sort((a: string, b: string) => a.localeCompare(b, 'th', { numeric: true }));
   });
 
   // Sort base levels
-  const sortedBaseLevels = Object.keys(classGroups).sort();
+  const sortedBaseLevels = Object.keys(classGroups).sort((a, b) => a.localeCompare(b, 'th', { numeric: true }));
 
   const handleClassClick = (className: string) => {
     setSelectedClass(className);
@@ -565,7 +565,7 @@ export default function StudentsManagement() {
 
   if (loading && students.length === 0 && !uploadProgress) {
     return (
-      <div className={`min-h-screen p-6 pb-24 bg-surface`}>
+      <div className="min-h-screen bg-surface px-4 pb-28 pt-2 text-gray-900 sm:px-6 dark:text-gray-50">
         <h1 className={`text-3xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-800'}`}>จัดการข้อมูลนักเรียน</h1>
         <div className="animate-pulse space-y-4">
           <div className={`h-12 rounded-2xl bg-surface shadow-neu-lg`} />
@@ -588,7 +588,7 @@ export default function StudentsManagement() {
 
   return (
     <div 
-      className={`min-h-screen p-6 pb-24 bg-surface`}
+      className="min-h-screen bg-surface px-4 pb-28 pt-2 text-gray-900 sm:px-6 dark:text-gray-50"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -613,231 +613,102 @@ export default function StudentsManagement() {
           <ArrowLeft size={48} className="text-white opacity-50" />
         </motion.div>
       )}
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mb-6"
-      >
-        <h1 className={`text-3xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-800'}`}>
-          จัดการข้อมูลนักเรียน
-        </h1>
-        
-        {/* Search Header */}
-        <div className={`flex items-center gap-3 p-4 rounded-2xl bg-surface shadow-neu-in-sm`}>
-          {/* Back Button */}
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => router.push('/admin/dashboard/users')}
-            className={`p-2 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
-          >
-            <ArrowLeft size={20} />
-          </motion.button>
+      <div className="mx-auto max-w-5xl">
+        <AdminPageHeader
+          title="นักเรียน"
+          subtitle={`${students.length} คน · ลงทะเบียนแล้ว ${students.filter(st => st.uid).length} คน`}
+          onBack={() => router.push('/admin/dashboard')}
+          actions={<>
+            <ActionButton icon={<Download size={18} />} label="ดาวน์โหลด" onClick={handleDownload} />
+            <UploadButton icon={<Upload size={18} />} label="อัปโหลด" onChange={handleUpload} />
+            <ActionButton icon={<Plus size={18} />} label="เพิ่มนักเรียน" onClick={() => setShowAddModal(true)} primary />
+          </>}
+        />
+        <SearchWell value={searchQuery} onChange={handleSearch} placeholder="ค้นหาชื่อ เลขประจำตัว หรืออีเมล" />
 
-          {/* Search Input */}
-          <div className="flex-1">
-            <input
-              type="text"
-              placeholder="ค้นหานักเรียน..."
-              value={searchQuery}
-              onChange={(e) => handleSearch(e.target.value)}
-              className={`w-full px-4 py-2 rounded-xl outline-none ${isDark ? 'bg-surface shadow-neu-in-sm text-white placeholder-gray-400' : 'bg-surface shadow-neu-in-sm text-gray-700 placeholder-gray-500'}`}
-            />
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Students List Card */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className={`rounded-2xl p-6 bg-surface shadow-neu-lg`}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
-            {selectedClass ? `ชั้น ${selectedClass}` : searchQuery ? 'ผลการค้นหา' : 'รายชื่อห้องเรียนทั้งหมด'}
-          </h2>
-          {selectedClass && (
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleBackToClasses}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
-            >
-              <ArrowLeft size={16} />
-              <span>กลับ</span>
-            </motion.button>
-          )}
-          {selectedStudents.size > 0 && (
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleDeleteSelectedStudents}
-              className="flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-xl"
-            >
-              <Trash2 size={16} />
-              <span>ลบ {selectedStudents.size} รายการ</span>
-            </motion.button>
-          )}
-        </div>
-        {selectedClass ? (
-          // Show students in selected class
-          <div className="space-y-3">
-            {groupedStudents[selectedClass]?.map((student: any, studentIndex: number) => (
-              <motion.div
-                key={student.studentId}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: studentIndex * 0.02 }}
-                whileHover={{ scale: 1.01, x: 5 }}
-                whileTap={{ scale: 0.99 }}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  toggleStudentSelection(student.studentId);
-                }}
-                onTouchStart={() => handleStudentTouchStart(student.studentId)}
-                onTouchEnd={handleStudentTouchEnd}
-                onTouchMove={handleStudentTouchMove}
-                onClick={() => selectedStudents.size > 0 ? toggleStudentSelection(student.studentId) : handleStudentClick(student)}
-                className={`rounded-2xl p-4 cursor-pointer transition-all ${selectedStudents.has(student.studentId) ? 'bg-red-100 border-2 border-red-500' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm'}`}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>{student.name}</p>
-                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                      {student.studentId} • เลขที่ {student.number} • ชั้น {student.class}
-                    </p>
-                  </div>
-                  {selectedStudents.has(student.studentId) ? (
-                    <span className="text-red-500">✓</span>
-                  ) : (
-                    <span className="text-blue-500">→</span>
-                  )}
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        ) : searchQuery ? (
-          // Show filtered students directly when searching
-          <div className="space-y-3">
-            {filteredStudents.length === 0 ? (
-              <p className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                ไม่พบนักเรียนที่ค้นหา
-              </p>
-            ) : (
-              filteredStudents.map((student: any, studentIndex: number) => (
-                <motion.div
-                  key={student.studentId}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: studentIndex * 0.02 }}
-                  whileHover={{ scale: 1.01, x: 5 }}
-                  whileTap={{ scale: 0.99 }}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    toggleStudentSelection(student.studentId);
-                  }}
-                  onTouchStart={() => handleStudentTouchStart(student.studentId)}
-                  onTouchEnd={handleStudentTouchEnd}
-                  onTouchMove={handleStudentTouchMove}
-                  onClick={() => selectedStudents.size > 0 ? toggleStudentSelection(student.studentId) : handleStudentClick(student)}
-                  className={`rounded-2xl p-4 cursor-pointer transition-all ${selectedStudents.has(student.studentId) ? 'bg-red-100 border-2 border-red-500' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm'}`}
+        {selectedClass || searchQuery ? (
+          <SectionCard>
+            <div className="mb-3 flex items-center gap-3">
+              {selectedClass && !searchQuery && (
+                <button
+                  type="button"
+                  onClick={handleBackToClasses}
+                  className="flex h-9 items-center gap-1.5 rounded-xl bg-surface px-3 text-sm font-semibold text-gray-700 shadow-neu-sm active:shadow-neu-in-sm dark:text-gray-200"
                 >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>{student.name}</p>
-                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        {student.studentId} • เลขที่ {student.number} • ชั้น {student.class}
-                      </p>
-                    </div>
-                    {selectedStudents.has(student.studentId) ? (
-                      <span className="text-red-500">✓</span>
-                    ) : (
-                      <span className="text-blue-500">→</span>
-                    )}
-                  </div>
-                </motion.div>
-              ))
-            )}
-          </div>
-        ) : (
-          // Show class cards in grid layout grouped by base level
-          <div className="space-y-6">
-            {sortedBaseLevels.map((baseLevel, levelIndex) => (
-              <div key={baseLevel}>
-                <div className="grid grid-cols-2 gap-4">
-                  {classGroups[baseLevel].map((className: string, classIndex: number) => (
-                    <motion.div
-                      key={className}
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.3 + levelIndex * 0.1 + classIndex * 0.05 }}
-                      whileHover={{ scale: 1.02, y: -5 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => handleClassClick(className)}
-                      className={`rounded-2xl p-4 cursor-pointer transition-all bg-surface shadow-neu-sm active:shadow-neu-in-sm`}
-                    >
-                      <h4 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
-                        ชั้น {className}
-                      </h4>
-                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        {groupedStudents[className].length} นักเรียน
-                      </p>
-                    </motion.div>
-                  ))}
-                </div>
+                  <ArrowLeft size={16} /> ทุกห้อง
+                </button>
+              )}
+              <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400">
+                {selectedClass && !searchQuery
+                  ? `ชั้น ${selectedClass} · ${groupedStudents[selectedClass]?.length ?? 0} คน`
+                  : `ผลการค้นหา ${filteredStudents.length} คน`}
+              </h2>
+            </div>
+            {(selectedClass && !searchQuery ? groupedStudents[selectedClass] ?? [] : filteredStudents).length === 0 ? (
+              <p className="py-8 text-center text-gray-500 dark:text-gray-400">ไม่พบนักเรียนที่ค้นหา</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {(selectedClass && !searchQuery ? groupedStudents[selectedClass] ?? [] : filteredStudents).map((student: any) => (
+                  <RosterRow
+                    key={student.studentId}
+                    leading={
+                      <span aria-hidden className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-surface text-sm font-semibold tabular-nums text-gray-700 shadow-neu-in-sm dark:text-gray-200">
+                        {student.number || '–'}
+                      </span>
+                    }
+                    title={student.name}
+                    meta={`${student.studentId} · ชั้น ${student.class}`}
+                    trailing={<StatusPill ok={!!student.uid}>{student.uid ? 'ลงทะเบียนแล้ว' : 'ยังไม่ลงทะเบียน'}</StatusPill>}
+                    selected={selectedStudents.has(student.studentId)}
+                    selecting={selectedStudents.size > 0}
+                    onOpen={() => handleStudentClick(student)}
+                    onToggle={() => toggleStudentSelection(student.studentId)}
+                    touch={{
+                      onTouchStart: () => handleStudentTouchStart(student.studentId),
+                      onTouchEnd: handleStudentTouchEnd,
+                      onTouchMove: handleStudentTouchMove,
+                    }}
+                  />
+                ))}
               </div>
+            )}
+          </SectionCard>
+        ) : sortedBaseLevels.length === 0 ? (
+          <SectionCard>
+            <p className="py-8 text-center text-gray-500 dark:text-gray-400">ยังไม่มีข้อมูลนักเรียน อัปโหลดไฟล์ Excel หรือกด &quot;เพิ่มนักเรียน&quot;</p>
+          </SectionCard>
+        ) : (
+          <div className="space-y-5">
+            {sortedBaseLevels.map(baseLevel => (
+              <SectionCard key={baseLevel} title={baseLevel}>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                  {classGroups[baseLevel].map((className: string) => {
+                    const list = groupedStudents[className];
+                    const registered = list.filter((st: any) => st.uid).length;
+                    return (
+                      <button
+                        key={className}
+                        type="button"
+                        onClick={() => handleClassClick(className)}
+                        className="rounded-2xl bg-surface p-4 text-left shadow-neu-sm transition-shadow active:shadow-neu-in-sm"
+                      >
+                        <div className="text-xl font-bold tabular-nums">{className}</div>
+                        <div className="text-sm text-gray-500 dark:text-gray-400">{list.length} คน</div>
+                        <div className="mt-2 h-1.5 overflow-hidden rounded-full shadow-neu-in-xs">
+                          <div className="h-full rounded-full bg-emerald-500" style={{ width: `${list.length ? (registered / list.length) * 100 : 0}%` }} />
+                        </div>
+                        <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">ลงทะเบียน {registered}/{list.length}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </SectionCard>
             ))}
           </div>
         )}
-      </motion.div>
+      </div>
 
-      {/* Footer Dock */}
-      <motion.div
-        initial={{ y: 100 }}
-        animate={{ y: 0 }}
-        className="fixed bottom-0 left-0 right-0 z-40"
-      >
-        <div className={`dock-container relative px-6 py-3 bg-surface shadow-neu-lg`}>
-          <div className="flex items-center justify-center gap-6 max-w-4xl mx-auto">
-            {/* Download Button */}
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleDownload}
-              className={`flex items-center justify-center p-4 rounded-xl transition-colors w-24 ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
-            >
-              <Download size={28} />
-            </motion.button>
-
-            {/* Hero Action Button (Larger) */}
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setShowAddModal(true)}
-              className="hero-action-button relative z-50 flex items-center justify-center p-5 rounded-3xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white transition-all w-32"
-              style={{
-                boxShadow: 'var(--neu-raised)'
-              }}
-            >
-              <Plus size={32} />
-            </motion.button>
-
-            {/* Upload Button */}
-            <div className={`relative p-4 rounded-xl transition-colors w-24 flex items-center justify-center ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}>
-              <input
-                type="file"
-                accept=".xlsx"
-                onChange={handleUpload}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              />
-              <Upload size={28} className={isDark ? 'text-gray-300' : 'text-gray-700'} />
-            </div>
-          </div>
-        </div>
-      </motion.div>
+      <SelectionBar count={selectedStudents.size} onDelete={handleDeleteSelectedStudents} onClear={() => setSelectedStudents(new Set())} />
 
       {/* Popup */}
       <Modal open={showPopup && !!selectedStudent} onClose={() => setShowPopup(false)}>

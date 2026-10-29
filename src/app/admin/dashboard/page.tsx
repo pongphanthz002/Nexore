@@ -1,31 +1,26 @@
 'use client';
 
-import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { storageService } from '@/services/storage.service';
 import { firestoreService } from '@/services/firestore.service';
 import { schoolDatabaseService } from '@/services/school-database.service';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import PieChart from '@/components/PieChart';
-import { Files } from 'lucide-react';
-import { useTheme } from '@/contexts/ThemeContext';
+import { Book, Check, ChevronRight, Copy, GraduationCap, Users } from 'lucide-react';
+import SchoolDangerZone from '@/components/admin/SchoolDangerZone';
 
 export default function AdminDashboard() {
   const router = useRouter();
-  const { userAccount, signOut } = useAuth();
+  const { userAccount } = useAuth();
   const [stats, setStats] = useState({ students: 0, teachers: 0, nodes: 0, signedUpStudents: 0, signedUpTeachers: 0 });
   const [schoolId, setSchoolId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
-  const { isDark } = useTheme();
   const lastLoadedSchoolIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     async function loadData() {
       try {
-        console.log('AdminDashboard - Loading data, userAccount role:', userAccount?.role);
-        console.log('AdminDashboard - Loading data, userAccount userId:', userAccount?.userId);
         let schoolFirebaseConfig = null;
         let currentSchoolId = '';
 
@@ -52,17 +47,12 @@ export default function AdminDashboard() {
 
         if (schoolFirebaseConfig) {
           setLoading(true);
-          console.log('Loading data with Firebase config:', schoolFirebaseConfig);
           const [teachers, students] = await Promise.all([
             schoolDatabaseService.getAllTeachersOptimized(schoolFirebaseConfig),
             schoolDatabaseService.getAllStudentsOptimized(schoolFirebaseConfig)
           ]);
           
-          console.log('Teachers:', teachers.length, 'Students:', students.length);
-          console.log('AdminDashboard - After loading data, userAccount role:', userAccount?.role);
-          console.log('AdminDashboard - After loading data, userAccount userId:', userAccount?.userId);
-          
-          const signedUpTeachers = teachers.filter(t => t.firebaseConfig && Object.keys(t.firebaseConfig).length > 0).length;
+          const signedUpTeachers = teachers.filter(t => t.uid).length;
           const signedUpStudents = students.filter(s => s.uid).length;
           
           setStats({
@@ -86,156 +76,86 @@ export default function AdminDashboard() {
   }, [userAccount]);
 
   const handleCopySchoolId = () => {
-    if (schoolId) {
-      navigator.clipboard.writeText(schoolId);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
+    if (!schoolId) return;
+    navigator.clipboard.writeText(schoolId);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
-  const getDisplaySchoolId = () => {
-    return `School ID: ${schoolId}`;
-  };
-
-  // Generate syntax highlighted School ID
-  const getHighlightedSchoolId = () => {
-    const prefix = 'School ID: ';
-    const id = schoolId;
-    return (
-      <>
-        <span className="text-purple-600 dark:text-purple-400">{prefix}</span>
-        <span className="text-blue-600 dark:text-blue-400">{id}</span>
-      </>
-    );
-  };
-
-  if (loading) {
-    return (
-      <div className="p-6">
-        <div className="max-w-7xl mx-auto">
-          {/* Skeleton: PIE Charts */}
-          <div className={`rounded-2xl p-8 mb-8 bg-surface shadow-neu-lg animate-pulse`}>
-            <div className={`h-6 w-32 rounded-lg mb-6 ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
-            <div className="flex justify-center gap-12">
-              <div className="flex flex-col items-center gap-3">
-                <div className={`w-28 h-28 rounded-full ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
-                <div className={`h-4 w-16 rounded ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
-              </div>
-              <div className="flex flex-col items-center gap-3">
-                <div className={`w-28 h-28 rounded-full ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
-                <div className={`h-4 w-20 rounded ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
-              </div>
-            </div>
-          </div>
-          {/* Skeleton: School ID */}
-          <div className={`rounded-2xl p-6 mb-8 bg-surface shadow-neu-lg animate-pulse`}>
-            <div className={`h-6 w-24 rounded-lg mb-4 ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
-            <div className={`h-12 rounded-2xl ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
-          </div>
-          {/* Skeleton: Action Card */}
-          <div className={`rounded-2xl p-6 bg-surface shadow-neu-lg animate-pulse`}>
-            <div className={`h-6 w-28 rounded-lg ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const tiles = [
+    { href: '/admin/dashboard/users/teachers', icon: Users, title: 'ครู', total: stats.teachers, registered: stats.signedUpTeachers },
+    { href: '/admin/dashboard/users/students', icon: GraduationCap, title: 'นักเรียน', total: stats.students, registered: stats.signedUpStudents },
+    { href: '/admin/dashboard/users/subjects', icon: Book, title: 'วิชาเรียน', hint: 'รายวิชาและตารางสอนของครู' },
+  ];
 
   return (
-    <div className="p-6">
-      {/* Main content */}
-      <div className="max-w-7xl mx-auto">
-
-        {/* PIE Charts */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 300, damping: 30, delay: 0.2 }}
-          whileHover={{ scale: 1.01, y: -3 }}
-          className={`rounded-2xl p-8 mb-8 bg-surface shadow-neu-lg`}
-        >
-          <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-6`}>สถิติผู้ใช้</h2>
-          <div className="flex justify-center gap-12">
-            <PieChart
-              label="ครู"
-              total={stats.teachers}
-              signedUp={stats.signedUpTeachers}
-              color="#3b82f6"
-              bgColor={isDark ? '#374151' : '#e5e7eb'}
-              unsignedColor="#ef4444"
-              isDark={isDark}
-            />
-            <PieChart
-              label="นักเรียน"
-              total={stats.students}
-              signedUp={stats.signedUpStudents}
-              color="#10b981"
-              bgColor={isDark ? '#374151' : '#e5e7eb'}
-              unsignedColor="#ef4444"
-              isDark={isDark}
-            />
+    <div className="px-4 pb-16 pt-2 text-gray-900 sm:px-6 dark:text-gray-50">
+      <div className="mx-auto max-w-5xl space-y-8">
+        <header className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold">ภาพรวมโรงเรียน</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">ข้อมูลครู นักเรียน และวิชาเรียน</p>
           </div>
-        </motion.div>
-
-        {/* School ID Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 300, damping: 30, delay: 0.3 }}
-          whileHover={{ scale: 1.01, y: -3 }}
-          className={`rounded-2xl p-6 mb-8 bg-surface shadow-neu-lg`}
-        >
-          <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
-            School ID
-          </h2>
           {schoolId && (
-            <div className="relative p-4 rounded-2xl shadow-neu-in-sm font-mono text-sm">
-              <div className="flex items-center justify-between">
-                <p className="text-gray-800 dark:text-white">{getHighlightedSchoolId()}</p>
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                  onClick={handleCopySchoolId}
-                  className="p-2 bg-gray-300 dark:bg-gray-600 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-all"
-                >
-                  <Files size={20} className={isDark ? 'text-white' : 'text-gray-900'} />
-                </motion.button>
-              </div>
-            </div>
+            <button
+              type="button"
+              onClick={handleCopySchoolId}
+              title="คัดลอก School ID"
+              className="flex h-10 items-center gap-2 rounded-xl bg-surface pl-3 pr-2 text-sm shadow-neu-sm active:shadow-neu-in-sm"
+            >
+              <span className="text-gray-500 dark:text-gray-400">School ID</span>
+              <span className="font-mono font-semibold">{schoolId}</span>
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg shadow-neu-in-xs">
+                {copied ? <Check size={15} className="text-emerald-600" /> : <Copy size={15} />}
+              </span>
+            </button>
           )}
-        </motion.div>
+        </header>
 
-        {/* Floating Toast */}
-        {copied && (
-          <motion.div
-            initial={{ opacity: 0, y: 50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 50, scale: 0.9 }}
-            transition={{ type: "spring", stiffness: 400, damping: 25 }}
-            className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded-2xl shadow-neu z-50"
-            style={{
-              boxShadow: '0 8px 32px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.3)',
-            }}
-          >
-            คัดลอกแล้ว!
-          </motion.div>
-        )}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {tiles.map(tile => {
+            const Icon = tile.icon;
+            const share = tile.total ? (tile.registered ?? 0) / tile.total : 0;
+            return (
+              <button
+                key={tile.href}
+                type="button"
+                onClick={() => router.push(tile.href)}
+                className="flex flex-col rounded-2xl bg-surface p-5 text-left shadow-neu transition-shadow active:shadow-neu-in-sm"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl text-red-600 shadow-neu-in-sm dark:text-red-400">
+                    <Icon size={22} />
+                  </span>
+                  <span className="flex-1 text-lg font-bold">{tile.title}</span>
+                  <ChevronRight size={18} className="text-gray-400" />
+                </div>
+                {tile.total !== undefined ? (
+                  loading ? (
+                    <div className="mt-5 h-[60px] animate-pulse rounded-xl bg-gray-300/40 dark:bg-white/10" />
+                  ) : (
+                    <>
+                      <div className="mt-5 flex items-baseline gap-1.5">
+                        <span className="text-3xl font-bold tabular-nums">{tile.total.toLocaleString('th-TH')}</span>
+                        <span className="text-sm text-gray-500 dark:text-gray-400">คน</span>
+                      </div>
+                      <div className="mt-2 h-2 overflow-hidden rounded-full shadow-neu-in-xs">
+                        <div className="h-full rounded-full bg-emerald-500 transition-[width] duration-500" style={{ width: `${share * 100}%` }} />
+                      </div>
+                      <div className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                        ลงทะเบียนแล้ว {(tile.registered ?? 0).toLocaleString('th-TH')} คน ({Math.round(share * 100)}%)
+                      </div>
+                    </>
+                  )
+                ) : (
+                  <p className="mt-5 text-sm text-gray-500 dark:text-gray-400">{tile.hint}</p>
+                )}
+              </button>
+            );
+          })}
+        </div>
 
-        {/* Action Card - Users Management */}
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ type: "spring", stiffness: 300, damping: 30, delay: 0.4 }}
-          whileHover={{ scale: 1.02, y: -5 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => router.push('/admin/dashboard/users')}
-          className={`rounded-2xl p-6 bg-surface shadow-neu-lg cursor-pointer`}
-        >
-          <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            จัดการข้อมูล
-          </h3>
-        </motion.div>
+        <SchoolDangerZone />
       </div>
     </div>
   );
