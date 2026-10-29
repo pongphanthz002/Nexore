@@ -16,6 +16,7 @@ import Modal from '@/components/Modal';
 import Avatar from '@/components/Avatar';
 import { googlePhotoURL } from '@/lib/google-photo';
 import { buildHueMap, hueVars } from '@/lib/timetable';
+import { SkeletonGroup, SkeletonRows } from '@/components/Skeleton';
 
 function emptySubjectForm(): {
   subjectName: string;
@@ -1021,10 +1022,9 @@ export default function ProfilePage() {
                 {/* Modal Content */}
                 <div className="flex-1 overflow-y-auto py-4 space-y-3 pr-1">
                   {loadingSubjects ? (
-                    <div className="py-12 flex items-center justify-center gap-2 text-sm text-gray-500">
-                      <Loader2 size={20} className="animate-spin text-red-500" />
-                      กำลังโหลดข้อมูลวิชาเรียน...
-                    </div>
+                    <SkeletonGroup label="กำลังโหลดข้อมูลวิชาเรียน">
+                      <SkeletonRows rows={4} avatar={false} />
+                    </SkeletonGroup>
                   ) : teacherSubjects.length === 0 ? (
                     <div className={`p-10 text-center rounded-2xl shadow-neu-in-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                       <BookOpen size={40} className="mx-auto mb-2 opacity-40" />

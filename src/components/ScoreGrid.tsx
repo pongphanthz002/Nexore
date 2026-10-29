@@ -642,7 +642,7 @@ export default function ScoreGrid(props: ScoreGridProps) {
   // Flat sheet on the soft-UI surface; sticky cells need opaque backgrounds
   const border = isDark ? 'border-gray-700' : 'border-gray-300';
   const surface = 'bg-surface';
-  const headBg = isDark ? 'bg-[#2f343e]' : 'bg-[#dde1e8]';
+  const headBg = isDark ? 'bg-[#33312f]' : 'bg-[#dde1e8]';
   const groupBg = isDark ? 'bg-purple-950' : 'bg-purple-50';
   const muted = isDark ? 'text-gray-400' : 'text-gray-500';
   const thBase = `border-b border-r ${border} px-2 text-xs font-bold whitespace-nowrap select-none [-webkit-touch-callout:none]`;

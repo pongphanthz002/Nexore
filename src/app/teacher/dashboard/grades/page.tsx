@@ -30,6 +30,7 @@ import StudentSubjectSheet from '@/components/StudentSubjectSheet';
 import SubjectPicker from '@/components/SubjectPicker';
 import { buildHueMap } from '@/lib/timetable';
 import { useTheme } from '@/contexts/ThemeContext';
+import { Bone, SkeletonCard, SkeletonGroup } from '@/components/Skeleton';
 
 type HistoryEntry = { studentId: string; field: ScoreField; before: number | null; after: number | null };
 const MAX_UNDO = 50;
@@ -643,14 +644,14 @@ export default function GradesPage() {
     return (
       <div className="p-6">
         <div className="max-w-7xl mx-auto">
-          <div className={`rounded-2xl p-6 bg-surface shadow-neu-lg animate-pulse`}>
-            <div className={`h-8 w-40 rounded-lg mb-4 ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
-            <div className="grid grid-cols-2 gap-3">
-              {[1, 2, 3, 4].map(i => (
-                <div key={i} className={`h-20 rounded-xl ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
-              ))}
-            </div>
-          </div>
+          <SkeletonGroup label="กำลังโหลดวิชา">
+            <SkeletonCard>
+              <Bone className="mb-5 h-7 w-40" />
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[0, 1, 2, 3].map(i => <Bone key={i} className="h-20 w-full !rounded-2xl" />)}
+              </div>
+            </SkeletonCard>
+          </SkeletonGroup>
         </div>
       </div>
     );
@@ -834,10 +835,10 @@ export default function GradesPage() {
               )}
 
               {loadingGrades || !gradeConfig ? (
-                <div className="flex items-center justify-center gap-2 py-16">
-                  <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                  <span className="text-sm font-bold">กำลังโหลดข้อมูล...</span>
-                </div>
+                <SkeletonGroup label="กำลังโหลดคะแนน" className="space-y-2">
+                  <Bone className="h-10 w-full !rounded-xl" />
+                  {[0, 1, 2, 3, 4, 5].map(i => <Bone key={i} className="h-9 w-full !rounded-lg" />)}
+                </SkeletonGroup>
               ) : filteredStudents.length === 0 ? (
                 <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                   ไม่พบนักเรียนในห้องนี้

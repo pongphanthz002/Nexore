@@ -18,7 +18,7 @@ function FirebaseSetupGuideContent() {
       step1: {
         title: 'ขั้นที่ 1: สร้างโปรเจกต์',
         items: [
-          'ไปที่ <a href="https://console.firebase.google.com" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">Firebase Console</a>',
+          'ไปที่ <a href="https://console.firebase.google.com" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:underline">Firebase Console</a>',
           'คลิก Create a project และตั้งชื่อ Project',
           'คลิก Continue ไปเรื่อย ๆ',
           'เลือก "Default Account for Firebase"',
@@ -98,7 +98,7 @@ function FirebaseSetupGuideContent() {
       step1: {
         title: 'Step 1: Create Project',
         items: [
-          'Go to <a href="https://console.firebase.google.com" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">Firebase Console</a>',
+          'Go to <a href="https://console.firebase.google.com" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:underline">Firebase Console</a>',
           'Click "Create a project" and name your project',
           'Click "Continue" to proceed',
           'Select "Default Account for Firebase"',
@@ -184,7 +184,7 @@ function FirebaseSetupGuideContent() {
   };
 
   return (
-    <div className="min-h-screen soft-light bg-surface flex items-center justify-center p-4 relative">
+    <div className="min-h-screen bg-surface text-gray-900 dark:text-gray-50 flex items-center justify-center p-4 relative">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -197,21 +197,21 @@ function FirebaseSetupGuideContent() {
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           onClick={() => router.back()}
-          className="mb-4 flex items-center gap-2 text-gray-500 hover:text-black transition-colors"
+          className="mb-4 flex items-center gap-2 text-gray-500 hover:text-gray-900 dark:hover:text-gray-50 transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
-          BACK
+          ย้อนกลับ
         </motion.button>
 
         {/* Content */}
         <div className="bg-surface rounded-2xl p-8 shadow-neu-lg">
-          <h1 className="text-3xl font-bold text-black mb-8">{t.title}</h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-50 mb-8">{t.title}</h1>
 
-          <div className="space-y-8 text-gray-700">
+          <div className="space-y-8 text-gray-700 dark:text-gray-300">
             <div>
-              <h2 className="text-xl font-bold text-black mb-4">{t.step1.title}</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-50 mb-4">{t.step1.title}</h2>
               <ol className="list-decimal list-inside space-y-2">
                 {t.step1.items.map((item, index) => (
                   <li key={index} dangerouslySetInnerHTML={{ __html: item }} />
@@ -220,7 +220,7 @@ function FirebaseSetupGuideContent() {
             </div>
 
             <div>
-              <h2 className="text-xl font-bold text-black mb-4">{t.step2.title}</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-50 mb-4">{t.step2.title}</h2>
               <ol className="list-decimal list-inside space-y-2">
                 {t.step2.items.map((item, index) => (
                   <li key={index} dangerouslySetInnerHTML={{ __html: item }} />
@@ -229,7 +229,7 @@ function FirebaseSetupGuideContent() {
             </div>
 
             <div>
-              <h2 className="text-xl font-bold text-black mb-4">{t.step3.title}</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-50 mb-4">{t.step3.title}</h2>
               <ol className="list-decimal list-inside space-y-2 mb-4">
                 {t.step3.items.map((item, index) => (
                   <li key={index} dangerouslySetInnerHTML={{ __html: item }} />
@@ -238,38 +238,38 @@ function FirebaseSetupGuideContent() {
               <div className="relative">
                 <button
                   onClick={() => handleCopy(t.step3.code.replace(/<[^>]*>/g, ''))}
-                  className="absolute top-2 right-2 p-2 bg-gray-200 hover:bg-gray-300 rounded transition-colors"
+                  className="absolute top-2 right-2 p-2 bg-gray-200 text-gray-700 hover:bg-gray-300 rounded transition-colors"
                   title="Copy to clipboard"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                   </svg>
                 </button>
-                <pre className="bg-gray-900 p-4 rounded-lg text-sm overflow-x-auto">
+                <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-sm overflow-x-auto">
                   <code dangerouslySetInnerHTML={{ __html: t.step3.code }} />
                 </pre>
               </div>
               {copied && (
-                <div className="mt-2 text-sm text-green-600">
+                <div className="mt-2 text-sm text-green-600 dark:text-green-400">
                   คัดลอกไปยังคลิปบอร์ดแล้ว
                 </div>
               )}
             </div>
 
             <div>
-              <h2 className="text-xl font-bold text-black mb-4">{t.step4.title}</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-50 mb-4">{t.step4.title}</h2>
               <ol className="list-decimal list-inside space-y-2 mb-4">
                 {t.step4.items.map((item, index) => (
                   <li key={index} dangerouslySetInnerHTML={{ __html: item }} />
                 ))}
               </ol>
-              <pre className="bg-gray-900 p-4 rounded-lg text-sm overflow-x-auto">
+              <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-sm overflow-x-auto">
                 <code dangerouslySetInnerHTML={{ __html: t.step4.code }} />
               </pre>
             </div>
 
             <div className="shadow-neu-in-sm p-4 rounded-lg">
-              <h2 className="text-lg font-bold text-black mb-3">{t.notes.title}</h2>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-gray-50 mb-3">{t.notes.title}</h2>
               <ul className="list-disc list-inside space-y-1 text-sm">
                 {t.notes.items.map((item, index) => (
                   <li key={index}>{item}</li>
@@ -283,7 +283,7 @@ function FirebaseSetupGuideContent() {
       {/* Language Selector - Floating */}
       <button
         onClick={() => setLanguage(language === 'th' ? 'en' : 'th')}
-        className="absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center transition-colors bg-gray-200 text-gray-700 hover:bg-black hover:text-white border border-gray-300 shadow-lg font-bold text-sm"
+        className="absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center transition-shadow bg-surface text-gray-700 dark:text-gray-300 shadow-neu-sm active:shadow-neu-in-sm font-bold text-sm"
         title={language === 'th' ? 'Switch to English' : 'เปลี่ยนเป็นภาษาไทย'}
       >
         {language === 'th' ? 'TH' : 'EN'}
@@ -294,7 +294,7 @@ function FirebaseSetupGuideContent() {
 
 export default function FirebaseSetupGuide() {
   return (
-    <Suspense fallback={<div className="min-h-screen soft-light bg-surface flex items-center justify-center">Loading...</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-surface text-gray-900 dark:text-gray-50 flex items-center justify-center">กำลังโหลด…</div>}>
       <FirebaseSetupGuideContent />
     </Suspense>
   );

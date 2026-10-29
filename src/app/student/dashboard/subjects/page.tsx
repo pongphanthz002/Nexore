@@ -10,6 +10,7 @@ import { schoolDatabaseService } from '@/services/school-database.service';
 import { allowAction } from '@/lib/firestore-helpers';
 import StudentHeader from '@/components/StudentHeader';
 import StudentFooter from '@/components/StudentFooter';
+import PullToRefresh from '@/components/PullToRefresh';
 import {
   AssignmentSheet, AttendanceView, EASE, GradesView, ListSkeleton, SubjectHeader, SubjectList,
 } from '@/components/StudentSubjectViews';
@@ -84,10 +85,10 @@ export default function StudentSubjectsPage() {
     }
   }, [userAccount?.userId, fetchData]);
 
-  // Manual retry re-reads from the server; throttled to avoid hammering Firestore
+  // Pull-to-refresh and retry re-read from the server; throttled to avoid hammering Firestore
   const handleRetry = () => {
     if (!allowAction('student-subjects-refresh', 5_000)) return;
-    fetchData(true);
+    return fetchData(true);
   };
 
   const selected = subjects.find(s => s.subjectId === selectedId) || null;
@@ -104,6 +105,7 @@ export default function StudentSubjectsPage() {
   return (
     <div className="min-h-screen bg-surface font-sans text-gray-900 dark:text-gray-50">
       <StudentHeader isDark={isDark} toggleTheme={toggleTheme} />
+      <PullToRefresh onRefresh={handleRetry} disabled={loading} />
 
       <main className="mx-auto w-full max-w-7xl px-4 pb-32 pt-24 sm:px-6">
         {loading ? (

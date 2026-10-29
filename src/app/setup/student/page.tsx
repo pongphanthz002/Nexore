@@ -142,7 +142,7 @@ export default function StudentSetup() {
   };
 
   return (
-    <div className="no-scroll soft-light bg-surface flex items-center justify-center overflow-hidden relative p-4">
+    <div className="no-scroll bg-surface text-gray-900 dark:text-gray-50 flex items-center justify-center overflow-hidden relative p-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -155,21 +155,21 @@ export default function StudentSetup() {
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           onClick={() => router.push('/signup')}
-          className="mb-4 flex items-center gap-2 text-gray-500 hover:text-black transition-colors"
+          className="mb-4 flex items-center gap-2 text-gray-500 hover:text-gray-900 dark:hover:text-gray-50 transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
-          BACK
+          ย้อนกลับ
         </motion.button>
 
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-black mb-2">
-            STUDENT SETUP
+          <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-50 mb-2">
+            ลงทะเบียนนักเรียน
           </h1>
           <p className="text-gray-500 tracking-widest">
-            STEP {step} OF 2
+            ขั้นตอนที่ {step} จาก 2
           </p>
         </div>
 
@@ -191,13 +191,13 @@ export default function StudentSetup() {
                   value={schoolId}
                   onChange={(e) => setSchoolId(e.target.value)}
                   placeholder="ใส่ School ID ของโรงเรียน"
-                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors pr-10"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors pr-10"
                 />
                 <button
                   type="button"
                   onMouseEnter={() => setShowTooltip(true)}
                   onMouseLeave={() => setShowTooltip(false)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -213,9 +213,9 @@ export default function StudentSetup() {
               <button
                 onClick={handleSchoolIdSubmit}
                 disabled={loading}
-                className="w-full bg-gray-500 text-white font-bold py-3 rounded-lg hover:bg-[#000000] hover:scale-105 transition-all duration-150 disabled:opacity-50"
+                className="w-full bg-gray-900 text-white dark:bg-gray-50 dark:text-gray-900 font-bold py-3 rounded-lg hover:bg-black dark:hover:bg-white active:scale-[0.98] transition-[background-color,transform] duration-150 disabled:opacity-50"
               >
-                {loading ? 'กำลังตรวจสอบ...' : 'NEXT'}
+                {loading ? 'กำลังตรวจสอบ...' : 'ถัดไป'}
               </button>
             </div>
           </motion.div>
@@ -228,8 +228,8 @@ export default function StudentSetup() {
             animate={{ opacity: 1, x: 0 }}
             className="bg-surface rounded-2xl p-6 shadow-neu-lg"
           >
-            <h2 className="text-2xl font-bold text-black mb-6">
-              ID Verification
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-50 mb-6">
+              ยืนยันตัวตน
             </h2>
             <p className="text-gray-500 mb-6">
               ใส่เลขประจำตัวนักเรียนเพื่อยืนยันตัวตน
@@ -240,7 +240,7 @@ export default function StudentSetup() {
                 type="text"
                 value={studentId}
                 onChange={(e) => setStudentId(e.target.value)}
-                className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
+                className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
                 placeholder="เช่น S001"
                 required
               />
@@ -248,9 +248,9 @@ export default function StudentSetup() {
               <button
                 onClick={handleIDVerification}
                 disabled={loading}
-                className="w-full bg-gray-500 text-white font-bold py-3 rounded-lg hover:bg-[#000000] hover:scale-105 transition-all duration-150 disabled:opacity-50"
+                className="w-full bg-gray-900 text-white dark:bg-gray-50 dark:text-gray-900 font-bold py-3 rounded-lg hover:bg-black dark:hover:bg-white active:scale-[0.98] transition-[background-color,transform] duration-150 disabled:opacity-50"
               >
-                {loading ? 'Verifying...' : 'Verify'}
+                {loading ? 'กำลังยืนยัน...' : 'ยืนยัน'}
               </button>
             </div>
           </motion.div>

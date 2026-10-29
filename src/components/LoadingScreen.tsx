@@ -6,7 +6,7 @@ export default function LoadingScreen() {
   const reduceMotion = useReducedMotion();
 
   return (
-    <div className="no-scroll soft-light bg-surface flex items-center justify-center" role="status" aria-label="กำลังโหลด">
+    <div className="no-scroll bg-surface text-gray-900 dark:text-gray-50 flex items-center justify-center" role="status" aria-label="กำลังโหลด">
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -17,7 +17,7 @@ export default function LoadingScreen() {
           {/* eslint-disable-next-line @next/next/no-img-element -- static app icon, no optimisation needed */}
           <img src="/icon-192.png" alt="" className="h-14 w-14 rounded-2xl" />
         </div>
-        <h1 className="text-3xl font-bold tracking-wide text-gray-900">NEXORE</h1>
+        <h1 className="text-3xl font-bold tracking-wide text-gray-900 dark:text-gray-50">NEXORE</h1>
         <div className="mt-6 h-1.5 w-40 overflow-hidden rounded-full shadow-neu-in-xs">
           {reduceMotion ? (
             <div className="h-full w-1/3 rounded-full bg-red-600 opacity-60" />

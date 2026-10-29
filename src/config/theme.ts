@@ -1,7 +1,7 @@
 import { STORAGE_KEYS } from './storage.keys';
 
 /** Status-bar / browser chrome colour per theme (the soft-UI surface, --surface in globals.css). */
-export const THEME_COLORS = { light: '#e8ebf0', dark: '#262a33' } as const;
+export const THEME_COLORS = { light: '#e8ebf0', dark: '#252423' } as const;
 
 /**
  * Runs in <head> before the first paint so a saved dark theme never flashes light.

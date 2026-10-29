@@ -13,6 +13,7 @@ import {
   attendanceDateKey, attendanceDue, attendanceHref, buildHueMap, checkedKey, dayDateLabel, entriesForDay,
   TimetableEntry, TimetableRole, TimetableTeacher, visibleDays, weekRange, WEEK_ORDER,
 } from '@/lib/timetable';
+import { Bone, SkeletonCard, SkeletonGroup } from '@/components/Skeleton';
 
 /** Current day and minute, refreshed every 30 s and when the app comes back to the foreground. */
 function useNow() {
@@ -99,7 +100,7 @@ export default function TodayTimetable({ role, studentInfo }: TodayTimetableProp
   const openAttendance = (entry: TimetableEntry) => router.push(attendanceHref(entry));
 
   if (loading) {
-    return <div className="h-64 w-full animate-pulse rounded-[24px] bg-surface shadow-neu-lg" aria-label="กำลังโหลดตาราง" />;
+    return <TimetableSkeleton />;
   }
 
   return (
@@ -134,5 +135,19 @@ export default function TodayTimetable({ role, studentInfo }: TodayTimetableProp
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+/** The home timetable card while it loads (also shown by the student home before the student record arrives). */
+export function TimetableSkeleton() {
+  return (
+    <SkeletonGroup label="กำลังโหลดตารางเรียน">
+      <SkeletonCard className="h-64">
+        <Bone className="mb-5 h-5 w-32" />
+        <div className="space-y-3 pl-12">
+          {[0, 1, 2].map(i => <Bone key={i} className="h-12 w-full !rounded-xl" />)}
+        </div>
+      </SkeletonCard>
+    </SkeletonGroup>
   );
 }

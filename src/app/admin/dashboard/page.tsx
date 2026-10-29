@@ -8,6 +8,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Book, Check, ChevronRight, Copy, GraduationCap, Users } from 'lucide-react';
 import SchoolDangerZone from '@/components/admin/SchoolDangerZone';
+import { Bone } from '@/components/Skeleton';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -132,7 +133,11 @@ export default function AdminDashboard() {
                 </div>
                 {tile.total !== undefined ? (
                   loading ? (
-                    <div className="mt-5 h-[60px] animate-pulse rounded-xl bg-gray-300/40 dark:bg-white/10" />
+                    <div className="mt-5 space-y-2.5" aria-hidden>
+                      <Bone className="h-8 w-20" />
+                      <Bone className="h-2 w-full" />
+                      <Bone className="h-3 w-1/3" />
+                    </div>
                   ) : (
                     <>
                       <div className="mt-5 flex items-baseline gap-1.5">

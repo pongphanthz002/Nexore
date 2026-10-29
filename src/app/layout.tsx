@@ -3,6 +3,7 @@ import { Noto_Sans_Thai } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import OfflineBanner from "@/components/OfflineBanner";
 import { THEME_COLORS, themeInitScript } from "@/config/theme";
 
 // One face for Thai and Latin on every device (system Thai fonts differ between iOS, Android and PC)
@@ -51,6 +52,7 @@ export default function RootLayout({
       <body className={`${notoSansThai.variable} ${notoSansThai.className}`}>
         <ThemeProvider>
           <AuthProvider>{children}</AuthProvider>
+          <OfflineBanner />
         </ThemeProvider>
       </body>
     </html>

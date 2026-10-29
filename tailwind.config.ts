@@ -1,5 +1,4 @@
 import type { Config } from "tailwindcss";
-import colors from "tailwindcss/colors";
 
 const config: Config = {
   // dark: variants follow the in-app toggle (html.dark), not the phone setting
@@ -17,8 +16,11 @@ const config: Config = {
       colors: {
         // Soft UI surface (see globals.css); the same colour in page, cards and controls
         surface: 'rgb(var(--surface) / <alpha-value>)',
-        // A little darker than Tailwind's, so grey text keeps 4.5:1 on the soft surface
-        gray: { ...colors.gray, 500: '#5f6675' },
+        // Theme-aware greys (globals.css --gray-*): Tailwind's in light mode (500 a little darker, for
+        // 4.5:1 on the soft surface), warm neutrals in dark mode
+        gray: Object.fromEntries(
+          [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950].map(n => [n, `rgb(var(--gray-${n}) / <alpha-value>)`]),
+        ),
         black: {
           50: '#0a0a0a',
           100: '#121212',

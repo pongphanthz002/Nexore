@@ -15,7 +15,7 @@ export default function RoleSelection() {
   };
 
   return (
-    <div className="no-scroll soft-light bg-surface flex items-center justify-center relative">
+    <div className="no-scroll bg-surface text-gray-900 dark:text-gray-50 flex items-center justify-center relative">
       {/* Main content */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -30,11 +30,11 @@ export default function RoleSelection() {
           transition={{ delay: 0.2, duration: 0.8 }}
           className="text-center mb-12"
         >
-          <h1 className="text-5xl font-bold text-black mb-4 tracking-wider">
+          <h1 className="text-5xl font-bold text-gray-900 dark:text-gray-50 mb-4 tracking-wider">
             NEXORE
           </h1>
           <p className="text-gray-500 text-lg tracking-widest">
-            SELECT YOUR ROLE
+            เลือกบทบาทของคุณ
           </p>
         </motion.div>
 
@@ -46,12 +46,12 @@ export default function RoleSelection() {
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.4, duration: 0.6 }}
             onClick={() => handleRoleSelect('student')}
-            className="w-full bg-gray-500 text-white rounded-lg p-6 text-center hover:bg-[#000000] hover:scale-105 transition-all duration-150 shadow-neu-sm"
+            className="w-full bg-surface rounded-2xl p-6 text-center shadow-neu active:shadow-neu-in-sm transition-shadow duration-150"
           >
             <h2 className="text-2xl font-bold mb-2">
               นักเรียน
             </h2>
-            <p className="text-sm opacity-90">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
               เข้าถึงแหล่งเรียนรู้ ตรวจสอบคะแนน และดูเวลาเรียน
             </p>
           </motion.button>
@@ -62,12 +62,12 @@ export default function RoleSelection() {
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.5, duration: 0.6 }}
             onClick={() => handleRoleSelect('teacher')}
-            className="w-full bg-gray-500 text-white rounded-lg p-6 text-center hover:bg-[#000000] hover:scale-105 transition-all duration-150 shadow-neu-sm"
+            className="w-full bg-surface rounded-2xl p-6 text-center shadow-neu active:shadow-neu-in-sm transition-shadow duration-150"
           >
             <h2 className="text-2xl font-bold mb-2">
               ครู
             </h2>
-            <p className="text-sm opacity-90">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
               บันทึกคะแนน เช็คชื่อ และอัพสื่อการเรียนรู้
             </p>
           </motion.button>

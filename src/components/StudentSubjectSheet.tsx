@@ -17,6 +17,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import Modal from '@/components/Modal';
 import { AssignmentSheet, AttendanceView, EASE, GradesView, SubjectHeader } from '@/components/StudentSubjectViews';
 import Avatar from '@/components/Avatar';
+import { SkeletonCard, SkeletonGroup } from '@/components/Skeleton';
 
 /**
  * Per-student popup on the teacher grades page. It shows exactly what the student sees on their
@@ -147,7 +148,7 @@ export default function StudentSubjectSheet({ student, subject, teacher, hue, as
                 {tab === 'grades' ? (
                   <GradesView grade={grade} subject={info} isDark={isDark} onOpen={setOpenItem} />
                 ) : summary === 'loading' ? (
-                  <div className="h-40 animate-pulse rounded-[22px] bg-surface shadow-neu" aria-label="กำลังโหลดเวลาเรียน" />
+                  <SkeletonGroup label="กำลังโหลดเวลาเรียน"><SkeletonCard className="h-40" lines={2} /></SkeletonGroup>
                 ) : (
                   <AttendanceView info={attendance} />
                 )}

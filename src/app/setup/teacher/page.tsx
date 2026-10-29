@@ -195,7 +195,7 @@ function TeacherSetupContent() {
   };
 
   return (
-    <div className="min-h-screen soft-light bg-surface relative p-4 pt-8 overflow-y-auto flex items-center justify-center">
+    <div className="min-h-screen bg-surface text-gray-900 dark:text-gray-50 relative p-4 pt-8 overflow-y-auto flex items-center justify-center">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -218,21 +218,21 @@ function TeacherSetupContent() {
               router.push('/signup');
             }
           }}
-          className="mb-4 flex items-center gap-2 text-gray-500 hover:text-black transition-colors p-2 -ml-2"
+          className="mb-4 flex items-center gap-2 text-gray-500 hover:text-gray-900 dark:hover:text-gray-50 transition-colors p-2 -ml-2"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
-          BACK
+          ย้อนกลับ
         </motion.button>
 
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-black mb-2">
-            TEACHER SETUP
+          <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-50 mb-2">
+            ลงทะเบียนครู
           </h1>
           <p className="text-gray-500 tracking-widest">
-            STEP {step} OF 3
+            ขั้นตอนที่ {step} จาก 3
           </p>
         </div>
 
@@ -254,13 +254,13 @@ function TeacherSetupContent() {
                   value={schoolId}
                   onChange={(e) => setSchoolId(e.target.value)}
                   placeholder="ใส่ School ID ของโรงเรียน"
-                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors pr-10"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors pr-10"
                 />
                 <button
                   type="button"
                   onMouseEnter={() => setShowTooltip(true)}
                   onMouseLeave={() => setShowTooltip(false)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -276,16 +276,16 @@ function TeacherSetupContent() {
               <button
                 onClick={handleSchoolIdSubmit}
                 disabled={loading}
-                className="w-full bg-gray-500 text-white font-bold py-3 rounded-lg hover:bg-[#000000] hover:scale-105 transition-all duration-150 disabled:opacity-50"
+                className="w-full bg-gray-900 text-white dark:bg-gray-50 dark:text-gray-900 font-bold py-3 rounded-lg hover:bg-black dark:hover:bg-white active:scale-[0.98] transition-[background-color,transform] duration-150 disabled:opacity-50"
               >
-                {loading ? 'กำลังตรวจสอบ...' : 'NEXT'}
+                {loading ? 'กำลังตรวจสอบ...' : 'ถัดไป'}
               </button>
 
               {/* Admin Setup Link */}
               <div className="text-center mt-4">
                 <button
                   onClick={() => router.push('/setup/admin')}
-                  className="text-gray-400 text-sm hover:text-black transition-colors underline"
+                  className="text-gray-400 text-sm hover:text-gray-900 dark:hover:text-gray-50 transition-colors underline"
                 >
                   หรือ Setup ในฐานะ Admin
                 </button>
@@ -301,8 +301,8 @@ function TeacherSetupContent() {
             animate={{ opacity: 1, x: 0 }}
             className="bg-surface rounded-2xl p-6 shadow-neu-lg"
           >
-            <h2 className="text-2xl font-bold text-black mb-6">
-              ID Verification
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-50 mb-6">
+              ยืนยันตัวตน
             </h2>
             <p className="text-gray-500 mb-6">
               ใส่เลขประจำตัวครูเพื่อยืนยันตัวตน
@@ -310,12 +310,12 @@ function TeacherSetupContent() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-gray-700 text-sm mb-2">เลขประจำตัวครู</label>
+                <label className="block text-gray-700 dark:text-gray-300 text-sm mb-2">เลขประจำตัวครู</label>
                 <input
                   type="text"
                   value={teacherId}
                   onChange={(e) => setTeacherId(e.target.value)}
-                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
                   placeholder="เช่น T001"
                   required
                 />
@@ -324,9 +324,9 @@ function TeacherSetupContent() {
               <button
                 onClick={handleIDVerification}
                 disabled={loading}
-                className="w-full bg-gray-500 text-white font-bold py-3 rounded-lg hover:bg-[#000000] hover:scale-105 transition-all duration-150 disabled:opacity-50"
+                className="w-full bg-gray-900 text-white dark:bg-gray-50 dark:text-gray-900 font-bold py-3 rounded-lg hover:bg-black dark:hover:bg-white active:scale-[0.98] transition-[background-color,transform] duration-150 disabled:opacity-50"
               >
-                {loading ? 'Verifying...' : 'Verify'}
+                {loading ? 'กำลังยืนยัน...' : 'ยืนยัน'}
               </button>
             </div>
           </motion.div>
@@ -339,7 +339,7 @@ function TeacherSetupContent() {
             animate={{ opacity: 1, x: 0 }}
             className="bg-surface rounded-2xl p-6 shadow-neu-lg"
           >
-            <h2 className="text-2xl font-bold text-black mb-6">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-50 mb-6">
               SET UP with Firebase
             </h2>
 
@@ -358,67 +358,67 @@ function TeacherSetupContent() {
               </p>
 
               <div>
-                <label className="block text-gray-700 text-sm mb-2">API Key</label>
+                <label className="block text-gray-700 dark:text-gray-300 text-sm mb-2">API Key</label>
                 <input
                   type="text"
                   value={teacherFirebaseConfig.apiKey}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, apiKey: e.target.value})}
-                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-gray-700 text-sm mb-2">Auth Domain</label>
+                <label className="block text-gray-700 dark:text-gray-300 text-sm mb-2">Auth Domain</label>
                 <input
                   type="text"
                   value={teacherFirebaseConfig.authDomain}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, authDomain: e.target.value})}
-                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-gray-700 text-sm mb-2">Project ID</label>
+                <label className="block text-gray-700 dark:text-gray-300 text-sm mb-2">Project ID</label>
                 <input
                   type="text"
                   value={teacherFirebaseConfig.projectId}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, projectId: e.target.value})}
-                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-gray-700 text-sm mb-2">Storage Bucket</label>
+                <label className="block text-gray-700 dark:text-gray-300 text-sm mb-2">Storage Bucket</label>
                 <input
                   type="text"
                   value={teacherFirebaseConfig.storageBucket}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, storageBucket: e.target.value})}
-                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-gray-700 text-sm mb-2">Messaging Sender ID</label>
+                <label className="block text-gray-700 dark:text-gray-300 text-sm mb-2">Messaging Sender ID</label>
                 <input
                   type="text"
                   value={teacherFirebaseConfig.messagingSenderId}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, messagingSenderId: e.target.value})}
-                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-gray-700 text-sm mb-2">App ID</label>
+                <label className="block text-gray-700 dark:text-gray-300 text-sm mb-2">App ID</label>
                 <input
                   type="text"
                   value={teacherFirebaseConfig.appId}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, appId: e.target.value})}
-                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-black focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -426,16 +426,16 @@ function TeacherSetupContent() {
               <button
                 onClick={handleNodeBinding}
                 disabled={loading}
-                className="w-full bg-gray-500 text-white font-bold py-3 rounded-lg hover:bg-[#000000] hover:scale-105 transition-all duration-150 disabled:opacity-50"
+                className="w-full bg-gray-900 text-white dark:bg-gray-50 dark:text-gray-900 font-bold py-3 rounded-lg hover:bg-black dark:hover:bg-white active:scale-[0.98] transition-[background-color,transform] duration-150 disabled:opacity-50"
               >
-                {loading ? 'Saving...' : 'NEXT'}
+                {loading ? 'กำลังบันทึก...' : 'ถัดไป'}
               </button>
 
               <div className="text-center mt-4">
                 <button
                   type="button"
                   onClick={() => router.push('/setup/admin/guide?from=teacher')}
-                  className="text-gray-400 text-sm hover:text-black transition-colors underline"
+                  className="text-gray-400 text-sm hover:text-gray-900 dark:hover:text-gray-50 transition-colors underline"
                 >
                   Firebase Setup Guide
                 </button>
@@ -450,7 +450,7 @@ function TeacherSetupContent() {
 
 export default function TeacherSetup() {
   return (
-    <Suspense fallback={<div className="min-h-screen soft-light bg-surface flex items-center justify-center">Loading...</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-surface text-gray-900 dark:text-gray-50 flex items-center justify-center">กำลังโหลด…</div>}>
       <TeacherSetupContent />
     </Suspense>
   );

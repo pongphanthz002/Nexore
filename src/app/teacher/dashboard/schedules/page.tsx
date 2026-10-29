@@ -22,6 +22,7 @@ import Avatar from '@/components/Avatar';
 import { useTeacherRoster } from '@/hooks/useTeacherRoster';
 import { studentAttendanceTotals, type StudentAttendanceTotals } from '@/lib/attendance';
 import { useTheme } from '@/contexts/ThemeContext';
+import { Bone, SkeletonCard, SkeletonGroup, SkeletonRows } from '@/components/Skeleton';
 
 // Parse "08:30-09:30" → { startMinutes, endMinutes }
 function parseTimeRange(time: string): { startMinutes: number; endMinutes: number } | null {
@@ -145,6 +146,8 @@ function SchedulesContent() {
   // Rooms checked together (one period taught to several rooms); each record keeps its subject in recordOwner
   const [groupSubjects, setGroupSubjects] = useState<SubjectData[]>([]);
   const [recordOwner, setRecordOwner] = useState<Record<string, string>>({});
+  // Rows of a not-yet-saved session still on their default "มา": drawn uncoloured until the teacher picks a status
+  const [defaultIds, setDefaultIds] = useState<Set<string>>(new Set());
   const [loadingAttendance, setLoadingAttendance] = useState(false);
   const [fromSection, setFromSection] = useState<'current' | 'all'>('current');
   const [paramsProcessed, setParamsProcessed] = useState(false);
@@ -550,6 +553,7 @@ function SchedulesContent() {
     const formattedDate = parseInputDateToFormat(selectedDate);
     const owner: Record<string, string> = {};
     const records: AttendanceRecord[] = [];
+    const untouched = new Set<string>();
     let savedHours: number | undefined;
 
     await Promise.all(group.map(async (target, i) => {
@@ -564,6 +568,7 @@ function SchedulesContent() {
       const list = existing
         ? existing.records
         : roster.map(s => ({ studentId: s.studentId, name: s.name, number: s.number, status: 'มา' as const }));
+      if (!existing) list.forEach(r => untouched.add(r.studentId));
       list.forEach(r => { owner[r.studentId] = target.subjectId; });
       records.push(...list);
     }));
@@ -573,18 +578,26 @@ function SchedulesContent() {
     records.sort((a, b) => (order.get(owner[a.studentId]) ?? 0) - (order.get(owner[b.studentId]) ?? 0));
     setRecordOwner(owner);
     setAttendanceRecords(records);
+    setDefaultIds(untouched);
     if (savedHours) setSelectedHours(savedHours);
     else if (hours) setSelectedHours(hours);
     setLoadingAttendance(false);
   };
 
   const handleMarkAllPresent = () => {
+    setDefaultIds(new Set());
     setAttendanceRecords(records => 
       records.map(r => ({ ...r, status: 'มา' as const }))
     );
   };
 
   const handleStatusChange = (studentId: string, status: string) => {
+    setDefaultIds(ids => {
+      if (!ids.has(studentId)) return ids;
+      const next = new Set(ids);
+      next.delete(studentId);
+      return next;
+    });
     setAttendanceRecords(records => 
       records.map(r => r.studentId === studentId ? { ...r, status: status as AttendanceRecord['status'] } : r)
     );
@@ -674,18 +687,18 @@ function SchedulesContent() {
     return (
       <div className="p-6">
         <div className="max-w-7xl mx-auto space-y-6">
-          <div className={`rounded-2xl p-6 bg-surface shadow-neu-lg animate-pulse`}>
-            <div className={`h-8 w-48 rounded-lg mb-4 ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
-            <div className={`h-20 rounded-xl ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
-          </div>
-          <div className={`rounded-2xl p-6 bg-surface shadow-neu-lg animate-pulse`}>
-            <div className={`h-8 w-40 rounded-lg mb-4 ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
-            <div className="space-y-3">
-              {[1, 2, 3].map(i => (
-                <div key={i} className={`h-16 rounded-xl ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
-              ))}
-            </div>
-          </div>
+          <SkeletonGroup label="กำลังโหลดวิชา" className="space-y-6">
+            <SkeletonCard>
+              <Bone className="mb-4 h-7 w-48" />
+              <Bone className="h-20 w-full !rounded-2xl" />
+            </SkeletonCard>
+            <SkeletonCard>
+              <Bone className="mb-4 h-7 w-40" />
+              <div className="space-y-3">
+                {[0, 1, 2].map(i => <Bone key={i} className="h-16 w-full !rounded-2xl" />)}
+              </div>
+            </SkeletonCard>
+          </SkeletonGroup>
         </div>
       </div>
     );
@@ -967,9 +980,9 @@ function SchedulesContent() {
 
               {/* Student list with status dropdown */}
               {loadingAttendance ? (
-                <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  กำลังโหลด...
-                </div>
+                <SkeletonGroup label="กำลังโหลดรายชื่อ">
+                  <SkeletonRows rows={8} trailing />
+                </SkeletonGroup>
               ) : attendanceRecords.length > 0 ? (
                 <div className="space-y-2">
                   {attendanceRecords.map((record, index) => {
@@ -990,17 +1003,20 @@ function SchedulesContent() {
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: Math.min(index, 30) * 0.02 }}
-                          className={`flex items-center gap-3 p-3 rounded-xl border transition-colors duration-300 ${statusClass}`}
+                          className={`flex items-center gap-2.5 py-2.5 pl-2 pr-2.5 rounded-xl border transition-colors duration-300 ${statusClass}`}
                         >
-                          <span className="w-7 text-center font-medium tabular-nums opacity-80">
-                            {record.number}
+                          <span className="flex flex-none items-center gap-1">
+                            <span className="w-6 text-right text-sm font-medium tabular-nums opacity-80">
+                              {record.number}
+                            </span>
+                            <Avatar src={photoById.get(record.studentId)} name={record.name} />
                           </span>
-                          <Avatar src={photoById.get(record.studentId)} name={record.name} />
-                          <span className="flex-1 min-w-0 font-semibold">
+                          <span className="flex-1 min-w-0 font-semibold leading-snug">
                             {record.name}
                           </span>
                           <AttendanceStatusSelect
                             value={record.status}
+                            muted={defaultIds.has(record.studentId)}
                             label={record.name}
                             onChange={status => handleStatusChange(record.studentId, status)}
                           />

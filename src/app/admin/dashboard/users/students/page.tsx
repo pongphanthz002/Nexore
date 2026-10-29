@@ -14,6 +14,7 @@ import * as XLSX from 'xlsx';
 import { Download, Upload, Trash2, Edit, Eye, EyeOff, RefreshCw, Plus, ArrowLeft, Search, X } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 import Modal from '@/components/Modal';
+import { Bone, SkeletonGroup, SkeletonRows } from '@/components/Skeleton';
 
 export default function StudentsManagement() {
   const router = useRouter();
@@ -567,21 +568,11 @@ export default function StudentsManagement() {
     return (
       <div className="min-h-screen bg-surface px-4 pb-28 pt-2 text-gray-900 sm:px-6 dark:text-gray-50">
         <h1 className={`text-3xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-800'}`}>จัดการข้อมูลนักเรียน</h1>
-        <div className="animate-pulse space-y-4">
-          <div className={`h-12 rounded-2xl bg-surface shadow-neu-lg`} />
-          <div className={`h-10 w-48 rounded-lg ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className={`rounded-2xl p-4 bg-surface shadow-neu-lg`}>
-              <div className="flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-full ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
-                <div className="flex-1 space-y-2">
-                  <div className={`h-4 w-32 rounded ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
-                  <div className={`h-3 w-24 rounded ${isDark ? 'bg-white/10' : 'bg-gray-300/60'}`} />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+        <SkeletonGroup label="กำลังโหลดรายชื่อนักเรียน" className="space-y-4">
+          <Bone className="h-12 w-full" />
+          <Bone className="h-4 w-40" />
+          <SkeletonRows rows={6} />
+        </SkeletonGroup>
       </div>
     );
   }

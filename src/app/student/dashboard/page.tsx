@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import TodayTimetable from '@/components/timetable/TodayTimetable';
+import TodayTimetable, { TimetableSkeleton } from '@/components/timetable/TodayTimetable';
 import StudentHeader from '@/components/StudentHeader';
 import StudentFooter from '@/components/StudentFooter';
 import { useAuth } from '@/contexts/AuthContext';
@@ -96,7 +96,7 @@ export default function StudentDashboard() {
       <div className="pt-24 pb-32 px-6">
         <div className="max-w-7xl mx-auto space-y-6">
           {/* Today's timetable (opens the full-screen week view) */}
-          {studentInfo && <TodayTimetable role="student" studentInfo={studentInfo} />}
+          {studentInfo ? <TodayTimetable role="student" studentInfo={studentInfo} /> : loading && <TimetableSkeleton />}
 
           {/* Pending Assignments Section */}
           {!loadingPending && pendingAssignments.length > 0 && (
@@ -111,10 +111,10 @@ export default function StudentDashboard() {
                     <AlertCircle className="w-5 h-5 text-red-500" />
                   </div>
                   <div>
-                    <h3 className={`font-bold text-base ${isDark ? 'text-slate-100' : 'text-slate-800'}`}>
+                    <h3 className={`font-bold text-base ${isDark ? 'text-gray-100' : 'text-gray-800'}`}>
                       งานค้าง
                     </h3>
-                    <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                       {pendingAssignments.length} รายการ
                     </p>
                   </div>
@@ -141,23 +141,23 @@ export default function StudentDashboard() {
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex-1 min-w-0">
                             <p className={`font-bold text-sm leading-tight truncate ${
-                              isOverdue ? (isDark ? 'text-red-400' : 'text-red-700') : (isDark ? 'text-slate-200' : 'text-slate-700')
+                              isOverdue ? (isDark ? 'text-red-400' : 'text-red-700') : (isDark ? 'text-gray-200' : 'text-gray-700')
                             }`}>
                               {item.assignmentTitle}
                             </p>
-                            <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                            <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                               {item.subjectName}
                             </p>
                             {deadlineInfo && typeof deadlineInfo === 'object' && (
                               <p className={`text-xs font-semibold flex items-center gap-1 mt-1 ${
-                                isOverdue ? (isDark ? 'text-red-400' : 'text-red-700') : (isDark ? 'text-slate-400' : 'text-slate-600')
+                                isOverdue ? (isDark ? 'text-red-400' : 'text-red-700') : (isDark ? 'text-gray-400' : 'text-gray-600')
                               }`}>
                                 <Clock className="w-3 h-3" />
                                 กำหนดส่ง: {deadlineInfo.text}
                               </p>
                             )}
                           </div>
-                          <div className={`p-1.5 rounded-lg shrink-0 shadow-neu-in-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                          <div className={`p-1.5 rounded-lg shrink-0 shadow-neu-in-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                             <ChevronRight className="w-4 h-4" />
                           </div>
                         </div>

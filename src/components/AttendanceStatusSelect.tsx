@@ -25,10 +25,12 @@ interface AttendanceStatusSelectProps {
   onChange: (status: Status) => void;
   /** Student name, for the accessible label. */
   label: string;
+  /** Default status of a session not saved yet: shown without its colour so it doesn't look already checked. */
+  muted?: boolean;
 }
 
 /** Coloured status dropdown for one student's attendance row. */
-export default function AttendanceStatusSelect({ value, onChange, label }: AttendanceStatusSelectProps) {
+export default function AttendanceStatusSelect({ value, onChange, label, muted = false }: AttendanceStatusSelectProps) {
   const reduce = useReducedMotion();
   const [open, setOpen] = useState(false);
   const [up, setUp] = useState(false);
@@ -37,6 +39,7 @@ export default function AttendanceStatusSelect({ value, onChange, label }: Atten
   const buttonRef = useRef<HTMLButtonElement>(null);
   const listId = useId();
   const current = ATTENDANCE_STATUSES.find(s => s.value === value);
+  const chip = current && !muted ? current.chip : EMPTY_CHIP;
 
   const openList = () => {
     const rect = buttonRef.current?.getBoundingClientRect();
@@ -78,25 +81,25 @@ export default function AttendanceStatusSelect({ value, onChange, label }: Atten
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={listId}
-        aria-label={`สถานะของ ${label}: ${value || 'ยังไม่เลือก'}`}
+        aria-label={`สถานะของ ${label}: ${value || 'ยังไม่เลือก'}${muted ? ' (ค่าเริ่มต้น)' : ''}`}
         whileTap={reduce ? undefined : { scale: 0.94 }}
-        className={`flex h-10 min-w-[104px] items-center justify-between gap-1.5 rounded-full pl-3.5 pr-2.5 text-sm font-semibold transition-[color,background-color,box-shadow] duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${open ? 'shadow-neu-in-sm' : 'shadow-neu-sm'} ${current?.chip ?? EMPTY_CHIP}`}
+        className={`flex h-10 min-w-[72px] items-center justify-between gap-1 rounded-full pl-2.5 pr-1.5 text-[13px] font-semibold transition-[color,background-color,box-shadow] duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${open ? 'shadow-neu-in-sm' : 'shadow-neu-sm'} ${chip}`}
       >
         <AnimatePresence mode="popLayout" initial={false}>
           <motion.span
-            key={value || 'empty'}
+            key={`${value || 'empty'}${muted ? '-muted' : ''}`}
             initial={reduce ? false : { opacity: 0, y: 6, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={reduce ? undefined : { opacity: 0, y: -6, scale: 0.9 }}
             transition={{ type: 'spring', stiffness: 500, damping: 32 }}
-            className="flex items-center gap-1.5"
+            className="flex items-center gap-1"
           >
-            {current && <span className={`h-2 w-2 rounded-full ${current.dot}`} />}
+            {current && <span className={`h-1.5 w-1.5 rounded-full ${muted ? 'bg-gray-400 dark:bg-gray-500' : current.dot}`} />}
             {value || 'เลือก'}
           </motion.span>
         </AnimatePresence>
         <motion.span animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.2 }} className="flex">
-          <ChevronDown size={16} />
+          <ChevronDown size={14} />
         </motion.span>
       </motion.button>
 

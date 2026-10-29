@@ -2,7 +2,9 @@
 
 import { motion, useReducedMotion } from 'framer-motion';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Crown, RefreshCw } from 'lucide-react';
+import { Crown } from 'lucide-react';
+import PullToRefresh from '@/components/PullToRefresh';
+import { Bone, SkeletonCard, SkeletonGroup } from '@/components/Skeleton';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { loadTeacherStats } from '@/services/teacher-stats.service';
@@ -95,38 +97,54 @@ export default function TeacherDashboard() {
     if (!cached || Date.now() - cached.savedAt >= TEACHER_STATS_FRESH_MS) load(false);
   }, [schoolConfig, teacherId, load]);
 
+  // Pull-to-refresh on the teacher home re-reads the dashboard
   const refresh = () => {
     if (refreshing || !allowAction('teacher-stats-refresh', 10_000)) return;
-    load(true);
+    return load(true);
   };
+  const pull = <PullToRefresh onRefresh={refresh} disabled={!schoolConfig || !teacherId} />;
 
-  if (!inputs) {
-    if (failed) {
-      return (
-        <section className={CARD}>
-          <p className="font-medium">โหลดแดชบอร์ดไม่สำเร็จ</p>
-          <button type="button" onClick={() => load(true)} className="mt-3 h-11 rounded-full bg-surface px-5 font-semibold shadow-neu-sm active:shadow-neu-in-sm">ลองอีกครั้ง</button>
-        </section>
-      );
-    }
-    return (
-      <div className="grid gap-4 lg:grid-cols-12" aria-label="กำลังโหลดแดชบอร์ด">
-        <div className="h-80 animate-pulse rounded-[24px] bg-surface shadow-neu-lg lg:col-span-5" />
-        <div className="h-80 animate-pulse rounded-[24px] bg-surface shadow-neu-lg lg:col-span-7" />
-        <div className="h-72 animate-pulse rounded-[24px] bg-surface shadow-neu-lg lg:col-span-12" />
-      </div>
+  let body: React.ReactNode;
+  if (!inputs && failed) {
+    body = (
+      <section className={CARD}>
+        <p className="font-medium">โหลดแดชบอร์ดไม่สำเร็จ</p>
+        <button type="button" onClick={() => load(true)} className="mt-3 h-11 rounded-full bg-surface px-5 font-semibold shadow-neu-sm active:shadow-neu-in-sm">ลองอีกครั้ง</button>
+      </section>
     );
+  } else if (!inputs) {
+    body = (
+      <SkeletonGroup label="กำลังโหลดแดชบอร์ด" className="grid gap-4 lg:grid-cols-12">
+        <SkeletonCard className="h-80 lg:col-span-5">
+          <Bone className="mb-8 h-5 w-32" />
+          <div className="flex h-48 items-end justify-center gap-4">
+            <Bone className="h-24 w-16 !rounded-2xl" />
+            <Bone className="h-36 w-16 !rounded-2xl" />
+            <Bone className="h-16 w-16 !rounded-2xl" />
+          </div>
+        </SkeletonCard>
+        <SkeletonCard className="h-80 lg:col-span-7">
+          <Bone className="mb-8 h-5 w-40" />
+          <Bone className="h-52 w-full !rounded-2xl" />
+        </SkeletonCard>
+        <SkeletonCard className="h-72 lg:col-span-12">
+          <Bone className="mb-8 h-5 w-36" />
+          <Bone className="h-44 w-full !rounded-2xl" />
+        </SkeletonCard>
+      </SkeletonGroup>
+    );
+  } else if (inputs.length > 0) {
+    body = <TeacherDashboardView inputs={inputs} savedAt={savedAt} refreshing={refreshing} />;
   }
-  if (inputs.length === 0) return null;
 
-  return <TeacherDashboardView inputs={inputs} savedAt={savedAt} refreshing={refreshing} onRefresh={refresh} />;
+  // One tree for every state, so a pull in progress survives the data arriving
+  return <>{pull}{body}</>;
 }
 
-export function TeacherDashboardView({ inputs, savedAt, refreshing, onRefresh }: {
+export function TeacherDashboardView({ inputs, savedAt, refreshing }: {
   inputs: SubjectStatsInput[];
   savedAt: number | null;
   refreshing: boolean;
-  onRefresh: () => void;
 }) {
   return (
     <section className={`space-y-4 transition-opacity ${refreshing && savedAt ? 'opacity-70' : ''}`} aria-labelledby="dashboard-title">
@@ -138,14 +156,6 @@ export function TeacherDashboardView({ inputs, savedAt, refreshing, onRefresh }:
             <p className={`text-xs ${META}`}>อัปเดต {new Date(savedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={onRefresh}
-          aria-label="โหลดข้อมูลแดชบอร์ดใหม่"
-          className="grid h-11 w-11 flex-none place-items-center rounded-full bg-surface text-gray-600 shadow-neu-sm transition-shadow active:shadow-neu-in-sm dark:text-gray-300"
-        >
-          <RefreshCw size={20} className={refreshing ? 'animate-spin motion-reduce:animate-none' : ''} />
-        </button>
       </div>
       <div className="grid gap-4 lg:grid-cols-12">
         <PodiumCard inputs={inputs} />

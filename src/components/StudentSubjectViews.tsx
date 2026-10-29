@@ -2,7 +2,8 @@
 
 import { motion, useReducedMotion } from 'framer-motion';
 import { useState, useMemo } from 'react';
-import { RefreshCw, X } from 'lucide-react';
+import { X } from 'lucide-react';
+import { Bone, SkeletonCard, SkeletonGroup } from '@/components/Skeleton';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { StudentSubjectInfo, StudentGradeInfo, StudentGradeDetail, StudentAttendanceInfo } from '@/services/student-database.service';
 import { hueVars, parseTimeRange, formatMinutes, roomLabel, THAI_DAYS_SHORT, THAI_MONTHS_SHORT } from '@/lib/timetable';
@@ -96,16 +97,6 @@ export function SubjectList({ subjects, gradeOf, attendanceOf, error, partialFai
             </p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={onRetry}
-          disabled={refreshing}
-          aria-label="รีเฟรชคะแนนและเวลาเรียน"
-          title="รีเฟรช"
-          className="grid h-11 w-11 flex-none place-items-center rounded-full bg-surface text-gray-600 shadow-neu-sm transition-shadow focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 active:shadow-neu-in-sm disabled:text-gray-400 dark:text-gray-300"
-        >
-          <RefreshCw size={22} className={refreshing ? 'animate-spin motion-reduce:animate-none' : ''} />
-        </button>
       </div>
 
       {error && (
@@ -198,27 +189,27 @@ export function SubjectList({ subjects, gradeOf, attendanceOf, error, partialFai
 
 export function ListSkeleton() {
   return (
-    <div className="space-y-4" aria-busy="true" aria-label="กำลังโหลดวิชาเรียน">
+    <SkeletonGroup label="กำลังโหลดวิชาเรียน" className="space-y-4">
       <div>
         <h1 className="text-2xl font-semibold leading-tight">วิชาเรียน</h1>
-        <div className="mt-2 h-4 w-24 rounded-full bg-gray-300/60 dark:bg-white/10" />
+        <Bone className="mt-2 h-4 w-24" />
       </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {[0, 1, 2, 3, 4, 5].map(i => (
-          <div key={i} className={`${CARD} space-y-4 p-4`}>
+          <SkeletonCard key={i} className="space-y-4 !p-4">
             <div className="flex items-start gap-3">
-              <span className="h-11 w-1.5 rounded-full bg-gray-300/60 dark:bg-white/10" />
+              <Bone className="h-11 w-1.5" />
               <span className="flex-1 space-y-2">
-                <span className="block h-4 w-2/5 rounded-full bg-gray-300/60 dark:bg-white/10" />
-                <span className="block h-3 w-1/3 rounded-full bg-gray-300/40 dark:bg-white/5" />
+                <Bone className="h-4 w-2/5" />
+                <Bone className="h-3 w-1/3" />
               </span>
-              <span className="h-7 w-8 rounded-md bg-gray-300/60 dark:bg-white/10" />
+              <Bone className="h-7 w-8 !rounded-md" />
             </div>
-            <span className="block h-2 rounded-full shadow-neu-in-xs" />
-          </div>
+            <Bone className="h-2 w-full" />
+          </SkeletonCard>
         ))}
       </div>
-    </div>
+    </SkeletonGroup>
   );
 }
 
