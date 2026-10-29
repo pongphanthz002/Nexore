@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dealGroups, groupCount, groupPreview, groupSizes, groupStepperRange, pickPeople } from './classroom-tools';
+import { dealGroups, groupCount, groupPreview, groupSizes, groupStepperRange, groupsAsText, pickPeople } from './classroom-tools';
 
 /** Deterministic rng (mulberry32) */
 function seeded(seed: number) {
@@ -111,5 +111,28 @@ describe('pickPeople', () => {
   it('ignores called ids that are no longer in the pool and caps at the pool size', () => {
     const r = pickPeople(['a', 'b'], 5, ['x'], false, seeded(6));
     expect(r.picked.sort()).toEqual(['a', 'b']);
+  });
+});
+
+describe('groupsAsText', () => {
+  const p = (name: string, number: string, classroom = 'ม.2/1') => ({ name, number, classroom });
+
+  it('writes a heading and one block per group, members in roll order', () => {
+    const text = groupsAsText(
+      [[p('ปิยะ', '12'), p('กมล', '3')], [p('ณัฐ', '5'), p('ธนา', '20')]],
+      { title: 'ภาษาไทย (ท21101) · ม.2/1', date: new Date(2026, 9, 29) },
+    );
+    const lines = text.split('\n');
+    expect(lines[0]).toBe('จัดกลุ่ม · ภาษาไทย (ท21101) · ม.2/1');
+    expect(lines[1]).toMatch(/29 ตุลาคม .*2569 · 4 คน · 2 กลุ่ม$/);
+    expect(lines[2]).toBe('');
+    expect(lines.slice(3, 6)).toEqual(['กลุ่ม 1 (2 คน)', 'เลขที่ 3  กมล', 'เลขที่ 12  ปิยะ']);
+    expect(lines[6]).toBe('');
+    expect(lines.slice(7)).toEqual(['กลุ่ม 2 (2 คน)', 'เลขที่ 5  ณัฐ', 'เลขที่ 20  ธนา']);
+  });
+
+  it('puts the room first when rooms are mixed', () => {
+    const text = groupsAsText([[p('ข้าว', '2', 'ม.2/2'), p('ดาว', '9', 'ม.2/1')]], { title: 'x', showRoom: true });
+    expect(text.split('\n').slice(3)).toEqual(['กลุ่ม 1 (2 คน)', 'ม.2/1  เลขที่ 9  ดาว', 'ม.2/2  เลขที่ 2  ข้าว']);
   });
 });

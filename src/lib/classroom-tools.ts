@@ -147,7 +147,32 @@ export function pickPeople(
   return { picked, called: round };
 }
 
-/** "กลุ่ม 1: 3 สมชาย, 7 สมหญิง" lines, for pasting into a chat. */
-export function groupsAsText<T>(groups: T[][], label: (person: T) => string): string {
-  return groups.map((g, i) => `กลุ่ม ${i + 1}: ${g.map(label).join(', ')}`).join('\n');
+/**
+ * The groups as text for pasting into a chat or document: a heading, then one block per group
+ * separated by a blank line, members in roll order, each on its own line.
+ *
+ *   จัดกลุ่ม · ภาษาไทย (ท21101) · ม.2/1
+ *   วันพุธที่ 29 ตุลาคม 2569 · 28 คน · 4 กลุ่ม
+ *
+ *   กลุ่ม 1 (7 คน)
+ *   เลขที่ 3  กมล ศรีสุข
+ *   …
+ */
+export function groupsAsText(
+  groups: { name: string; number: string; classroom: string }[][],
+  { title, date = new Date(), showRoom = false }: { title: string; date?: Date; showRoom?: boolean },
+): string {
+  const total = groups.reduce((n, g) => n + g.length, 0);
+  const day = date.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const head = [`จัดกลุ่ม · ${title}`, `${day} · ${total} คน · ${groups.length} กลุ่ม`].join('\n');
+  const blocks = groups.map((g, i) => {
+    const members = [...g]
+      .sort((a, b) => a.classroom.localeCompare(b.classroom, 'th', { numeric: true }) || (parseInt(a.number) || 0) - (parseInt(b.number) || 0))
+      .map(p => {
+        const label = p.number ? `เลขที่ ${p.number}  ${p.name}` : p.name;
+        return showRoom ? `${p.classroom}  ${label}` : label;
+      });
+    return [`กลุ่ม ${i + 1} (${g.length} คน)`, ...members].join('\n');
+  });
+  return [head, ...blocks].join('\n\n');
 }

@@ -11,6 +11,7 @@ import { useTeacherRoster } from '@/hooks/useTeacherRoster';
 import { useFeatureAccess } from '@/hooks/useFeatureAccess';
 import type { SubjectData, StudentData } from '@/services/school-database.service';
 import { teacherDatabaseService } from '@/services/teacher-database.service';
+import { buildSubjectGradeSummary } from '@/services/teacher-stats.service';
 import SubjectPicker from '@/components/SubjectPicker';
 import ComingSoon from '@/components/ComingSoon';
 import Avatar from '@/components/Avatar';
@@ -28,7 +29,8 @@ import { roomKeyOf } from '@/lib/classroom-tools-store';
  * Classroom tools (teacher "เพิ่มเติม" → เครื่องมือในห้องเรียน): random picker and group maker
  * over one room, or every room of a merged period. Opens on the period being taught now;
  * outside a period the teacher picks a room. Students marked absent or on leave today are left
- * out (the teacher can change that), and the subject's grade summary (1 read) balances groups.
+ * out (the teacher can change that), and the subject's totals, computed now from its scores with
+ * the shared grade calculation (4 reads), balance the groups.
  */
 
 /** Statuses that mean the student isn't in the room today. */
@@ -109,7 +111,10 @@ export default function ClassroomToolsPage() {
     Promise.all(selection.map(async subject => {
       const [session, summary] = await Promise.all([
         teacherDatabaseService.getAttendance(dbConfig, subject.subjectId, subject.classroom, date).catch(() => null),
-        teacherDatabaseService.getGradeSummary(dbConfig, subject.subjectId).catch(() => null),
+        buildSubjectGradeSummary(dbConfig, subject, students).catch(err => {
+          console.error('Error computing totals for groups:', err);
+          return null;
+        }),
       ]);
       return { session, summary };
     })).then(found => {
@@ -125,7 +130,7 @@ export default function ClassroomToolsPage() {
       setScores(totals.size ? totals : null);
     });
     return () => { cancelled = true; };
-  }, [selection, teacher, userAccount]);
+  }, [selection, teacher, userAccount, students]);
 
   const present = pool.filter(p => !excluded.has(p.studentId));
 
@@ -201,10 +206,11 @@ export default function ClassroomToolsPage() {
 
   const first = selection[0];
   const hue = hues.get(first.subjectName) || 'blue';
+  const groupTitle = [`${first.subjectName}${first.subjectCode ? ` (${first.subjectCode})` : ''}`, rooms.join(', ')].join(' · ');
 
   const tool = (big: boolean) => tab === 'pick'
     ? <GachaMachine people={present} roomKey={roomKey} showRoom={showRoom} big={big} />
-    : <GroupMaker people={present} scores={scores} roomKey={roomKey} showRoom={showRoom} big={big} />;
+    : <GroupMaker people={present} scores={scores} roomKey={roomKey} showRoom={showRoom} title={groupTitle} big={big} />;
 
   return wrap(
     <>

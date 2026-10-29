@@ -24,8 +24,10 @@ interface Result {
   balanced: boolean;
 }
 
-export default function GroupMaker({ people, scores, roomKey, showRoom, big = false }: {
+export default function GroupMaker({ people, scores, roomKey, showRoom, title, big = false }: {
   people: ToolPerson[];
+  /** subject and rooms, the heading of the copied text */
+  title: string;
   /** studentId → subject total; null when the subject has no scores yet */
   scores: Map<string, number> | null;
   roomKey: string;
@@ -71,7 +73,7 @@ export default function GroupMaker({ people, scores, roomKey, showRoom, big = fa
 
   const copy = async () => {
     if (!result) return;
-    const text = groupsAsText(result.groups, p => [p.number, p.name].filter(Boolean).join(' '));
+    const text = groupsAsText(result.groups, { title, showRoom });
     try {
       await navigator.clipboard.writeText(text);
       toast.success('คัดลอกรายชื่อกลุ่มแล้ว');
