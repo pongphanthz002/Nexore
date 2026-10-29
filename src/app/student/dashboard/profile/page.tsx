@@ -12,6 +12,7 @@ import StudentHeader from '@/components/StudentHeader';
 import StudentFooter from '@/components/StudentFooter';
 import { BookOpen, ChevronRight, Files } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
+import { Bone } from '@/components/Skeleton';
 
 export default function StudentProfilePage() {
   const router = useRouter();
@@ -68,7 +69,7 @@ export default function StudentProfilePage() {
             <Avatar src={googlePhotoURL(user)} name={name} size="lg" />
             <div className="min-w-0 flex-1">
               <h1 className="truncate text-2xl font-bold leading-tight">
-                {loading && !name ? 'กำลังโหลด…' : name || '-'}
+                {loading && !name ? <Bone className="my-1.5 h-6 w-40" /> : name || '-'}
               </h1>
               <p className="truncate text-sm text-gray-500 dark:text-gray-400">{userAccount?.email || '-'}</p>
               <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold">
@@ -107,7 +108,7 @@ export default function StudentProfilePage() {
               <div className="min-w-0 flex-1">
                 <div className="text-lg font-bold leading-tight">วิชาที่เรียน</div>
                 <div className="text-sm text-gray-500 dark:text-gray-400">
-                  {loading && subjects.length === 0 ? 'กำลังโหลด…' : `${subjectChips.length} วิชา`}
+                  {loading && subjects.length === 0 ? <Bone className="mt-1.5 h-3.5 w-16" /> : `${subjectChips.length} วิชา`}
                 </div>
               </div>
               <span className="flex-none text-sm font-semibold text-red-700 dark:text-red-400">ดูคะแนน</span>

@@ -4,6 +4,8 @@ import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import OfflineBanner from "@/components/OfflineBanner";
+import { Toaster } from "@/components/Toast";
+import { ConfirmHost } from "@/components/ConfirmHost";
 import { THEME_COLORS, themeInitScript } from "@/config/theme";
 
 // One face for Thai and Latin on every device (system Thai fonts differ between iOS, Android and PC)
@@ -53,6 +55,8 @@ export default function RootLayout({
         <ThemeProvider>
           <AuthProvider>{children}</AuthProvider>
           <OfflineBanner />
+          <Toaster />
+          <ConfirmHost />
         </ThemeProvider>
       </body>
     </html>

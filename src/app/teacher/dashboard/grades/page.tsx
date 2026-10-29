@@ -31,6 +31,8 @@ import SubjectPicker from '@/components/SubjectPicker';
 import { buildHueMap } from '@/lib/timetable';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Bone, SkeletonCard, SkeletonGroup } from '@/components/Skeleton';
+import { toast } from '@/components/Toast';
+import { askConfirm } from '@/components/ConfirmHost';
 
 type HistoryEntry = { studentId: string; field: ScoreField; before: number | null; after: number | null };
 const MAX_UNDO = 50;
@@ -110,7 +112,6 @@ export default function GradesPage() {
   const [isScoreEditing, setIsScoreEditing] = useState(false);
   const [isFinishing, setIsFinishing] = useState(false);
   const [invalidCells, setInvalidCells] = useState<Map<string, string>>(new Map());
-  const [toast, setToast] = useState<string | null>(null);
   const [historySize, setHistorySize] = useState({ undo: 0, redo: 0 });
   const [isOnline, setIsOnline] = useState(true);
   const [selectedStudent, setSelectedStudent] = useState<StudentData | null>(null);
@@ -159,12 +160,6 @@ export default function GradesPage() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 4000);
-    return () => clearTimeout(t);
-  }, [toast]);
-
   const studentsForSubject = (subject: SubjectData) => students
     .filter(s => {
       if (subject.subjectType === 'elective' && Array.isArray(subject.studentIds) && subject.studentIds.length > 0) {
@@ -176,7 +171,7 @@ export default function GradesPage() {
 
   const handleDownloadExcel = async () => {
     if (selectedSubjectsForDownload.length === 0) {
-      alert('กรุณาเลือกวิชาที่ต้องการดาวน์โหลด');
+      toast.warn('กรุณาเลือกวิชาที่ต้องการดาวน์โหลด');
       return;
     }
 
@@ -185,7 +180,7 @@ export default function GradesPage() {
     );
 
     if (subjectsToDownload.length === 0) {
-      alert('ไม่มีข้อมูลวิชาที่จะดาวน์โหลด');
+      toast.error('ไม่มีข้อมูลวิชาที่จะดาวน์โหลด');
       return;
     }
     setIsDownloading(true);
@@ -228,7 +223,7 @@ export default function GradesPage() {
 
     } catch (error) {
       console.error('Error downloading grades:', error);
-      alert('เกิดข้อผิดพลาดในการดาวน์โหลดไฟล์');
+      toast.error('เกิดข้อผิดพลาดในการดาวน์โหลดไฟล์');
     } finally {
       setIsDownloading(false);
     }
@@ -373,7 +368,7 @@ export default function GradesPage() {
   };
 
   const handleFinishEditing = async () => {
-    if (invalidCells.size > 0 && !confirm(`มี ${invalidCells.size} ช่องที่คะแนนไม่ถูกต้องและยังไม่ได้บันทึก ออกจากโหมดกรอกคะแนนเลยไหม?`)) return;
+    if (invalidCells.size > 0 && !(await askConfirm({ title: 'ออกจากโหมดกรอกคะแนน?', message: `มี ${invalidCells.size} ช่องที่คะแนนไม่ถูกต้อง ช่องเหล่านี้จะไม่ถูกบันทึก`, confirmLabel: 'ออก', cancelLabel: 'กลับไปแก้' }))) return;
     setIsFinishing(true);
     const saved = await Promise.race([
       autosave.flush(),
@@ -381,7 +376,7 @@ export default function GradesPage() {
     ]);
     setIsFinishing(false);
     if (!saved) {
-      alert('ยังบันทึกคะแนนไม่ครบ ระบบจะลองบันทึกต่อให้อัตโนมัติ กรุณาตรวจสอบอินเทอร์เน็ตแล้วกด "เสร็จสิ้น" อีกครั้ง');
+      toast.warn('ยังบันทึกคะแนนไม่ครบ ระบบจะลองบันทึกต่อให้อัตโนมัติ กรุณาตรวจสอบอินเทอร์เน็ตแล้วกด "เสร็จสิ้น" อีกครั้ง');
       return;
     }
     setInvalidCells(new Map());
@@ -418,7 +413,7 @@ export default function GradesPage() {
       ]);
     } catch (error) {
       console.error('Error saving columns:', error);
-      alert('บันทึกการจัดคอลัมน์ไม่สำเร็จ กำลังโหลดข้อมูลล่าสุด');
+      toast.error('บันทึกการจัดคอลัมน์ไม่สำเร็จ กำลังโหลดข้อมูลล่าสุด');
       if (selectedSubject) handleOpenGrades(selectedSubject);
     }
   };
@@ -460,7 +455,7 @@ export default function GradesPage() {
         idOrder,
       ));
       if (moved.length) {
-        setToast(moved.map(a => `ย้าย '${a.title}' ออกจากกลุ่ม ${groups.find(g => g.id === a.groupId)?.name}`).join(' · '));
+        toast(moved.map(a => `ย้าย '${a.title}' ออกจากกลุ่ม ${groups.find(g => g.id === a.groupId)?.name}`).join(' · '));
       }
     },
     editGroup: (group, name, rawScore) => {
@@ -474,8 +469,8 @@ export default function GradesPage() {
       order.splice(lastMember ? order.indexOf(lastMember) + 1 : order.length, 0, a.id);
       persistStructure(normalizeStructure(list.map(x => (x.id === a.id ? { ...x, groupId: '' } : x)), groups, order));
     },
-    ungroup: group => {
-      if (!confirm(`ยกเลิกกลุ่ม "${group.name}"? งานในกลุ่มยังอยู่ครบ แต่จะไม่ถูกทอนคะแนนอีก`)) return;
+    ungroup: async group => {
+      if (!(await askConfirm({ title: `ยกเลิกกลุ่ม "${group.name}"?`, message: 'งานในกลุ่มยังอยู่ครบ แต่จะไม่ถูกทอนคะแนนอีก', confirmLabel: 'ยกเลิกกลุ่ม' }))) return;
       const { assignments: list, groups } = structureRef.current;
       persistStructure(normalizeStructure(
         list.map(a => (a.groupId === group.id ? { ...a, groupId: '' } : a)),
@@ -489,8 +484,8 @@ export default function GradesPage() {
       const targets = list.filter(a => ids.includes(a.id));
       const scored = scoresRef.current.filter(s => targets.some(a => isScored(s.assignmentScores?.[a.id]))).length;
       const names = targets.length === 1 ? `"${targets[0].title}"` : `${targets.length} งาน (${targets.map(a => a.title).join(', ')})`;
-      const detail = scored > 0 ? `\nมีนักเรียนกรอกคะแนนงานเหล่านี้แล้ว ${scored} คน คะแนนเหล่านี้จะถูกลบด้วย` : '';
-      if (!confirm(`ลบ ${names}?${detail}`)) return;
+      const detail = scored > 0 ? `มีนักเรียนกรอกคะแนนงานเหล่านี้แล้ว ${scored} คน คะแนนเหล่านี้จะถูกลบด้วย` : undefined;
+      if (!(await askConfirm({ title: `ลบ ${names}?`, message: detail, confirmLabel: 'ลบ', tone: 'danger' }))) return;
       try {
         // Write queued cells first so none of them re-creates a deleted assignment's score afterwards
         await autosave.flush();
@@ -508,7 +503,7 @@ export default function GradesPage() {
         }));
       } catch (error) {
         console.error('Error deleting assignments:', error);
-        alert('ลบชิ้นงานไม่สำเร็จบางรายการ กำลังโหลดข้อมูลล่าสุด');
+        toast.warn('ลบชิ้นงานไม่สำเร็จบางรายการ กำลังโหลดข้อมูลล่าสุด');
         if (selectedSubject) handleOpenGrades(selectedSubject);
         return;
       }
@@ -523,7 +518,7 @@ export default function GradesPage() {
         await teacherDatabaseService.updateAssignments(gradeDbConfig, [{ id: a.id, fields: { title } }]);
       } catch (error) {
         console.error('Error renaming assignment:', error);
-        alert('เปลี่ยนชื่องานไม่สำเร็จ');
+        toast.error('เปลี่ยนชื่องานไม่สำเร็จ');
       }
     },
     addAssignment: () => { setEditingAssignment(null); setShowAssignmentModal(true); },
@@ -535,7 +530,7 @@ export default function GradesPage() {
         await teacherDatabaseService.saveGradeConfig(gradeDbConfig, next);
       } catch (error) {
         console.error('Error saving exam max:', error);
-        alert('บันทึกคะแนนเต็มข้อสอบไม่สำเร็จ');
+        toast.error('บันทึกคะแนนเต็มข้อสอบไม่สำเร็จ');
       }
     },
     reorder: (idOrder, scaledPositions) => {
@@ -557,10 +552,10 @@ export default function GradesPage() {
       await teacherDatabaseService.saveGradeConfig(gradeDbConfig, newConfig);
       setGradeConfig(newConfig);
       setShowGradeConfigModal(false);
-      alert('บันทึกการตั้งค่าคะแนนสำเร็จ');
+      toast.success('บันทึกการตั้งค่าคะแนนสำเร็จ');
     } catch (error) {
       console.error('Error saving grade config:', error);
-      alert('เกิดข้อผิดพลาดในการบันทึกการตั้งค่า');
+      toast.error('เกิดข้อผิดพลาดในการบันทึกการตั้งค่า');
     }
   };
 
@@ -571,7 +566,7 @@ export default function GradesPage() {
       await teacherDatabaseService.updateAssignments(gradeDbConfig, ids.map(id => ({ id, fields: { isVisible } })));
     } catch (error) {
       console.error('Error changing visibility:', error);
-      alert('เปลี่ยนการมองเห็นไม่สำเร็จ');
+      toast.error('เปลี่ยนการมองเห็นไม่สำเร็จ');
       if (selectedSubject) handleOpenGrades(selectedSubject);
     }
   };
@@ -609,7 +604,7 @@ export default function GradesPage() {
       setEditingAssignment(null);
     } catch (error) {
       console.error('Error saving assignment:', error);
-      alert('เกิดข้อผิดพลาดในการบันทึกชิ้นงาน');
+      toast.error('เกิดข้อผิดพลาดในการบันทึกชิ้นงาน');
     }
   };
 
@@ -871,7 +866,7 @@ export default function GradesPage() {
                   onUndo={() => stepHistory('undo')}
                   onRedo={() => stepHistory('redo')}
                   onStudentClick={setSelectedStudent}
-                  notify={setToast}
+                  notify={toast}
                   actions={gridActions}
                 />
               )}

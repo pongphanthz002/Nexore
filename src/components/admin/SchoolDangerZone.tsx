@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { schoolDatabaseService } from '@/services/school-database.service';
 import { firestoreService } from '@/services/firestore.service';
 import Modal, { ModalHeader } from '@/components/Modal';
+import { toast } from '@/components/Toast';
 
 type Action = 'reset' | 'delete';
 
@@ -58,12 +59,12 @@ export default function SchoolDangerZone() {
       await schoolDatabaseService.deleteAllSchoolData(userAccount.schoolFirebaseConfig);
       await schoolDatabaseService.deleteAllUserAccountsFromMasterRegistry(teacherEmails, studentEmails);
       invalidateCache();
-      alert('รีเซ็ตข้อมูลสำเร็จ');
+      toast.success('รีเซ็ตข้อมูลสำเร็จ');
       setAction(null);
       setTyped('');
     } catch (error) {
       console.error('Error resetting data:', error);
-      alert('ไม่สามารถรีเซ็ตข้อมูลได้');
+      toast.error('ไม่สามารถรีเซ็ตข้อมูลได้');
     } finally {
       setBusy(false);
     }
@@ -80,12 +81,12 @@ export default function SchoolDangerZone() {
       await firestoreService.deleteHub(userAccount.schoolId);
       if (userAccount.email) await firestoreService.deleteUserAccount(userAccount.email);
       invalidateCache();
-      alert('ลบข้อมูลโรงเรียนสำเร็จ');
+      toast.success('ลบข้อมูลโรงเรียนสำเร็จ');
       await signOut();
       router.push('/signup');
     } catch (error) {
       console.error('Error deleting data:', error);
-      alert('ไม่สามารถลบข้อมูลได้');
+      toast.error('ไม่สามารถลบข้อมูลได้');
     } finally {
       setBusy(false);
     }

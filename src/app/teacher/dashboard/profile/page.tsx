@@ -12,11 +12,12 @@ import type { FirebaseConfig } from '@/types/firebase.types';
 import { Edit, Save, X, Settings, Files, Eye, EyeOff, AlertTriangle, Loader2, BookOpen, Plus, Trash2, Clock, Calendar, Users, GraduationCap, ChevronRight, Search, CheckSquare, Square, Pencil } from 'lucide-react';
 import { GoogleBasicSubjectIcon, GoogleElectiveSubjectIcon } from '@/components/GoogleSubjectIcons';
 import { useTheme } from '@/contexts/ThemeContext';
-import Modal from '@/components/Modal';
+import Modal, { FormError } from '@/components/Modal';
 import Avatar from '@/components/Avatar';
 import { googlePhotoURL } from '@/lib/google-photo';
 import { buildHueMap, hueVars } from '@/lib/timetable';
-import { SkeletonGroup, SkeletonRows } from '@/components/Skeleton';
+import { Bone, SkeletonGroup, SkeletonRows } from '@/components/Skeleton';
+import { toast } from '@/components/Toast';
 
 function emptySubjectForm(): {
   subjectName: string;
@@ -68,6 +69,7 @@ export default function ProfilePage() {
   const [subjectToDelete, setSubjectToDelete] = useState<SubjectData | null>(null);
   const [isDeletingSubject, setIsDeletingSubject] = useState(false);
   const [isSavingSubject, setIsSavingSubject] = useState(false);
+  const [subjectFormError, setSubjectFormError] = useState('');
   const [teacherConfig, setTeacherConfig] = useState<TeacherFirebaseConfig | null>(null);
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
   const [studentClassFilter, setStudentClassFilter] = useState<string>('all');
@@ -189,6 +191,7 @@ export default function ProfilePage() {
         ? sub.schedules.map(sc => ({ ...sc }))
         : [{ day: sub.day || 'จันทร์', time: sub.time || '08:30-09:30', duration: sub.duration || '1' }],
     } : emptySubjectForm());
+    setSubjectFormError('');
     setShowAddSubjectModal(true);
   };
 
@@ -220,23 +223,24 @@ export default function ProfilePage() {
 
   const handleAddSubject = async (confirmedRemoval = false) => {
     if (!userAccount?.schoolFirebaseConfig || !userAccount?.userId) {
-      alert('ไม่พบข้อมูลครูผู้สอนหรือข้อมูลโรงเรียน');
+      toast.error('ไม่พบข้อมูลครูผู้สอนหรือข้อมูลโรงเรียน');
       return;
     }
     if (!newSubjectData.subjectName.trim()) {
-      alert('กรุณากรอกชื่อวิชา');
+      setSubjectFormError('กรุณากรอกชื่อวิชา');
       return;
     }
 
     let finalClassroom = newSubjectData.classroom.trim();
+    setSubjectFormError('');
     if (newSubjectData.subjectType === 'basic') {
       if (!finalClassroom) {
-        alert('กรุณาเลือกห้องเรียน');
+        setSubjectFormError('กรุณาเลือกห้องเรียน');
         return;
       }
     } else {
       if (newSubjectData.studentIds.length === 0) {
-        alert('กรุณาเลือกนักเรียนที่เรียนในวิชาเพิ่มเติมอย่างน้อย 1 คน');
+        setSubjectFormError('กรุณาเลือกนักเรียนที่เรียนในวิชาเพิ่มเติมอย่างน้อย 1 คน');
         return;
       }
       if (!finalClassroom) {
@@ -290,7 +294,7 @@ export default function ProfilePage() {
       closeSubjectEditor();
     } catch (error) {
       console.error('Error saving subject:', error);
-      alert(editingSubject ? 'ไม่สามารถบันทึกการแก้ไขได้' : 'ไม่สามารถเพิ่มวิชาเรียนได้');
+      toast.error(editingSubject ? 'ไม่สามารถบันทึกการแก้ไขได้' : 'ไม่สามารถเพิ่มวิชาเรียนได้');
     } finally {
       setIsSavingSubject(false);
     }
@@ -336,7 +340,7 @@ export default function ProfilePage() {
       setSubjectToDelete(null);
     } catch (error) {
       console.error('Error deleting subject:', error);
-      alert('ไม่สามารถลบวิชาเรียนได้');
+      toast.error('ไม่สามารถลบวิชาเรียนได้');
     } finally {
       setIsDeletingSubject(false);
     }
@@ -404,7 +408,7 @@ export default function ProfilePage() {
           setTeacherConfig(prev => (prev ? { ...prev, defaultRoom: room } : prev));
         } catch (error) {
           console.error('Error saving default room:', error);
-          alert('บันทึกห้องประจำไม่สำเร็จ ลองอีกครั้ง');
+          toast.error('บันทึกห้องประจำไม่สำเร็จ ลองอีกครั้ง');
           return;
         }
       }
@@ -566,7 +570,7 @@ export default function ProfilePage() {
       setIsEditingConfig(false);
       setValidatedConfigKey(null);
       setShowConfigPopup(false);
-      alert(`เปลี่ยนฐานข้อมูลครูเป็น ${normalizedConfigForm.projectId} เรียบร้อยแล้ว`);
+      toast.success(`เปลี่ยนฐานข้อมูลครูเป็น ${normalizedConfigForm.projectId} เรียบร้อยแล้ว`);
     } catch (err) {
       console.error('Error saving teacher config:', err);
       setConfigError('บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
@@ -719,7 +723,7 @@ export default function ProfilePage() {
                 <div className="text-lg font-bold leading-tight">วิชาที่สอน</div>
                 <div className="text-sm text-gray-500 dark:text-gray-400">
                   {loadingSubjects && teacherSubjects.length === 0
-                    ? 'กำลังโหลด…'
+                    ? <Bone className="mt-1.5 h-3.5 w-48 max-w-full" />
                     : `${new Set(teacherSubjects.map(s => s.subjectName)).size} วิชา · ${teacherSubjects.length} ห้อง · ห้องประจำ ${teacherConfig?.defaultRoom || '–'}`}
                 </div>
               </div>
@@ -1573,6 +1577,8 @@ export default function ProfilePage() {
                     )}
                   </div>
                 </div>
+
+                <FormError message={subjectFormError} />
 
                 {/* Modal Actions */}
                 <div className="flex gap-3 mt-5 pt-3 border-t border-gray-300/60 dark:border-white/10">

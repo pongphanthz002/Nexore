@@ -12,11 +12,13 @@ import UploadProgressModal, { UploadProgress } from '@/components/UploadProgress
 import { ActionButton, AdminPageHeader, Initial, RosterRow, SearchWell, SectionCard, SelectionBar, UploadButton } from '@/components/admin/AdminUI';
 import { buildHueMap, hueColor } from '@/lib/timetable';
 import * as XLSX from 'xlsx';
-import { Download, Upload, Trash2, Plus, ArrowLeft, Search, BookOpen, Calendar, Clock, Loader2, X, ChevronRight, Pencil } from 'lucide-react';
+import { Download, Upload, Trash2, Plus, Search, BookOpen, Calendar, Clock, Loader2, X, ChevronRight, Pencil } from 'lucide-react';
 import { GoogleBasicSubjectIcon, GoogleElectiveSubjectIcon } from '@/components/GoogleSubjectIcons';
 import { useTheme } from '@/contexts/ThemeContext';
-import Modal from '@/components/Modal';
+import Modal, { FormError } from '@/components/Modal';
 import { Bone, SkeletonGroup, SkeletonRows } from '@/components/Skeleton';
+import { toast } from '@/components/Toast';
+import { askConfirm } from '@/components/ConfirmHost';
 
 function emptySubjectForm(teacherId = ''): {
   teacherId: string;
@@ -50,11 +52,9 @@ export default function SubjectsManagement() {
   const [selectedSubjects, setSelectedSubjects] = useState<Set<string>>(new Set());
   const [showAddModal, setShowAddModal] = useState(false);
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
-  const [swipeProgress, setSwipeProgress] = useState(0);
-  const [isSwiping, setIsSwiping] = useState(false);
-  const [touchStartX, setTouchStartX] = useState(0);
   const { isDark } = useTheme();
   const [isSavingSubject, setIsSavingSubject] = useState(false);
+  const [subjectFormError, setSubjectFormError] = useState('');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
   const [studentClassFilter, setStudentClassFilter] = useState<string>('all');
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
@@ -198,7 +198,7 @@ export default function SubjectsManagement() {
       await downloadSubjectSheet(subjects);
     } catch (error) {
       console.error('Error downloading subjects:', error);
-      alert('ดาวน์โหลดไฟล์ไม่สำเร็จ');
+      toast.error('ดาวน์โหลดไฟล์ไม่สำเร็จ');
     }
   };
 
@@ -209,7 +209,7 @@ export default function SubjectsManagement() {
     if (!file) return;
 
     if (!userAccount?.schoolFirebaseConfig) {
-      alert('ไม่พบ School Firebase Config');
+      toast.error('ไม่พบ School Firebase Config');
       return;
     }
 
@@ -336,7 +336,7 @@ export default function SubjectsManagement() {
     } catch (error) {
       console.error('Error uploading subjects:', error);
       setUploadProgress(null);
-      alert('ไม่สามารถอัพโหลดรายชื่อวิชาเรียนได้');
+      toast.error('ไม่สามารถอัพโหลดรายชื่อวิชาเรียนได้');
     } finally {
       setUploadProgress(null);
       setLoading(false);
@@ -353,7 +353,7 @@ export default function SubjectsManagement() {
     } catch (error) {
       console.error('Error uploading subjects:', error);
       setUploadProgress(null);
-      alert('ไม่สามารถอัพโหลดรายชื่อวิชาเรียนได้');
+      toast.error('ไม่สามารถอัพโหลดรายชื่อวิชาเรียนได้');
     } finally {
       setUploadProgress(null);
       setLoading(false);
@@ -402,9 +402,9 @@ export default function SubjectsManagement() {
     invalidateCache();
     setUploadProgress(null);
     if (failedSubjects.length > 0) {
-      alert(`ลบวิชาบางวิชาไม่สำเร็จ: ${failedSubjects.join(', ')}`);
+      toast.warn(`ลบวิชาบางวิชาไม่สำเร็จ: ${failedSubjects.join(', ')}`);
     }
-    alert('อัพโหลดรายชื่อวิชาเรียนสำเร็จ');
+    toast.success('อัพโหลดรายชื่อวิชาเรียนสำเร็จ');
   };
 
   /** Students enrolled in a subject: its whole classroom, or an elective's listed students. */
@@ -428,6 +428,7 @@ export default function SubjectsManagement() {
       studentIds: sub.studentIds || [],
       schedules: sub.schedules?.length ? sub.schedules : [{ day: sub.day || 'จันทร์', time: sub.time || '08:30-09:30', duration: sub.duration || '1' }],
     } : emptySubjectForm(selectedTeacherId));
+    setSubjectFormError('');
     setShowAddModal(true);
   };
 
@@ -439,19 +440,20 @@ export default function SubjectsManagement() {
   const handleAddSubject = async (confirmedRemoval = false) => {
     if (!userAccount?.schoolFirebaseConfig) return;
     if (!newSubject.teacherId || !newSubject.subjectName.trim()) {
-      alert('กรุณากรอกข้อมูลให้ครบ');
+      setSubjectFormError('กรุณาเลือกครูและกรอกชื่อวิชา');
       return;
     }
 
     let finalClassroom = newSubject.classroom.trim();
+    setSubjectFormError('');
     if (newSubject.subjectType === 'basic') {
       if (!finalClassroom) {
-        alert('กรุณาเลือกห้องเรียน');
+        setSubjectFormError('กรุณาเลือกห้องเรียน');
         return;
       }
     } else {
       if (newSubject.studentIds.length === 0) {
-        alert('กรุณาเลือกนักเรียนที่เรียนในวิชาเพิ่มเติมอย่างน้อย 1 คน');
+        setSubjectFormError('กรุณาเลือกนักเรียนที่เรียนในวิชาเพิ่มเติมอย่างน้อย 1 คน');
         return;
       }
       if (!finalClassroom) {
@@ -505,7 +507,7 @@ export default function SubjectsManagement() {
       setNewSubject(emptySubjectForm());
     } catch (error) {
       console.error('Error saving subject:', error);
-      alert(editingSubject ? 'ไม่สามารถบันทึกการแก้ไขได้' : 'ไม่สามารถเพิ่มวิชาเรียนได้');
+      toast.error(editingSubject ? 'ไม่สามารถบันทึกการแก้ไขได้' : 'ไม่สามารถเพิ่มวิชาเรียนได้');
     } finally {
       setIsSavingSubject(false);
     }
@@ -515,7 +517,7 @@ export default function SubjectsManagement() {
     if (selectedSubjects.size === 0) return;
     if (!userAccount?.schoolFirebaseConfig) return;
 
-    if (!confirm(`ยืนยันการลบ ${selectedSubjects.size} วิชาเรียน? (รวมข้อมูลที่เกี่ยวข้องทั้งหมด เช่น คะแนน เช็คชื่อ การบ้าน ตารางเรียน สื่อการสอน)`)) return;
+    if (!(await askConfirm({ title: `ลบ ${selectedSubjects.size} วิชา?`, message: 'ข้อมูลที่เกี่ยวข้องทั้งหมด เช่น คะแนน เช็คชื่อ การบ้าน ตารางเรียน และสื่อการสอน จะถูกลบและกู้คืนไม่ได้', confirmLabel: 'ลบ', tone: 'danger' }))) return;
 
     setLoading(true);
     try {
@@ -555,10 +557,10 @@ export default function SubjectsManagement() {
       setSelectedSubjects(new Set());
       await loadData(true);
       invalidateCache();
-      alert('ลบวิชาเรียนและข้อมูลที่เกี่ยวข้องทั้งหมดสำเร็จ');
+      toast.success('ลบวิชาเรียนและข้อมูลที่เกี่ยวข้องทั้งหมดสำเร็จ');
     } catch (error) {
       console.error('Error deleting subjects:', error);
-      alert('ไม่สามารถลบวิชาเรียนได้');
+      toast.error('ไม่สามารถลบวิชาเรียนได้');
     } finally {
       setLoading(false);
     }
@@ -592,59 +594,6 @@ export default function SubjectsManagement() {
     if (longPressTimer) {
       clearTimeout(longPressTimer);
       setLongPressTimer(null);
-    }
-  };
-
-  // Swipe gesture handlers for back navigation
-  const handleTouchStart = (e: React.TouchEvent) => {
-    const touchX = e.touches[0].clientX;
-
-    // Prevent iOS Safari edge swipe-to-go-back gesture
-    if (touchX < 50) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-
-    // Only allow swipe from left edge (within 50px)
-    if (touchX < 50) {
-      setTouchStartX(touchX);
-      setIsSwiping(true);
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isSwiping) return;
-    const currentX = e.touches[0].clientX;
-    const diff = currentX - touchStartX;
-
-    // Only track left-to-right swipe
-    if (diff > 0) {
-      const progress = Math.min(diff / 200, 1); // 200px threshold
-      setSwipeProgress(progress);
-    }
-  };
-
-  const handleTouchEnd = () => {
-    if (!isSwiping) return;
-
-    // If swiped more than 50% of threshold, go back
-    if (swipeProgress > 0.5) {
-      router.back();
-    }
-
-    // Reset state
-    setSwipeProgress(0);
-    setIsSwiping(false);
-    setTouchStartX(0);
-  };
-
-  // Trackpad gesture handlers for laptops
-  const handleWheel = (e: React.WheelEvent) => {
-    // Check if it's a horizontal scroll (trackpad gesture)
-    // Mac trackpad: deltaX negative = left-to-right swipe (back gesture)
-    if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && e.deltaX < -50) {
-      // Left-to-right scroll - trigger back immediately
-      router.back();
     }
   };
 
@@ -727,30 +676,7 @@ export default function SubjectsManagement() {
   return (
     <div
       className="min-h-screen bg-surface px-4 pb-28 pt-2 text-gray-900 sm:px-6 dark:text-gray-50"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onWheel={handleWheel}
     >
-      {/* Swipe visual feedback */}
-      {isSwiping && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: swipeProgress * 0.3 }}
-          className="fixed inset-0 bg-black pointer-events-none z-50"
-        />
-      )}
-
-      {/* Swipe indicator arrow */}
-      {isSwiping && swipeProgress > 0.1 && (
-        <motion.div
-          initial={{ opacity: 0, x: -50 }}
-          animate={{ opacity: swipeProgress, x: swipeProgress * 100 - 50 }}
-          className="fixed left-4 top-1/2 -translate-y-1/2 z-50 pointer-events-none"
-        >
-          <ArrowLeft size={48} className="text-white opacity-50" />
-        </motion.div>
-      )}
       <div className="mx-auto max-w-5xl">
         <AdminPageHeader
           title="วิชาเรียน"
@@ -1466,6 +1392,8 @@ export default function SubjectsManagement() {
                   )}
                 </div>
               </div>
+
+              <FormError message={subjectFormError} />
 
               {/* Modal Actions */}
               <div className="flex gap-3 mt-5 pt-3 border-t border-gray-300/60 dark:border-white/10">

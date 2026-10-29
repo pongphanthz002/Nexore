@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter, useSearchParams } from 'next/navigation';
+import LoadingScreen from '@/components/LoadingScreen';
 
 function FirebaseSetupGuideContent() {
   const router = useRouter();
@@ -294,7 +295,7 @@ function FirebaseSetupGuideContent() {
 
 export default function FirebaseSetupGuide() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-surface text-gray-900 dark:text-gray-50 flex items-center justify-center">กำลังโหลด…</div>}>
+    <Suspense fallback={<LoadingScreen />}>
       <FirebaseSetupGuideContent />
     </Suspense>
   );

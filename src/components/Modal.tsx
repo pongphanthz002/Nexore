@@ -3,7 +3,7 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
+import { AlertCircle, X } from 'lucide-react';
 
 /**
  * The app's one popup: a soft-UI surface panel over a dimmed page, rendered into <body> so a transformed
@@ -206,5 +206,16 @@ export function ConfirmDialog({
         </button>
       </div>
     </Modal>
+  );
+}
+
+/** A form's validation message, shown above its buttons (in place of an alert). Renders nothing when empty. */
+export function FormError({ message, className = 'mt-4' }: { message?: string | null; className?: string }) {
+  if (!message) return null;
+  return (
+    <p role="alert" className={`flex items-start gap-2 rounded-xl px-3.5 py-2.5 text-sm font-medium text-red-700 shadow-neu-in-sm dark:text-red-400 ${className}`}>
+      <AlertCircle size={18} className="mt-px flex-none" aria-hidden />
+      <span>{message}</span>
+    </p>
   );
 }

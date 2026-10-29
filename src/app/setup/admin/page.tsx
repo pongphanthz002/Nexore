@@ -8,6 +8,7 @@ import { MasterRegistryConfig } from '@/types';
 import { firestoreService, Hub, FirebaseConfig } from '@/services/firestore.service';
 import { useAuth } from '@/contexts/AuthContext';
 import { UserAccount } from '@/contexts/AuthContext';
+import { toast } from '@/components/Toast';
 
 export default function AdminSetup() {
   const router = useRouter();
@@ -79,7 +80,7 @@ export default function AdminSetup() {
           console.log('User account saved successfully');
         } catch (error) {
           console.error('Error saving user account to Master Registry:', error);
-          alert('Failed to save user account: ' + (error instanceof Error ? error.message : 'Unknown error'));
+          toast.error('บันทึกบัญชีไม่สำเร็จ: ' + (error instanceof Error ? error.message : 'Unknown error'));
           setLoading(false);
           return;
         }
@@ -103,7 +104,7 @@ export default function AdminSetup() {
         }
       } else {
         console.error('User email or UID is missing, cannot save user account');
-        alert('User information is missing. Please try signing in again.');
+        toast.error('ไม่พบข้อมูลผู้ใช้ กรุณาเข้าสู่ระบบอีกครั้ง');
         setLoading(false);
         return;
       }
@@ -112,7 +113,7 @@ export default function AdminSetup() {
       router.push('/admin/dashboard');
     } catch (error) {
       console.error('Error saving config:', error);
-      alert('Failed to save configuration: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      toast.error('บันทึกการตั้งค่าไม่สำเร็จ: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setLoading(false);
     }
@@ -131,7 +132,7 @@ export default function AdminSetup() {
       }
       
       if (!user?.email) {
-        alert('กรุณาล็อกอินด้วย Google');
+        toast.error('กรุณาล็อกอินด้วย Google');
         setLoading(false);
         return;
       }
@@ -168,7 +169,7 @@ export default function AdminSetup() {
 
       if (!user?.email || !user?.uid) {
         console.error('User email or UID is missing, cannot save user account');
-        alert('User information is missing. Please try signing in again.');
+        toast.error('ไม่พบข้อมูลผู้ใช้ กรุณาเข้าสู่ระบบอีกครั้ง');
         setLoading(false);
         return;
       }
@@ -179,7 +180,7 @@ export default function AdminSetup() {
         console.log('User account saved successfully');
       } catch (error) {
         console.error('Error saving user account to Master Registry:', error);
-        alert('Failed to save user account: ' + (error instanceof Error ? error.message : 'Unknown error'));
+        toast.error('บันทึกบัญชีไม่สำเร็จ: ' + (error instanceof Error ? error.message : 'Unknown error'));
         setLoading(false);
         return;
       }
@@ -209,7 +210,7 @@ export default function AdminSetup() {
     } catch (error) {
       console.error('Error saving hub to Firestore:', error);
       console.error('Error details:', JSON.stringify(error, null, 2));
-      alert('ไม่สามารถบันทึกข้อมูล Hub ได้ กรุณาตรวจสอบ Firestore Rules ใน Firebase Console');
+      toast.error('ไม่สามารถบันทึกข้อมูล Hub ได้ กรุณาตรวจสอบ Firestore Rules ใน Firebase Console');
       setLoading(false);
     }
   };
@@ -267,7 +268,7 @@ export default function AdminSetup() {
                   type="text"
                   value={config.schoolName || ''}
                   onChange={(e) => handleConfigChange('schoolName', e.target.value)}
-                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-xl p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -278,7 +279,7 @@ export default function AdminSetup() {
                   type="text"
                   value={config.schoolApiKey || ''}
                   onChange={(e) => handleConfigChange('schoolApiKey', e.target.value)}
-                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-xl p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -289,7 +290,7 @@ export default function AdminSetup() {
                   type="text"
                   value={config.schoolAuthDomain || ''}
                   onChange={(e) => handleConfigChange('schoolAuthDomain', e.target.value)}
-                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-xl p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -300,7 +301,7 @@ export default function AdminSetup() {
                   type="text"
                   value={config.schoolProjectId || ''}
                   onChange={(e) => handleConfigChange('schoolProjectId', e.target.value)}
-                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-xl p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -311,7 +312,7 @@ export default function AdminSetup() {
                   type="text"
                   value={config.schoolStorageBucket || ''}
                   onChange={(e) => handleConfigChange('schoolStorageBucket', e.target.value)}
-                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-xl p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -322,7 +323,7 @@ export default function AdminSetup() {
                   type="text"
                   value={config.schoolMessagingSenderId || ''}
                   onChange={(e) => handleConfigChange('schoolMessagingSenderId', e.target.value)}
-                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-xl p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -333,7 +334,7 @@ export default function AdminSetup() {
                   type="text"
                   value={config.schoolAppId || ''}
                   onChange={(e) => handleConfigChange('schoolAppId', e.target.value)}
-                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-xl p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -341,7 +342,7 @@ export default function AdminSetup() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-gray-900 text-white dark:bg-gray-50 dark:text-gray-900 font-bold py-3 rounded-lg hover:bg-black dark:hover:bg-white active:scale-[0.98] transition-[background-color,transform] duration-150 disabled:opacity-50"
+                className="w-full bg-gray-900 text-white dark:bg-gray-50 dark:text-gray-900 font-bold py-3 rounded-xl shadow-neu-sm hover:bg-black dark:hover:bg-white active:scale-[0.98] active:shadow-none transition-[background-color,box-shadow,transform] duration-150 disabled:opacity-50"
               >
                 {loading ? 'กำลังบันทึก...' : 'ถัดไป'}
               </button>

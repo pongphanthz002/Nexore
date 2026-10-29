@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useState, useEffect, useRef } from 'react';
+import { toast } from '@/components/Toast';
 
 export default function LoginSignup() {
   const router = useRouter();
@@ -24,7 +25,7 @@ export default function LoginSignup() {
       signupErrorRef.current = true;
       setSignupValidation(true);
       signOut().finally(() => {
-        alert('บัญชีนี้เคยลงทะเบียนแล้ว');
+        toast.error('บัญชีนี้เคยลงทะเบียนแล้ว');
         setIsSignup(false);
         setLoading(false);
         setTimeout(() => { signupErrorRef.current = false; }, 5000);
@@ -59,7 +60,7 @@ export default function LoginSignup() {
       // The effect above redirects once AuthContext has resolved the account
     } catch (error) {
       console.error('Error signing in:', error);
-      alert('เข้าสู่ระบบไม่สำเร็จ: ' + (error as Error).message);
+      toast.error('เข้าสู่ระบบไม่สำเร็จ: ' + (error as Error).message);
       setLoading(false);
     }
   };
@@ -72,7 +73,7 @@ export default function LoginSignup() {
       // The effect above checks for an existing account and redirects
     } catch (error) {
       console.error('Error signing up:', error);
-      alert('เข้าสู่ระบบไม่สำเร็จ: ' + (error as Error).message);
+      toast.error('เข้าสู่ระบบไม่สำเร็จ: ' + (error as Error).message);
       setIsSignup(false);
       setLoading(false);
     }

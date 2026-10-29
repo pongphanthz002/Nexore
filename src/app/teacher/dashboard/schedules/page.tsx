@@ -23,6 +23,7 @@ import { useTeacherRoster } from '@/hooks/useTeacherRoster';
 import { studentAttendanceTotals, type StudentAttendanceTotals } from '@/lib/attendance';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Bone, SkeletonCard, SkeletonGroup, SkeletonRows } from '@/components/Skeleton';
+import { toast } from '@/components/Toast';
 
 // Parse "08:30-09:30" → { startMinutes, endMinutes }
 function parseTimeRange(time: string): { startMinutes: number; endMinutes: number } | null {
@@ -321,7 +322,7 @@ function SchedulesContent() {
 
   const handleDownloadExcel = async () => {
     if (selectedSubjectsForDownload.length === 0) {
-      alert('โปรดเลือกอย่างน้อยหนึ่งวิชา');
+      toast.warn('โปรดเลือกอย่างน้อยหนึ่งวิชา');
       return;
     }
 
@@ -446,7 +447,7 @@ function SchedulesContent() {
       }
 
       if (wb.SheetNames.length === 0) {
-        alert('ไม่พบข้อมูลในช่วงเวลาที่เลือก');
+        toast.error('ไม่พบข้อมูลในช่วงเวลาที่เลือก');
         return;
       }
 
@@ -458,7 +459,7 @@ function SchedulesContent() {
       setShowDownloadModal(false);
     } catch (error) {
       console.error('Download error:', error);
-      alert('เกิดข้อผิดพลาดในการดาวน์โหลด');
+      toast.error('เกิดข้อผิดพลาดในการดาวน์โหลด');
     } finally {
       setIsDownloading(false);
     }
@@ -542,7 +543,7 @@ function SchedulesContent() {
     // Use teacher's Firebase config if available, otherwise use school config (for admin teachers)
     const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
     if (!firebaseConfig) {
-      alert('ไม่พบ Firebase Config กรุณาติดต่อผู้ดูแลระบบ');
+      toast.error('ไม่พบ Firebase Config กรุณาติดต่อผู้ดูแลระบบ');
       return;
     }
 
@@ -610,7 +611,7 @@ function SchedulesContent() {
     // Use teacher's Firebase config if available, otherwise use school config (for admin teachers)
     const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
     if (!firebaseConfig) {
-      alert('ไม่พบ Firebase Config กรุณาติดต่อผู้ดูแลระบบ');
+      toast.error('ไม่พบ Firebase Config กรุณาติดต่อผู้ดูแลระบบ');
       return;
     }
 
@@ -632,7 +633,7 @@ function SchedulesContent() {
         updatedAt: new Date(),
       }));
       await Promise.all(saved.map(data => teacherDatabaseService.saveAttendance(firebaseConfig, data)));
-      alert(group.length > 1 ? `บันทึกเช็คชื่อ ${group.length} ห้องสำเร็จ` : 'บันทึกเช็คชื่อสำเร็จ');
+      toast.success(group.length > 1 ? `บันทึกเช็คชื่อ ${group.length} ห้องสำเร็จ` : 'บันทึกเช็คชื่อสำเร็จ');
 
       // Update todayAttendance state after successful save
       const todayFormatted = formatDate(new Date());
@@ -655,7 +656,7 @@ function SchedulesContent() {
       }
     } catch (error) {
       console.error('Error saving attendance:', error);
-      alert('เกิดข้อผิดพลาดในการบันทึก');
+      toast.error('เกิดข้อผิดพลาดในการบันทึก');
     } finally {
       setLoadingAttendance(false);
     }
@@ -683,26 +684,7 @@ function SchedulesContent() {
     router.replace('/teacher/dashboard/schedules');
   };
 
-  if (loading) {
-    return (
-      <div className="p-6">
-        <div className="max-w-7xl mx-auto space-y-6">
-          <SkeletonGroup label="กำลังโหลดวิชา" className="space-y-6">
-            <SkeletonCard>
-              <Bone className="mb-4 h-7 w-48" />
-              <Bone className="h-20 w-full !rounded-2xl" />
-            </SkeletonCard>
-            <SkeletonCard>
-              <Bone className="mb-4 h-7 w-40" />
-              <div className="space-y-3">
-                {[0, 1, 2].map(i => <Bone key={i} className="h-16 w-full !rounded-2xl" />)}
-              </div>
-            </SkeletonCard>
-          </SkeletonGroup>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <SchedulesSkeleton />;
 
   return (
     <div className="p-6">
@@ -1161,9 +1143,30 @@ function SchedulesContent() {
   );
 }
 
+function SchedulesSkeleton() {
+  return (
+    <div className="p-6">
+      <div className="max-w-7xl mx-auto space-y-6">
+        <SkeletonGroup label="กำลังโหลดวิชา" className="space-y-6">
+          <SkeletonCard>
+            <Bone className="mb-4 h-7 w-48" />
+            <Bone className="h-20 w-full !rounded-2xl" />
+          </SkeletonCard>
+          <SkeletonCard>
+            <Bone className="mb-4 h-7 w-40" />
+            <div className="space-y-3">
+              {[0, 1, 2].map(i => <Bone key={i} className="h-16 w-full !rounded-2xl" />)}
+            </div>
+          </SkeletonCard>
+        </SkeletonGroup>
+      </div>
+    </div>
+  );
+}
+
 export default function SchedulesPage() {
   return (
-    <Suspense fallback={<div className="p-6">กำลังโหลด...</div>}>
+    <Suspense fallback={<SchedulesSkeleton />}>
       <SchedulesContent />
     </Suspense>
   );

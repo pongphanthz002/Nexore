@@ -9,6 +9,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { firestoreService, Hub } from '@/services/firestore.service';
 import { schoolDatabaseService, TeacherFirebaseConfig } from '@/services/school-database.service';
 import { UserAccount } from '@/contexts/AuthContext';
+import { toast } from '@/components/Toast';
+import { FormError } from '@/components/Modal';
+import LoadingScreen from '@/components/LoadingScreen';
 
 function TeacherSetupContent() {
   const router = useRouter();
@@ -18,7 +21,7 @@ function TeacherSetupContent() {
   const [loading, setLoading] = useState(false);
   const [schoolId, setSchoolId] = useState<string>('');
   const [schoolFirebaseConfig, setSchoolFirebaseConfig] = useState<any>(null);
-  const [showTooltip, setShowTooltip] = useState(false);
+  const [stepError, setStepError] = useState('');
   const [teacherFirebaseConfig, setTeacherFirebaseConfig] = useState({
     apiKey: '',
     authDomain: '',
@@ -53,10 +56,12 @@ function TeacherSetupContent() {
 
   const handleSchoolIdSubmit = async () => {
     if (!schoolId.trim()) {
-      alert('กรุณากรอก School ID');
+      setStepError('กรุณากรอก School ID');
       return;
     }
 
+    setStepError('');
+    setLoading(true);
     try {
       // Fetch school hub from Master Registry to get school's Firebase config
       const schoolHub = await firestoreService.getHub(schoolId.trim());
@@ -68,11 +73,13 @@ function TeacherSetupContent() {
         localStorage.setItem('teacherSetup_step', '2');
         setStep(2);
       } else {
-        alert('ไม่พบข้อมูลโรงเรียนในระบบ');
+        setStepError('ไม่พบข้อมูลโรงเรียนในระบบ');
       }
     } catch (error) {
       console.error('Error fetching school hub:', error);
-      alert('ไม่สามารถดึงข้อมูลโรงเรียนได้');
+      toast.error('ไม่สามารถดึงข้อมูลโรงเรียนได้');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -82,7 +89,7 @@ function TeacherSetupContent() {
     try {
       // Use schoolFirebaseConfig from state (fetched in handleSchoolIdSubmit)
       if (!schoolFirebaseConfig) {
-        alert('ไม่พบ School Firebase Config กรุณาติดต่อแอดมิน');
+        toast.error('ไม่พบ School Firebase Config กรุณาติดต่อแอดมิน');
         setLoading(false);
         return;
       }
@@ -91,14 +98,14 @@ function TeacherSetupContent() {
       const teacherData = await schoolDatabaseService.getTeacherConfig(schoolFirebaseConfig, teacherId.trim());
 
       if (!teacherData) {
-        alert('เลขประจำตัวครูไม่พบในระบบ กรุณาติดต่อแอดมิน');
+        setStepError('เลขประจำตัวครูไม่พบในระบบ กรุณาติดต่อแอดมิน');
         setLoading(false);
         return;
       }
 
       // Check if teacher already has email/uid assigned
       if (teacherData.email || teacherData.uid) {
-        alert('เลขประจำตัวนี้ถูกใช้งานแล้ว');
+        setStepError('เลขประจำตัวนี้ถูกใช้งานแล้ว');
         setLoading(false);
         return;
       }
@@ -109,7 +116,7 @@ function TeacherSetupContent() {
       setStep(3);
     } catch (error) {
       console.error('Error verifying ID:', error);
-      alert('Teacher ID not found in registry');
+      setStepError('ไม่พบเลขประจำตัวครูในระบบ');
     } finally {
       setLoading(false);
     }
@@ -125,7 +132,7 @@ function TeacherSetupContent() {
       }
       
       if (!user?.email) {
-        alert('กรุณาล็อกอินด้วย Google');
+        toast.error('กรุณาล็อกอินด้วย Google');
         setLoading(false);
         return;
       }
@@ -134,7 +141,7 @@ function TeacherSetupContent() {
       const teacherData = await schoolDatabaseService.getTeacherConfig(schoolFirebaseConfig, teacherId);
       
       if (!teacherData) {
-        alert('ไม่พบข้อมูลครู กรุณาติดต่อแอดมิน');
+        toast.error('ไม่พบข้อมูลครู กรุณาติดต่อแอดมิน');
         setLoading(false);
         return;
       }
@@ -188,7 +195,7 @@ function TeacherSetupContent() {
       router.push('/teacher/dashboard');
     } catch (error) {
       console.error('Error in node binding:', error);
-      alert('Failed to register teacher node');
+      toast.error('ลงทะเบียนครูไม่สำเร็จ');
     } finally {
       setLoading(false);
     }
@@ -248,35 +255,24 @@ function TeacherSetupContent() {
             </p>
 
             <div className="space-y-4">
-              <div className="relative">
+              <div>
                 <input
                   type="text"
                   value={schoolId}
-                  onChange={(e) => setSchoolId(e.target.value)}
+                  onChange={(e) => { setSchoolId(e.target.value); setStepError(''); }}
                   placeholder="ใส่ School ID ของโรงเรียน"
-                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors pr-10"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-xl p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
+                  aria-describedby="school-id-hint"
                 />
-                <button
-                  type="button"
-                  onMouseEnter={() => setShowTooltip(true)}
-                  onMouseLeave={() => setShowTooltip(false)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </button>
-                {showTooltip && (
-                  <div className="absolute right-0 top-full mt-2 w-64 bg-gray-800 text-white text-sm rounded-lg p-3 shadow-lg z-10">
-                    School ID คือรหัสประจำโรงเรียน<br/>ขอรับได้จากผู้ดูแล
-                  </div>
-                )}
+                <p id="school-id-hint" className="mt-2 text-sm text-gray-500">School ID คือรหัสประจำโรงเรียน ขอรับได้จากผู้ดูแลระบบของโรงเรียน</p>
               </div>
+
+              <FormError message={stepError} className="" />
 
               <button
                 onClick={handleSchoolIdSubmit}
                 disabled={loading}
-                className="w-full bg-gray-900 text-white dark:bg-gray-50 dark:text-gray-900 font-bold py-3 rounded-lg hover:bg-black dark:hover:bg-white active:scale-[0.98] transition-[background-color,transform] duration-150 disabled:opacity-50"
+                className="w-full bg-gray-900 text-white dark:bg-gray-50 dark:text-gray-900 font-bold py-3 rounded-xl shadow-neu-sm hover:bg-black dark:hover:bg-white active:scale-[0.98] active:shadow-none transition-[background-color,box-shadow,transform] duration-150 disabled:opacity-50"
               >
                 {loading ? 'กำลังตรวจสอบ...' : 'ถัดไป'}
               </button>
@@ -314,17 +310,19 @@ function TeacherSetupContent() {
                 <input
                   type="text"
                   value={teacherId}
-                  onChange={(e) => setTeacherId(e.target.value)}
-                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
+                  onChange={(e) => { setTeacherId(e.target.value); setStepError(''); }}
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-xl p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
                   placeholder="เช่น T001"
                   required
                 />
               </div>
 
+              <FormError message={stepError} className="" />
+
               <button
                 onClick={handleIDVerification}
                 disabled={loading}
-                className="w-full bg-gray-900 text-white dark:bg-gray-50 dark:text-gray-900 font-bold py-3 rounded-lg hover:bg-black dark:hover:bg-white active:scale-[0.98] transition-[background-color,transform] duration-150 disabled:opacity-50"
+                className="w-full bg-gray-900 text-white dark:bg-gray-50 dark:text-gray-900 font-bold py-3 rounded-xl shadow-neu-sm hover:bg-black dark:hover:bg-white active:scale-[0.98] active:shadow-none transition-[background-color,box-shadow,transform] duration-150 disabled:opacity-50"
               >
                 {loading ? 'กำลังยืนยัน...' : 'ยืนยัน'}
               </button>
@@ -363,7 +361,7 @@ function TeacherSetupContent() {
                   type="text"
                   value={teacherFirebaseConfig.apiKey}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, apiKey: e.target.value})}
-                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-xl p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -374,7 +372,7 @@ function TeacherSetupContent() {
                   type="text"
                   value={teacherFirebaseConfig.authDomain}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, authDomain: e.target.value})}
-                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-xl p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -385,7 +383,7 @@ function TeacherSetupContent() {
                   type="text"
                   value={teacherFirebaseConfig.projectId}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, projectId: e.target.value})}
-                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-xl p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -396,7 +394,7 @@ function TeacherSetupContent() {
                   type="text"
                   value={teacherFirebaseConfig.storageBucket}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, storageBucket: e.target.value})}
-                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-xl p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -407,7 +405,7 @@ function TeacherSetupContent() {
                   type="text"
                   value={teacherFirebaseConfig.messagingSenderId}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, messagingSenderId: e.target.value})}
-                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-xl p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -418,7 +416,7 @@ function TeacherSetupContent() {
                   type="text"
                   value={teacherFirebaseConfig.appId}
                   onChange={(e) => setTeacherFirebaseConfig({...teacherFirebaseConfig, appId: e.target.value})}
-                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-lg p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
+                  className="w-full bg-surface border border-transparent shadow-neu-in-sm rounded-xl p-3 text-gray-900 dark:text-gray-50 focus:border-gray-400 focus:outline-none transition-colors"
                   required
                 />
               </div>
@@ -426,7 +424,7 @@ function TeacherSetupContent() {
               <button
                 onClick={handleNodeBinding}
                 disabled={loading}
-                className="w-full bg-gray-900 text-white dark:bg-gray-50 dark:text-gray-900 font-bold py-3 rounded-lg hover:bg-black dark:hover:bg-white active:scale-[0.98] transition-[background-color,transform] duration-150 disabled:opacity-50"
+                className="w-full bg-gray-900 text-white dark:bg-gray-50 dark:text-gray-900 font-bold py-3 rounded-xl shadow-neu-sm hover:bg-black dark:hover:bg-white active:scale-[0.98] active:shadow-none transition-[background-color,box-shadow,transform] duration-150 disabled:opacity-50"
               >
                 {loading ? 'กำลังบันทึก...' : 'ถัดไป'}
               </button>
@@ -450,7 +448,7 @@ function TeacherSetupContent() {
 
 export default function TeacherSetup() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-surface text-gray-900 dark:text-gray-50 flex items-center justify-center">กำลังโหลด…</div>}>
+    <Suspense fallback={<LoadingScreen />}>
       <TeacherSetupContent />
     </Suspense>
   );

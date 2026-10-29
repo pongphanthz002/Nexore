@@ -11,10 +11,12 @@ import { runPool } from '@/lib/firestore-helpers';
 import UploadProgressModal, { UploadProgress } from '@/components/UploadProgressModal';
 import { ActionButton, AdminPageHeader, Initial, RosterRow, SearchWell, SectionCard, SelectionBar, StatusPill, UploadButton } from '@/components/admin/AdminUI';
 import * as XLSX from 'xlsx';
-import { Eye, EyeOff, Edit, RefreshCw, Trash2, Download, Upload, Plus, ArrowLeft, Search, X } from 'lucide-react';
+import { Eye, EyeOff, Edit, RefreshCw, Trash2, Download, Upload, Plus, Search, X } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
-import Modal from '@/components/Modal';
+import Modal, { FormError } from '@/components/Modal';
 import { Bone, SkeletonGroup, SkeletonRows } from '@/components/Skeleton';
+import { toast } from '@/components/Toast';
+import { askConfirm } from '@/components/ConfirmHost';
 
 export default function TeachersManagement() {
   const router = useRouter();
@@ -31,6 +33,7 @@ export default function TeachersManagement() {
   const { isDark } = useTheme();
   const [showUID, setShowUID] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [formError, setFormError] = useState('');
   const [editTeacherData, setEditTeacherData] = useState({
     teacherId: '',
     name: ''
@@ -38,9 +41,6 @@ export default function TeachersManagement() {
   const [selectedTeachers, setSelectedTeachers] = useState<Set<string>>(new Set());
   const [showAddModal, setShowAddModal] = useState(false);
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
-  const [swipeProgress, setSwipeProgress] = useState(0);
-  const [isSwiping, setIsSwiping] = useState(false);
-  const [touchStartX, setTouchStartX] = useState(0);
   const [newTeacherData, setNewTeacherData] = useState({
     teacherId: '',
     name: '',
@@ -115,7 +115,7 @@ export default function TeachersManagement() {
     if (!file) return;
 
     if (!userAccount?.schoolFirebaseConfig) {
-      alert('ไม่พบ School Firebase Config กรุณาทำ Admin Setup ก่อน');
+      toast.error('ไม่พบ School Firebase Config กรุณาทำ Admin Setup ก่อน');
       return;
     }
 
@@ -166,11 +166,11 @@ export default function TeachersManagement() {
       setUploadProgress(p => p && { ...p, label: 'กำลังโหลดรายชื่อล่าสุด', done: 0, total: 0 });
       await loadTeachers(true);
       setUploadProgress(null);
-      alert('อัพโหลดรายชื่อครูสำเร็จ');
+      toast.success('อัพโหลดรายชื่อครูสำเร็จ');
     } catch (error) {
       console.error('Error uploading teachers:', error);
       setUploadProgress(null);
-      alert('ไม่สามารถอัพโหลดรายชื่อครูได้');
+      toast.error('ไม่สามารถอัพโหลดรายชื่อครูได้');
     } finally {
       setUploadProgress(null);
       setLoading(false);
@@ -179,7 +179,7 @@ export default function TeachersManagement() {
 
   const confirmDeleteAndUpload = async () => {
     if (!userAccount?.schoolFirebaseConfig) {
-      alert('ไม่พบ School Firebase Config');
+      toast.error('ไม่พบ School Firebase Config');
       setShowDeleteConfirm(false);
       setLoading(false);
       return;
@@ -236,13 +236,13 @@ export default function TeachersManagement() {
       invalidateCache();
       setUploadProgress(null);
       if (failedTeacherIds.length > 0) {
-        alert(`ลบครูบางคนไม่สำเร็จ: ${failedTeacherIds.join(', ')}`);
+        toast.warn(`ลบครูบางคนไม่สำเร็จ: ${failedTeacherIds.join(', ')}`);
       }
-      alert('อัพโหลดรายชื่อครูสำเร็จ');
+      toast.success('อัพโหลดรายชื่อครูสำเร็จ');
     } catch (error) {
       console.error('Error uploading teachers:', error);
       setUploadProgress(null);
-      alert('ไม่สามารถอัพโหลดรายชื่อครูได้');
+      toast.error('ไม่สามารถอัพโหลดรายชื่อครูได้');
     } finally {
       setUploadProgress(null);
       setLoading(false);
@@ -262,6 +262,7 @@ export default function TeachersManagement() {
       teacherId: selectedTeacher.teacherId,
       name: selectedTeacher.name
     });
+    setFormError('');
     setShowEditModal(true);
     setShowPopup(false);
   };
@@ -269,11 +270,11 @@ export default function TeachersManagement() {
   const handleSaveTeacherEdit = async () => {
     if (!userAccount?.schoolFirebaseConfig) return;
     if (!editTeacherData.teacherId || !editTeacherData.name) {
-      alert('กรุณากรอกข้อมูลให้ครบ');
+      setFormError('กรุณากรอกข้อมูลให้ครบทุกช่อง');
       return;
     }
 
-    if (!confirm('ยืนยันการแก้ไขข้อมูลครู?')) return;
+    if (!(await askConfirm({ title: 'บันทึกการแก้ไขข้อมูลครู?', confirmLabel: 'บันทึก' }))) return;
 
     setLoading(true);
     try {
@@ -312,10 +313,10 @@ export default function TeachersManagement() {
       invalidateCache();
       setShowEditModal(false);
       setSelectedTeacher(null);
-      alert('แก้ไขข้อมูลครูสำเร็จ');
+      toast.success('แก้ไขข้อมูลครูสำเร็จ');
     } catch (error) {
       console.error('Error editing teacher:', error);
-      alert('ไม่สามารถแก้ไขข้อมูลครูได้: ' + (error as Error).message);
+      toast.error('ไม่สามารถแก้ไขข้อมูลครูได้: ' + (error as Error).message);
     } finally {
       setLoading(false);
     }
@@ -323,7 +324,7 @@ export default function TeachersManagement() {
 
   const handleUnsyncTeacher = async () => {
     if (!userAccount?.schoolFirebaseConfig) return;
-    if (!confirm('ยืนยันการยกเลิกการซิงค์? จะลบ email และ UID ออก')) return;
+    if (!(await askConfirm({ title: 'ยกเลิกการซิงค์บัญชี?', message: 'อีเมลและ UID ของบัญชีนี้จะถูกลบออก ครูต้องลงทะเบียนใหม่จึงจะเข้าใช้ได้', confirmLabel: 'ยกเลิกการซิงค์', tone: 'danger' }))) return;
 
     setLoading(true);
     try {
@@ -342,10 +343,10 @@ export default function TeachersManagement() {
       await loadTeachers(true);
       setShowPopup(false);
       setSelectedTeacher(null);
-      alert('ยกเลิกการซิงค์สำเร็จ');
+      toast.success('ยกเลิกการซิงค์สำเร็จ');
     } catch (error) {
       console.error('Error unsyncing teacher:', error);
-      alert('ไม่สามารถยกเลิกการซิงค์ได้');
+      toast.error('ไม่สามารถยกเลิกการซิงค์ได้');
     } finally {
       setLoading(false);
     }
@@ -382,64 +383,11 @@ export default function TeachersManagement() {
     }
   };
 
-  // Swipe gesture handlers for back navigation
-  const handleTouchStart = (e: React.TouchEvent) => {
-    const touchX = e.touches[0].clientX;
-    
-    // Prevent iOS Safari edge swipe-to-go-back gesture
-    if (touchX < 50) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    
-    // Only allow swipe from left edge (within 50px)
-    if (touchX < 50) {
-      setTouchStartX(touchX);
-      setIsSwiping(true);
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isSwiping) return;
-    const currentX = e.touches[0].clientX;
-    const diff = currentX - touchStartX;
-    
-    // Only track left-to-right swipe
-    if (diff > 0) {
-      const progress = Math.min(diff / 200, 1); // 200px threshold
-      setSwipeProgress(progress);
-    }
-  };
-
-  const handleTouchEnd = () => {
-    if (!isSwiping) return;
-    
-    // If swiped more than 50% of threshold, go back
-    if (swipeProgress > 0.5) {
-      router.back();
-    }
-    
-    // Reset state
-    setSwipeProgress(0);
-    setIsSwiping(false);
-    setTouchStartX(0);
-  };
-
-  // Trackpad gesture handlers for laptops
-  const handleWheel = (e: React.WheelEvent) => {
-    // Check if it's a horizontal scroll (trackpad gesture)
-    // Mac trackpad: deltaX negative = left-to-right swipe (back gesture)
-    if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && e.deltaX < -50) {
-      // Left-to-right scroll - trigger back immediately
-      router.back();
-    }
-  };
-
   const handleDeleteSelectedTeachers = async () => {
     if (selectedTeachers.size === 0) return;
     if (!userAccount?.schoolFirebaseConfig) return;
 
-    if (!confirm(`ยืนยันการลบ ${selectedTeachers.size} ครู?`)) return;
+    if (!(await askConfirm({ title: `ลบครู ${selectedTeachers.size} คน?`, message: 'ข้อมูลของครูที่เลือกจะถูกลบและกู้คืนไม่ได้', confirmLabel: 'ลบ', tone: 'danger' }))) return;
 
     setLoading(true);
     try {
@@ -454,10 +402,10 @@ export default function TeachersManagement() {
       setSelectedTeachers(new Set());
       await loadTeachers(true);
       invalidateCache();
-      alert('ลบครูสำเร็จ');
+      toast.success('ลบครูสำเร็จ');
     } catch (error) {
       console.error('Error deleting teachers:', error);
-      alert('ไม่สามารถลบครูได้');
+      toast.error('ไม่สามารถลบครูได้');
     } finally {
       setLoading(false);
     }
@@ -466,7 +414,7 @@ export default function TeachersManagement() {
   const handleAddTeacher = async () => {
     if (!userAccount?.schoolFirebaseConfig) return;
     if (!newTeacherData.teacherId || !newTeacherData.name) {
-      alert('กรุณากรอกข้อมูลให้ครบ');
+      setFormError('กรุณากรอกข้อมูลให้ครบทุกช่อง');
       return;
     }
 
@@ -500,10 +448,10 @@ export default function TeachersManagement() {
         name: '',
         email: ''
       });
-      alert('เพิ่มครูสำเร็จ');
+      toast.success('เพิ่มครูสำเร็จ');
     } catch (error) {
       console.error('Error adding teacher:', error);
-      alert('ไม่สามารถเพิ่มครูได้');
+      toast.error('ไม่สามารถเพิ่มครูได้');
     } finally {
       setLoading(false);
     }
@@ -523,32 +471,9 @@ export default function TeachersManagement() {
   }
 
   return (
-    <div 
+    <div
       className="min-h-screen bg-surface px-4 pb-28 pt-2 text-gray-900 sm:px-6 dark:text-gray-50"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onWheel={handleWheel}
     >
-      {/* Swipe visual feedback */}
-      {isSwiping && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: swipeProgress * 0.3 }}
-          className="fixed inset-0 bg-black pointer-events-none z-50"
-        />
-      )}
-      
-      {/* Swipe indicator arrow */}
-      {isSwiping && swipeProgress > 0.1 && (
-        <motion.div
-          initial={{ opacity: 0, x: -50 }}
-          animate={{ opacity: swipeProgress, x: swipeProgress * 100 - 50 }}
-          className="fixed left-4 top-1/2 -translate-y-1/2 z-50 pointer-events-none"
-        >
-          <ArrowLeft size={48} className="text-white opacity-50" />
-        </motion.div>
-      )}
       <div className="mx-auto max-w-5xl">
         <AdminPageHeader
           title="ครู"
@@ -557,7 +482,7 @@ export default function TeachersManagement() {
           actions={<>
             <ActionButton icon={<Download size={18} />} label="ดาวน์โหลด" onClick={handleDownload} />
             <UploadButton icon={<Upload size={18} />} label="อัปโหลด" onChange={handleUpload} />
-            <ActionButton icon={<Plus size={18} />} label="เพิ่มครู" onClick={() => setShowAddModal(true)} primary />
+            <ActionButton icon={<Plus size={18} />} label="เพิ่มครู" onClick={() => { setFormError(''); setShowAddModal(true); }} primary />
           </>}
         />
         <SearchWell value={searchQuery} onChange={handleSearch} placeholder="ค้นหาชื่อ เลขประจำตัว หรืออีเมล" />
@@ -716,6 +641,7 @@ export default function TeachersManagement() {
                 />
               </div>
             </div>
+            <FormError message={formError} />
             <div className="flex gap-3 mt-6">
               <motion.button
                 whileHover={{ scale: 1.02 }}
@@ -861,6 +787,7 @@ export default function TeachersManagement() {
                 />
               </div>
             </div>
+            <FormError message={formError} />
             <div className="flex gap-3 mt-6">
               <motion.button
                 whileHover={{ scale: 1.02 }}

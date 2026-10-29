@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useState } from 'react';
+import { toast } from '@/components/Toast';
 
 export default function SignupOptions() {
   const router = useRouter();
@@ -18,7 +19,7 @@ export default function SignupOptions() {
       await new Promise(resolve => setTimeout(resolve, 1000));
     } catch (error) {
       console.error('Error signing in:', error);
-      alert('เข้าสู่ระบบไม่สำเร็จ');
+      toast.error('เข้าสู่ระบบไม่สำเร็จ');
       setLoading(false);
     }
   };

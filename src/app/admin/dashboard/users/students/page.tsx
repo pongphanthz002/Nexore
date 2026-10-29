@@ -13,8 +13,10 @@ import { ActionButton, AdminPageHeader, Initial, RosterRow, SearchWell, SectionC
 import * as XLSX from 'xlsx';
 import { Download, Upload, Trash2, Edit, Eye, EyeOff, RefreshCw, Plus, ArrowLeft, Search, X } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
-import Modal from '@/components/Modal';
+import Modal, { FormError } from '@/components/Modal';
 import { Bone, SkeletonGroup, SkeletonRows } from '@/components/Skeleton';
+import { toast } from '@/components/Toast';
+import { askConfirm } from '@/components/ConfirmHost';
 
 export default function StudentsManagement() {
   const router = useRouter();
@@ -31,6 +33,7 @@ export default function StudentsManagement() {
   const [openClass, setOpenClass] = useState<string | null>(null);
   const [showUID, setShowUID] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [formError, setFormError] = useState('');
   const [editStudentData, setEditStudentData] = useState({
     studentId: '',
     name: '',
@@ -40,9 +43,6 @@ export default function StudentsManagement() {
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
   const [showAddModal, setShowAddModal] = useState(false);
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
-  const [swipeProgress, setSwipeProgress] = useState(0);
-  const [isSwiping, setIsSwiping] = useState(false);
-  const [touchStartX, setTouchStartX] = useState(0);
   const [newStudentData, setNewStudentData] = useState({
     studentId: '',
     name: '',
@@ -125,7 +125,7 @@ export default function StudentsManagement() {
     if (!file) return;
 
     if (!userAccount?.schoolFirebaseConfig) {
-      alert('ไม่พบ School Firebase Config กรุณาทำ Admin Setup ก่อน');
+      toast.error('ไม่พบ School Firebase Config กรุณาทำ Admin Setup ก่อน');
       return;
     }
 
@@ -180,13 +180,13 @@ export default function StudentsManagement() {
       await loadStudents(true);
       setUploadProgress(null);
       if (unknownTeacherIds.length > 0) {
-        alert(`คำเตือน: ไม่พบครูรหัส ${unknownTeacherIds.join(', ')} ในระบบ (teacherNodes) ข้อมูลนักเรียนถูกบันทึกแล้ว`);
+        toast.error(`ไม่พบครูรหัส ${unknownTeacherIds.join(', ')} ในระบบ (teacherNodes) ข้อมูลนักเรียนถูกบันทึกแล้ว`);
       }
-      alert('อัพโหลดรายชื่อนักเรียนสำเร็จ');
+      toast.success('อัพโหลดรายชื่อนักเรียนสำเร็จ');
     } catch (error) {
       console.error('Error uploading students:', error);
       setUploadProgress(null);
-      alert('ไม่สามารถอัพโหลดรายชื่อนักเรียนได้');
+      toast.error('ไม่สามารถอัพโหลดรายชื่อนักเรียนได้');
     } finally {
       setUploadProgress(null);
       setLoading(false);
@@ -195,7 +195,7 @@ export default function StudentsManagement() {
 
   const confirmDeleteAndUpload = async () => {
     if (!userAccount?.schoolFirebaseConfig) {
-      alert('ไม่พบ School Firebase Config');
+      toast.error('ไม่พบ School Firebase Config');
       setShowDeleteConfirm(false);
       setLoading(false);
       return;
@@ -240,19 +240,19 @@ export default function StudentsManagement() {
       setUploadProgress(null);
 
       if (failedStudentIds.length > 0) {
-        alert(`ลบนักเรียนบางคนไม่สำเร็จ: ${failedStudentIds.join(', ')}`);
+        toast.warn(`ลบนักเรียนบางคนไม่สำเร็จ: ${failedStudentIds.join(', ')}`);
       }
       if (failedTeacherIds.size > 0) {
-        alert(`ลบข้อมูลในฐานข้อมูลครูบางคนไม่สำเร็จ: ${Array.from(failedTeacherIds).join(', ')}`);
+        toast.warn(`ลบข้อมูลในฐานข้อมูลครูบางคนไม่สำเร็จ: ${Array.from(failedTeacherIds).join(', ')}`);
       }
       if (unknownTeacherIds.length > 0) {
-        alert(`คำเตือน: ไม่พบครูรหัส ${unknownTeacherIds.join(', ')} ในระบบ (teacherNodes) ข้อมูลนักเรียนถูกบันทึกแล้ว`);
+        toast.error(`ไม่พบครูรหัส ${unknownTeacherIds.join(', ')} ในระบบ (teacherNodes) ข้อมูลนักเรียนถูกบันทึกแล้ว`);
       }
-      alert('อัพโหลดรายชื่อนักเรียนสำเร็จ');
+      toast.success('อัพโหลดรายชื่อนักเรียนสำเร็จ');
     } catch (error) {
       console.error('Error uploading students:', error);
       setUploadProgress(null);
-      alert('ไม่สามารถอัพโหลดรายชื่อนักเรียนได้');
+      toast.error('ไม่สามารถอัพโหลดรายชื่อนักเรียนได้');
     } finally {
       setUploadProgress(null);
       setLoading(false);
@@ -274,6 +274,7 @@ export default function StudentsManagement() {
       class: selectedStudent.class,
       number: selectedStudent.number
     });
+    setFormError('');
     setShowEditModal(true);
     setShowPopup(false);
   };
@@ -281,11 +282,11 @@ export default function StudentsManagement() {
   const handleSaveStudentEdit = async () => {
     if (!userAccount?.schoolFirebaseConfig) return;
     if (!editStudentData.studentId || !editStudentData.name || !editStudentData.class || !editStudentData.number) {
-      alert('กรุณากรอกข้อมูลให้ครบ');
+      setFormError('กรุณากรอกข้อมูลให้ครบทุกช่อง');
       return;
     }
 
-    if (!confirm('ยืนยันการแก้ไขข้อมูลนักเรียน?')) return;
+    if (!(await askConfirm({ title: 'บันทึกการแก้ไขข้อมูลนักเรียน?', confirmLabel: 'บันทึก' }))) return;
 
     setLoading(true);
     try {
@@ -315,10 +316,10 @@ export default function StudentsManagement() {
       invalidateCache();
       setShowEditModal(false);
       setSelectedStudent(null);
-      alert('แก้ไขข้อมูลนักเรียนสำเร็จ');
+      toast.success('แก้ไขข้อมูลนักเรียนสำเร็จ');
     } catch (error) {
       console.error('Error editing student:', error);
-      alert('ไม่สามารถแก้ไขข้อมูลนักเรียนได้');
+      toast.error('ไม่สามารถแก้ไขข้อมูลนักเรียนได้');
     } finally {
       setLoading(false);
     }
@@ -326,7 +327,7 @@ export default function StudentsManagement() {
 
   const handleUnsyncStudent = async () => {
     if (!userAccount?.schoolFirebaseConfig) return;
-    if (!confirm('ยืนยันการยกเลิกการซิงค์? จะลบ email และ UID ออก')) return;
+    if (!(await askConfirm({ title: 'ยกเลิกการซิงค์บัญชี?', message: 'อีเมลและ UID ของบัญชีนี้จะถูกลบออก นักเรียนต้องลงทะเบียนใหม่จึงจะเข้าใช้ได้', confirmLabel: 'ยกเลิกการซิงค์', tone: 'danger' }))) return;
 
     setLoading(true);
     try {
@@ -345,10 +346,10 @@ export default function StudentsManagement() {
       await loadStudents(true);
       setShowPopup(false);
       setSelectedStudent(null);
-      alert('ยกเลิกการซิงค์สำเร็จ');
+      toast.success('ยกเลิกการซิงค์สำเร็จ');
     } catch (error) {
       console.error('Error unsyncing student:', error);
-      alert('ไม่สามารถยกเลิกการซิงค์ได้');
+      toast.error('ไม่สามารถยกเลิกการซิงค์ได้');
     } finally {
       setLoading(false);
     }
@@ -385,64 +386,11 @@ export default function StudentsManagement() {
     }
   };
 
-  // Swipe gesture handlers for back navigation
-  const handleTouchStart = (e: React.TouchEvent) => {
-    const touchX = e.touches[0].clientX;
-    
-    // Prevent iOS Safari edge swipe-to-go-back gesture
-    if (touchX < 50) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    
-    // Only allow swipe from left edge (within 50px)
-    if (touchX < 50) {
-      setTouchStartX(touchX);
-      setIsSwiping(true);
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isSwiping) return;
-    const currentX = e.touches[0].clientX;
-    const diff = currentX - touchStartX;
-    
-    // Only track left-to-right swipe
-    if (diff > 0) {
-      const progress = Math.min(diff / 200, 1); // 200px threshold
-      setSwipeProgress(progress);
-    }
-  };
-
-  const handleTouchEnd = () => {
-    if (!isSwiping) return;
-    
-    // If swiped more than 50% of threshold, go back
-    if (swipeProgress > 0.5) {
-      router.back();
-    }
-    
-    // Reset state
-    setSwipeProgress(0);
-    setIsSwiping(false);
-    setTouchStartX(0);
-  };
-
-  // Trackpad gesture handlers for laptops
-  const handleWheel = (e: React.WheelEvent) => {
-    // Check if it's a horizontal scroll (trackpad gesture)
-    // Mac trackpad: deltaX negative = left-to-right swipe (back gesture)
-    if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && e.deltaX < -50) {
-      // Left-to-right scroll - trigger back immediately
-      router.back();
-    }
-  };
-
   const handleDeleteSelectedStudents = async () => {
     if (selectedStudents.size === 0) return;
     if (!userAccount?.schoolFirebaseConfig) return;
 
-    if (!confirm(`ยืนยันการลบ ${selectedStudents.size} นักเรียน?`)) return;
+    if (!(await askConfirm({ title: `ลบนักเรียน ${selectedStudents.size} คน?`, message: 'ข้อมูลของนักเรียนที่เลือก รวมคะแนนและการเช็คชื่อ จะถูกลบและกู้คืนไม่ได้', confirmLabel: 'ลบ', tone: 'danger' }))) return;
 
     setLoading(true);
     try {
@@ -455,15 +403,15 @@ export default function StudentsManagement() {
         result.failedTeacherIds.forEach(id => failedTeacherIds.add(id));
       }
       if (failedTeacherIds.size > 0) {
-        alert(`ลบข้อมูลในฐานข้อมูลครูบางคนไม่สำเร็จ: ${Array.from(failedTeacherIds).join(', ')}`);
+        toast.warn(`ลบข้อมูลในฐานข้อมูลครูบางคนไม่สำเร็จ: ${Array.from(failedTeacherIds).join(', ')}`);
       }
       setSelectedStudents(new Set());
       await loadStudents(true);
       invalidateCache();
-      alert('ลบนักเรียนสำเร็จ');
+      toast.success('ลบนักเรียนสำเร็จ');
     } catch (error) {
       console.error('Error deleting students:', error);
-      alert('ไม่สามารถลบนักเรียนได้');
+      toast.error('ไม่สามารถลบนักเรียนได้');
     } finally {
       setLoading(false);
     }
@@ -472,7 +420,7 @@ export default function StudentsManagement() {
   const handleAddStudent = async () => {
     if (!userAccount?.schoolFirebaseConfig) return;
     if (!newStudentData.studentId || !newStudentData.name || !newStudentData.class || !newStudentData.number) {
-      alert('กรุณากรอกข้อมูลให้ครบ');
+      setFormError('กรุณากรอกข้อมูลให้ครบทุกช่อง');
       return;
     }
 
@@ -512,10 +460,10 @@ export default function StudentsManagement() {
         number: '',
         email: ''
       });
-      alert('เพิ่มนักเรียนสำเร็จ');
+      toast.success('เพิ่มนักเรียนสำเร็จ');
     } catch (error) {
       console.error('Error adding student:', error);
-      alert('ไม่สามารถเพิ่มนักเรียนได้');
+      toast.error('ไม่สามารถเพิ่มนักเรียนได้');
     } finally {
       setLoading(false);
     }
@@ -578,32 +526,9 @@ export default function StudentsManagement() {
   }
 
   return (
-    <div 
+    <div
       className="min-h-screen bg-surface px-4 pb-28 pt-2 text-gray-900 sm:px-6 dark:text-gray-50"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onWheel={handleWheel}
     >
-      {/* Swipe visual feedback */}
-      {isSwiping && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: swipeProgress * 0.3 }}
-          className="fixed inset-0 bg-black pointer-events-none z-50"
-        />
-      )}
-      
-      {/* Swipe indicator arrow */}
-      {isSwiping && swipeProgress > 0.1 && (
-        <motion.div
-          initial={{ opacity: 0, x: -50 }}
-          animate={{ opacity: swipeProgress, x: swipeProgress * 100 - 50 }}
-          className="fixed left-4 top-1/2 -translate-y-1/2 z-50 pointer-events-none"
-        >
-          <ArrowLeft size={48} className="text-white opacity-50" />
-        </motion.div>
-      )}
       <div className="mx-auto max-w-5xl">
         <AdminPageHeader
           title="นักเรียน"
@@ -612,7 +537,7 @@ export default function StudentsManagement() {
           actions={<>
             <ActionButton icon={<Download size={18} />} label="ดาวน์โหลด" onClick={handleDownload} />
             <UploadButton icon={<Upload size={18} />} label="อัปโหลด" onChange={handleUpload} />
-            <ActionButton icon={<Plus size={18} />} label="เพิ่มนักเรียน" onClick={() => setShowAddModal(true)} primary />
+            <ActionButton icon={<Plus size={18} />} label="เพิ่มนักเรียน" onClick={() => { setFormError(''); setShowAddModal(true); }} primary />
           </>}
         />
         <SearchWell value={searchQuery} onChange={handleSearch} placeholder="ค้นหาชื่อ เลขประจำตัว หรืออีเมล" />
@@ -843,6 +768,7 @@ export default function StudentsManagement() {
                 />
               </div>
             </div>
+            <FormError message={formError} />
             <div className="flex gap-3 mt-6">
               <motion.button
                 whileHover={{ scale: 1.02 }}
@@ -1012,6 +938,7 @@ export default function StudentsManagement() {
                 />
               </div>
             </div>
+            <FormError message={formError} />
             <div className="flex gap-3 mt-6">
               <motion.button
                 whileHover={{ scale: 1.02 }}
