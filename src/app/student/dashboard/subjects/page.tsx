@@ -11,6 +11,7 @@ import { allowAction } from '@/lib/firestore-helpers';
 import StudentHeader from '@/components/StudentHeader';
 import StudentFooter from '@/components/StudentFooter';
 import PullToRefresh from '@/components/PullToRefresh';
+import { refreshFeatureSettings } from '@/hooks/useFeatureAccess';
 import {
   AssignmentSheet, AttendanceView, EASE, GradesView, ListSkeleton, SubjectHeader, SubjectList,
 } from '@/components/StudentSubjectViews';
@@ -88,6 +89,8 @@ export default function StudentSubjectsPage() {
   // Pull-to-refresh and retry re-read from the server; throttled to avoid hammering Firestore
   const handleRetry = () => {
     if (!allowAction('student-subjects-refresh', 5_000)) return;
+    // The admin's feature settings (dock tabs) refresh with it
+    if (userAccount?.schoolFirebaseConfig) refreshFeatureSettings(userAccount.schoolFirebaseConfig);
     return fetchData(true);
   };
 

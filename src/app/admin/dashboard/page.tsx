@@ -6,7 +6,7 @@ import { firestoreService } from '@/services/firestore.service';
 import { schoolDatabaseService } from '@/services/school-database.service';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { Book, Check, ChevronRight, Copy, GraduationCap, Users } from 'lucide-react';
+import { Book, Check, ChevronRight, Copy, GraduationCap, SlidersHorizontal, Users } from 'lucide-react';
 import SchoolDangerZone from '@/components/admin/SchoolDangerZone';
 import { Bone } from '@/components/Skeleton';
 
@@ -87,6 +87,7 @@ export default function AdminDashboard() {
     { href: '/admin/dashboard/users/teachers', icon: Users, title: 'ครู', total: stats.teachers, registered: stats.signedUpTeachers },
     { href: '/admin/dashboard/users/students', icon: GraduationCap, title: 'นักเรียน', total: stats.students, registered: stats.signedUpStudents },
     { href: '/admin/dashboard/users/subjects', icon: Book, title: 'วิชาเรียน', hint: 'รายวิชาและตารางสอนของครู' },
+    { href: '/admin/dashboard/features', icon: SlidersHorizontal, title: 'ระบบเพิ่มเติม', hint: 'เลือกว่าครูและนักเรียนคนไหนเห็นระบบใดบ้าง' },
   ];
 
   return (
@@ -113,7 +114,7 @@ export default function AdminDashboard() {
           )}
         </header>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {tiles.map(tile => {
             const Icon = tile.icon;
             const share = tile.total ? (tile.registered ?? 0) / tile.total : 0;

@@ -13,6 +13,10 @@ export const STORAGE_KEYS = {
   TEACHER_STATS: 'NEXORE_TEACHER_STATS',
   /** Teacher's record, subjects and students for the grades/attendance pages, see src/lib/teacher-roster-cache.ts */
   TEACHER_ROSTER: 'NEXORE_TEACHER_ROSTER',
+  /** Admin's feature visibility settings (School DB settings/features), see src/services/feature-settings.service.ts */
+  FEATURE_SETTINGS: 'NEXORE_FEATURE_SETTINGS',
+  /** Classroom tools: last groups and who has been called, per room, see src/lib/classroom-tools-store.ts */
+  CLASSROOM_TOOLS: 'NEXORE_CLASSROOM_TOOLS',
   // Legacy keys used by storage.service.ts
   USER_IDENTITY: 'nexore_user_identity',
   MASTER_REGISTRY_CONFIG: 'nexore_master_registry_config',
