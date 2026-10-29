@@ -10,7 +10,17 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
+      },
       colors: {
+        // Soft UI surface (see globals.css); the same colour in page, cards and controls
+        surface: 'rgb(var(--surface) / <alpha-value>)',
+        // Theme-aware greys (globals.css --gray-*): Tailwind's in light mode (500 a little darker, for
+        // 4.5:1 on the soft surface), warm neutrals in dark mode
+        gray: Object.fromEntries(
+          [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950].map(n => [n, `rgb(var(--gray-${n}) / <alpha-value>)`]),
+        ),
         black: {
           50: '#0a0a0a',
           100: '#121212',
@@ -41,6 +51,12 @@ const config: Config = {
         },
       },
       boxShadow: {
+        'neu-lg': 'var(--neu-raised-lg)',
+        neu: 'var(--neu-raised)',
+        'neu-sm': 'var(--neu-raised-sm)',
+        'neu-in': 'var(--neu-inset)',
+        'neu-in-sm': 'var(--neu-inset-sm)',
+        'neu-in-xs': 'var(--neu-inset-xs)',
         'neon': '0 0 5px #39ff14, 0 0 20px #39ff14',
         'neon-strong': '0 0 10px #39ff14, 0 0 40px #39ff14, 0 0 80px #39ff14',
       },

@@ -1,17 +1,46 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { schoolDatabaseService, SubjectData, StudentData, ScheduleSlot, SubjectWhitelistRow } from '@/services/school-database.service';
 import { teacherDatabaseService } from '@/services/teacher-database.service';
 import { runPool } from '@/lib/firestore-helpers';
+import { downloadSubjectSheet, parseSubjectRows } from '@/lib/subject-excel';
 import UploadProgressModal, { UploadProgress } from '@/components/UploadProgressModal';
+import { ActionButton, AdminPageHeader, Initial, RosterRow, SearchWell, SectionCard, SelectionBar, UploadButton } from '@/components/admin/AdminUI';
+import { buildHueMap, hueColor } from '@/lib/timetable';
 import * as XLSX from 'xlsx';
-import { Download, Upload, Trash2, Plus, ArrowLeft, Search, BookOpen, Calendar, Clock, Loader2, X } from 'lucide-react';
+import { Download, Upload, Trash2, Plus, Search, BookOpen, Calendar, Clock, Loader2, X, ChevronRight, Pencil } from 'lucide-react';
 import { GoogleBasicSubjectIcon, GoogleElectiveSubjectIcon } from '@/components/GoogleSubjectIcons';
 import { useTheme } from '@/contexts/ThemeContext';
+import Modal, { FormError } from '@/components/Modal';
+import { Bone, SkeletonGroup, SkeletonRows } from '@/components/Skeleton';
+import { toast } from '@/components/Toast';
+import { askConfirm } from '@/components/ConfirmHost';
+
+function emptySubjectForm(teacherId = ''): {
+  teacherId: string;
+  subjectName: string;
+  subjectCode: string;
+  subjectType: 'basic' | 'elective';
+  classroom: string;
+  room: string;
+  studentIds: string[];
+  schedules: ScheduleSlot[];
+} {
+  return {
+    teacherId,
+    subjectName: '',
+    subjectCode: '',
+    subjectType: 'basic',
+    classroom: '',
+    room: '',
+    studentIds: [],
+    schedules: [{ day: 'จันทร์', time: '08:30-09:30', duration: '1' }],
+  };
+}
 
 export default function SubjectsManagement() {
   const router = useRouter();
@@ -23,11 +52,9 @@ export default function SubjectsManagement() {
   const [selectedSubjects, setSelectedSubjects] = useState<Set<string>>(new Set());
   const [showAddModal, setShowAddModal] = useState(false);
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
-  const [swipeProgress, setSwipeProgress] = useState(0);
-  const [isSwiping, setIsSwiping] = useState(false);
-  const [touchStartX, setTouchStartX] = useState(0);
   const { isDark } = useTheme();
   const [isSavingSubject, setIsSavingSubject] = useState(false);
+  const [subjectFormError, setSubjectFormError] = useState('');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
   const [studentClassFilter, setStudentClassFilter] = useState<string>('all');
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
@@ -37,33 +64,24 @@ export default function SubjectsManagement() {
     toAdd: SubjectWhitelistRow[];
     toDelete: SubjectData[];
     updatedCount: number;
+    /** Subjects with data whose classroom/students change in the file: those two fields are kept. */
+    kept: SubjectData[];
+    /** Electives the file leaves with no students. */
+    emptyElectives: SubjectWhitelistRow[];
   } | null>(null);
 
-  const [newSubject, setNewSubject] = useState<{
-    teacherId: string;
-    subjectName: string;
-    subjectType: 'basic' | 'elective';
-    classroom: string;
-    studentIds: string[];
-    schedules: ScheduleSlot[];
-  }>({
-    teacherId: '',
-    subjectName: '',
-    subjectType: 'basic',
-    classroom: '',
-    studentIds: [],
-    schedules: [{ day: 'จันทร์', time: '08:30-09:30', duration: '1' }]
-  });
+  const [newSubject, setNewSubject] = useState(emptySubjectForm);
+  // Detail popup, the subject being edited in the add/edit form, and the removal warning
+  const [detailSubject, setDetailSubject] = useState<SubjectData | null>(null);
+  const [editingSubject, setEditingSubject] = useState<SubjectData | null>(null);
+  const [removalConfirm, setRemovalConfirm] = useState<{ count: number } | null>(null);
 
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>('');
+  const [teacherQuery, setTeacherQuery] = useState('');
   const [showTeacherDropdown, setShowTeacherDropdown] = useState(false);
   const lastLoadedConfigRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    loadData();
-  }, [userAccount]);
-
-  const loadData = async (force = false) => {
+  const loadData = useCallback(async (force = false) => {
     try {
       if (!userAccount?.schoolFirebaseConfig) return;
       const configKey = userAccount.schoolFirebaseConfig.projectId;
@@ -83,7 +101,11 @@ export default function SubjectsManagement() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userAccount]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Available classrooms from student data
   const availableClassrooms = Array.from(new Set(allStudents.map(s => s.class)))
@@ -171,37 +193,12 @@ export default function SubjectsManagement() {
     }));
   };
 
-  const handleDownload = () => {
-    if (subjects.length === 0) {
-      const template = [
-        {
-          'เลขประจำตัวครู': '',
-          'วิชา': '',
-          'ประเภทวิชา': '',
-          'ห้อง': '',
-          'วัน': '',
-          'เวลา': '',
-          'จำนวนชั่วโมง': ''
-        }
-      ];
-      const worksheet = XLSX.utils.json_to_sheet(template);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'วิชาเรียน');
-      XLSX.writeFile(workbook, 'รายชื่อวิชาเรียน_template.xlsx');
-    } else {
-      const data = subjects.map(s => ({
-        'เลขประจำตัวครู': s.teacherId,
-        'วิชา': s.subjectName,
-        'ประเภทวิชา': s.subjectType === 'elective' ? 'เพิ่มเติม' : 'พื้นฐาน',
-        'ห้อง': s.classroom,
-        'วัน': s.day,
-        'เวลา': s.time,
-        'จำนวนชั่วโมง': s.duration || 1
-      }));
-      const worksheet = XLSX.utils.json_to_sheet(data);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'วิชาเรียน');
-      XLSX.writeFile(workbook, 'รายชื่อวิชาเรียน.xlsx');
+  const handleDownload = async () => {
+    try {
+      await downloadSubjectSheet(subjects);
+    } catch (error) {
+      console.error('Error downloading subjects:', error);
+      toast.error('ดาวน์โหลดไฟล์ไม่สำเร็จ');
     }
   };
 
@@ -212,7 +209,7 @@ export default function SubjectsManagement() {
     if (!file) return;
 
     if (!userAccount?.schoolFirebaseConfig) {
-      alert('ไม่พบ School Firebase Config');
+      toast.error('ไม่พบ School Firebase Config');
       return;
     }
 
@@ -221,91 +218,115 @@ export default function SubjectsManagement() {
     try {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const headers = ((XLSX.utils.sheet_to_json(worksheet, { header: 1 })[0] as unknown[]) || []).map(h => String(h ?? '').trim());
+      const parsed = parseSubjectRows(headers, XLSX.utils.sheet_to_json(worksheet) as Record<string, unknown>[]);
 
       // Subjects already in the system keep their subjectId, so their attendance, scores and
-      // assignments (keyed by subjectId in the teacher DBs) stay attached. A row matches an
-      // existing subject with the same teacher, subject name and classroom.
+      // assignments (keyed by subjectId in the teacher DBs) stay attached. A row matches by its
+      // system ID (รหัสอ้างอิงระบบ) first, so renamed subjects still match; otherwise by
+      // teacher + subject name + classroom.
       const existingSubjects = await schoolDatabaseService.getAllSubjects(userAccount.schoolFirebaseConfig, true);
       const subjectKey = (teacherId: string, subjectName: string, classroom: string) =>
         `${teacherId.trim()}|${subjectName.trim()}|${classroom.trim()}`;
-      const unmatched = new Map<string, SubjectData[]>();
+      const byId = new Map(existingSubjects.map(s => [s.subjectId, s]));
+      const byKey = new Map<string, SubjectData[]>();
       for (const subject of existingSubjects) {
         const key = subjectKey(String(subject.teacherId ?? ''), String(subject.subjectName ?? ''), String(subject.classroom ?? ''));
-        unmatched.set(key, [...(unmatched.get(key) || []), subject]);
+        byKey.set(key, [...(byKey.get(key) || []), subject]);
       }
-      const takeMatch = (key: string): SubjectData | undefined => {
-        const list = unmatched.get(key);
-        const match = list?.shift();
-        if (list && list.length === 0) unmatched.delete(key);
-        return match;
+      const taken = new Set<string>();
+      const take = (subject: SubjectData | undefined) => {
+        if (!subject || taken.has(subject.subjectId)) return undefined;
+        taken.add(subject.subjectId);
+        return subject;
       };
+      const takeMatch = (key: string) => take(byKey.get(key)?.find(s => !taken.has(s.subjectId)));
 
       const rows: SubjectWhitelistRow[] = [];
       const toAdd: SubjectWhitelistRow[] = [];
-      jsonData.forEach((row: any, index: number) => {
-        // Excel may give numeric cells as numbers
-        const teacherId = String(row['เลขประจำตัวครู'] ?? '');
-        const subjectName = String(row['วิชา'] ?? '');
-        const classroomStr = String(row['ห้อง'] ?? '').trim();
-        const day = String(row['วัน'] ?? '');
-        const time = String(row['เวลา'] ?? '');
-        const duration = String(row['จำนวนชั่วโมง'] || '1');
-
-        // Parse subject type from Thai text; leave it unset when the column is blank
-        // so an old template can't turn existing electives into basic subjects
-        const subjectTypeRaw = String(row['ประเภทวิชา'] ?? '').trim();
-        const subjectType = subjectTypeRaw === 'เพิ่มเติม' ? 'elective' : subjectTypeRaw === 'พื้นฐาน' ? 'basic' : undefined;
+      const rosterChanges: { row: SubjectWhitelistRow; existing: SubjectData }[] = [];
+      for (const r of parsed) {
+        if (!r.teacherId || !r.subjectName) continue;
 
         const buildRow = (classroom: string, existing?: SubjectData): SubjectWhitelistRow => {
-          // Replace "/" with "-" in classroom name for valid Firestore document ID
-          // e.g., "ม.1/1" → "ม.1-1"
+          // Replace "/" with "-" in classroom name for valid Firestore document ID, e.g. "ม.1/1" → "ม.1-1"
           const safeClassroom = classroom.replace(/\//g, '-');
+          const first = r.schedules?.[0];
           const result: SubjectWhitelistRow = {
-            subjectId: existing?.subjectId || `SUB${Date.now()}_${index}_${safeClassroom}`,
-            teacherId,
-            subjectName,
+            subjectId: existing?.subjectId || `SUB${Date.now()}_${r.index}_${safeClassroom}`,
+            teacherId: r.teacherId,
+            subjectName: r.subjectName,
             classroom,
-            day,
-            time,
-            duration,
-            subjectType: subjectType || (existing ? undefined : 'basic'),
+            day: first?.day ?? (r.schedules ? '' : existing?.day ?? ''),
+            time: first?.time ?? (r.schedules ? '' : existing?.time ?? ''),
+            duration: first?.duration ?? (r.schedules ? '1' : existing?.duration ?? '1'),
+            subjectType: r.subjectType || (existing ? undefined : 'basic'),
           };
-          // Screens read schedules before day/time: keep the first slot in step with the file
-          const slots = existing?.schedules;
-          if (slots && slots.length > 0) {
-            const first = slots[0];
-            if (first.day !== day || first.time !== time || (first.duration || '1') !== duration) {
-              result.schedules = [{ ...first, day, time, duration }, ...slots.slice(1)];
+          if (r.subjectCode !== undefined) result.subjectCode = r.subjectCode;
+          if (r.room !== undefined) result.room = r.room;
+          if (r.schedules && !r.legacySlot) {
+            result.schedules = r.schedules;
+          } else if (r.legacySlot && first) {
+            // Old one-slot file: screens read schedules before day/time, so keep the first slot in step
+            const slots = existing?.schedules;
+            if (slots && slots.length > 0) {
+              const s0 = slots[0];
+              if (s0.day !== first.day || s0.time !== first.time || (s0.duration || '1') !== first.duration) {
+                result.schedules = [{ ...s0, ...first }, ...slots.slice(1)];
+              }
             }
           }
+          const type = r.subjectType || existing?.subjectType || 'basic';
+          if (r.studentIds !== undefined && type === 'elective') result.studentIds = r.studentIds;
           return result;
         };
 
+        const idMatch = take(r.subjectId ? byId.get(r.subjectId) : undefined);
+        if (idMatch) {
+          const built = buildRow(r.classroom || idMatch.classroom, idMatch);
+          rows.push(built);
+          const lostStudents = built.studentIds !== undefined && (idMatch.studentIds || []).some(id => !built.studentIds!.includes(id));
+          if (built.classroom !== idMatch.classroom || lostStudents) rosterChanges.push({ row: built, existing: idMatch });
+          continue;
+        }
+
         // A downloaded file lists a multi-room subject (e.g. an elective) as one "ม.1/1, ม.1/2" cell
-        const wholeMatch = classroomStr ? takeMatch(subjectKey(teacherId, subjectName, classroomStr)) : undefined;
+        const wholeMatch = r.classroom ? takeMatch(subjectKey(r.teacherId, r.subjectName, r.classroom)) : undefined;
         if (wholeMatch) {
           rows.push(buildRow(wholeMatch.classroom, wholeMatch));
-          return;
+          continue;
         }
 
         // Otherwise a comma-separated cell means one subject per classroom
-        const classrooms = classroomStr.split(',').map((c: string) => c.trim()).filter((c: string) => c);
-        classrooms.forEach((classroom: string) => {
-          const existing = takeMatch(subjectKey(teacherId, subjectName, classroom));
+        const classrooms = r.classroom.split(',').map(c => c.trim()).filter(c => c);
+        classrooms.forEach(classroom => {
+          const existing = takeMatch(subjectKey(r.teacherId, r.subjectName, classroom));
           const built = buildRow(existing?.classroom ?? classroom, existing);
           rows.push(built);
           if (!existing) toAdd.push(built);
         });
+      }
+
+      // Subjects that already have attendance or scores keep their classroom and students
+      // (changing them would orphan that data); teachers change those from their subject menu.
+      const kept: SubjectData[] = [];
+      await runPool(rosterChanges, 5, async ({ row, existing }) => {
+        const teacher = teachers.find(t => t.teacherId === existing.teacherId);
+        const dataConfig = teacher?.firebaseConfig || userAccount.schoolFirebaseConfig;
+        const hasData = await teacherDatabaseService.subjectHasData(dataConfig, existing.subjectId).catch(() => true);
+        if (!hasData) return;
+        row.classroom = existing.classroom;
+        delete row.studentIds;
+        kept.push(existing);
       });
 
-      const toDelete = Array.from(unmatched.values()).flat();
+      const toDelete = existingSubjects.filter(s => !taken.has(s.subjectId));
       const updatedCount = rows.length - toAdd.length;
+      const emptyElectives = rows.filter(row => row.studentIds !== undefined && row.studentIds.length === 0);
 
-      if (toAdd.length > 0 || toDelete.length > 0) {
-        setPendingUpload({ rows, toAdd, toDelete, updatedCount });
+      if (toAdd.length > 0 || toDelete.length > 0 || kept.length > 0 || emptyElectives.length > 0) {
+        setPendingUpload({ rows, toAdd, toDelete, updatedCount, kept, emptyElectives });
         setUploadProgress(null);
         setLoading(false);
         return;
@@ -315,7 +336,7 @@ export default function SubjectsManagement() {
     } catch (error) {
       console.error('Error uploading subjects:', error);
       setUploadProgress(null);
-      alert('ไม่สามารถอัพโหลดรายชื่อวิชาเรียนได้');
+      toast.error('ไม่สามารถอัพโหลดรายชื่อวิชาเรียนได้');
     } finally {
       setUploadProgress(null);
       setLoading(false);
@@ -332,7 +353,7 @@ export default function SubjectsManagement() {
     } catch (error) {
       console.error('Error uploading subjects:', error);
       setUploadProgress(null);
-      alert('ไม่สามารถอัพโหลดรายชื่อวิชาเรียนได้');
+      toast.error('ไม่สามารถอัพโหลดรายชื่อวิชาเรียนได้');
     } finally {
       setUploadProgress(null);
       setLoading(false);
@@ -381,27 +402,58 @@ export default function SubjectsManagement() {
     invalidateCache();
     setUploadProgress(null);
     if (failedSubjects.length > 0) {
-      alert(`ลบวิชาบางวิชาไม่สำเร็จ: ${failedSubjects.join(', ')}`);
+      toast.warn(`ลบวิชาบางวิชาไม่สำเร็จ: ${failedSubjects.join(', ')}`);
     }
-    alert('อัพโหลดรายชื่อวิชาเรียนสำเร็จ');
+    toast.success('อัพโหลดรายชื่อวิชาเรียนสำเร็จ');
   };
 
-  const handleAddSubject = async () => {
+  /** Students enrolled in a subject: its whole classroom, or an elective's listed students. */
+  const rosterOf = (sub: { subjectType?: string; classroom: string; studentIds?: string[] }) =>
+    sub.subjectType === 'elective'
+      ? sub.studentIds || []
+      : allStudents.filter(st => st.class === sub.classroom).map(st => st.studentId);
+
+  const openSubjectEditor = (sub: SubjectData | null) => {
+    setDetailSubject(null);
+    setEditingSubject(sub);
+    setStudentSearchQuery('');
+    setStudentClassFilter('all');
+    setNewSubject(sub ? {
+      teacherId: sub.teacherId,
+      subjectName: sub.subjectName,
+      subjectCode: sub.subjectCode || '',
+      subjectType: sub.subjectType === 'elective' ? 'elective' : 'basic',
+      classroom: sub.classroom,
+      room: sub.room || '',
+      studentIds: sub.studentIds || [],
+      schedules: sub.schedules?.length ? sub.schedules : [{ day: sub.day || 'จันทร์', time: sub.time || '08:30-09:30', duration: sub.duration || '1' }],
+    } : emptySubjectForm(selectedTeacherId));
+    setSubjectFormError('');
+    setShowAddModal(true);
+  };
+
+  const closeSubjectEditor = () => {
+    setShowAddModal(false);
+    setEditingSubject(null);
+  };
+
+  const handleAddSubject = async (confirmedRemoval = false) => {
     if (!userAccount?.schoolFirebaseConfig) return;
     if (!newSubject.teacherId || !newSubject.subjectName.trim()) {
-      alert('กรุณากรอกข้อมูลให้ครบ');
+      setSubjectFormError('กรุณาเลือกครูและกรอกชื่อวิชา');
       return;
     }
 
     let finalClassroom = newSubject.classroom.trim();
+    setSubjectFormError('');
     if (newSubject.subjectType === 'basic') {
       if (!finalClassroom) {
-        alert('กรุณาเลือกห้องเรียน');
+        setSubjectFormError('กรุณาเลือกห้องเรียน');
         return;
       }
     } else {
       if (newSubject.studentIds.length === 0) {
-        alert('กรุณาเลือกนักเรียนที่เรียนในวิชาเพิ่มเติมอย่างน้อย 1 คน');
+        setSubjectFormError('กรุณาเลือกนักเรียนที่เรียนในวิชาเพิ่มเติมอย่างน้อย 1 คน');
         return;
       }
       if (!finalClassroom) {
@@ -412,39 +464,50 @@ export default function SubjectsManagement() {
     setIsSavingSubject(true);
     try {
       const primarySlot = newSubject.schedules[0] || { day: 'จันทร์', time: '08:30-09:30', duration: '1' };
-      const subject: any = {
-        subjectId: `SUB${Date.now()}`,
-        teacherId: newSubject.teacherId,
+      const fields = {
         subjectName: newSubject.subjectName.trim(),
+        subjectCode: newSubject.subjectCode.trim(),
         subjectType: newSubject.subjectType,
         classroom: finalClassroom,
+        room: newSubject.room.trim(),
         day: primarySlot.day || 'จันทร์',
         time: primarySlot.time || '08:30-09:30',
         duration: primarySlot.duration || '1',
-        schedules: newSubject.schedules
+        schedules: newSubject.schedules,
+        studentIds: newSubject.subjectType === 'elective' ? newSubject.studentIds : [],
       };
 
-      if (newSubject.subjectType === 'elective') {
-        subject.studentIds = newSubject.studentIds;
+      if (editingSubject) {
+        // Students who leave the subject (room change or removed from an elective) lose its data
+        const after = new Set(rosterOf(fields));
+        const removed = rosterOf(editingSubject).filter(id => !after.has(id));
+        const owner = teachers.find(t => t.teacherId === editingSubject.teacherId);
+        const dataConfig = owner?.firebaseConfig || userAccount.schoolFirebaseConfig;
+        if (removed.length > 0) {
+          if (!confirmedRemoval) {
+            const hasData = await teacherDatabaseService.subjectHasData(dataConfig, editingSubject.subjectId).catch(() => true);
+            if (hasData) {
+              setRemovalConfirm({ count: removed.length });
+              return;
+            }
+          }
+          await teacherDatabaseService.deleteSubjectStudentData(dataConfig, editingSubject.subjectId, removed);
+        }
+        await schoolDatabaseService.updateSubject(userAccount.schoolFirebaseConfig, editingSubject.subjectId, fields);
+      } else {
+        await schoolDatabaseService.addSubject(userAccount.schoolFirebaseConfig, {
+          subjectId: `SUB${Date.now()}`,
+          teacherId: newSubject.teacherId,
+          ...fields,
+        } as SubjectData);
       }
-
-      await schoolDatabaseService.addSubject(userAccount.schoolFirebaseConfig, subject);
       await loadData(true);
       invalidateCache();
-      setShowAddModal(false);
-      setStudentSearchQuery('');
-      setStudentClassFilter('all');
-      setNewSubject({
-        teacherId: '',
-        subjectName: '',
-        subjectType: 'basic',
-        classroom: '',
-        studentIds: [],
-        schedules: [{ day: 'จันทร์', time: '08:30-09:30', duration: '1' }]
-      });
+      closeSubjectEditor();
+      setNewSubject(emptySubjectForm());
     } catch (error) {
-      console.error('Error adding subject:', error);
-      alert('ไม่สามารถเพิ่มวิชาเรียนได้');
+      console.error('Error saving subject:', error);
+      toast.error(editingSubject ? 'ไม่สามารถบันทึกการแก้ไขได้' : 'ไม่สามารถเพิ่มวิชาเรียนได้');
     } finally {
       setIsSavingSubject(false);
     }
@@ -454,7 +517,7 @@ export default function SubjectsManagement() {
     if (selectedSubjects.size === 0) return;
     if (!userAccount?.schoolFirebaseConfig) return;
 
-    if (!confirm(`ยืนยันการลบ ${selectedSubjects.size} วิชาเรียน? (รวมข้อมูลที่เกี่ยวข้องทั้งหมด เช่น คะแนน เช็คชื่อ การบ้าน ตารางเรียน สื่อการสอน)`)) return;
+    if (!(await askConfirm({ title: `ลบ ${selectedSubjects.size} วิชา?`, message: 'ข้อมูลที่เกี่ยวข้องทั้งหมด เช่น คะแนน เช็คชื่อ การบ้าน ตารางเรียน และสื่อการสอน จะถูกลบและกู้คืนไม่ได้', confirmLabel: 'ลบ', tone: 'danger' }))) return;
 
     setLoading(true);
     try {
@@ -494,10 +557,10 @@ export default function SubjectsManagement() {
       setSelectedSubjects(new Set());
       await loadData(true);
       invalidateCache();
-      alert('ลบวิชาเรียนและข้อมูลที่เกี่ยวข้องทั้งหมดสำเร็จ');
+      toast.success('ลบวิชาเรียนและข้อมูลที่เกี่ยวข้องทั้งหมดสำเร็จ');
     } catch (error) {
       console.error('Error deleting subjects:', error);
-      alert('ไม่สามารถลบวิชาเรียนได้');
+      toast.error('ไม่สามารถลบวิชาเรียนได้');
     } finally {
       setLoading(false);
     }
@@ -534,59 +597,6 @@ export default function SubjectsManagement() {
     }
   };
 
-  // Swipe gesture handlers for back navigation
-  const handleTouchStart = (e: React.TouchEvent) => {
-    const touchX = e.touches[0].clientX;
-
-    // Prevent iOS Safari edge swipe-to-go-back gesture
-    if (touchX < 50) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-
-    // Only allow swipe from left edge (within 50px)
-    if (touchX < 50) {
-      setTouchStartX(touchX);
-      setIsSwiping(true);
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isSwiping) return;
-    const currentX = e.touches[0].clientX;
-    const diff = currentX - touchStartX;
-
-    // Only track left-to-right swipe
-    if (diff > 0) {
-      const progress = Math.min(diff / 200, 1); // 200px threshold
-      setSwipeProgress(progress);
-    }
-  };
-
-  const handleTouchEnd = () => {
-    if (!isSwiping) return;
-
-    // If swiped more than 50% of threshold, go back
-    if (swipeProgress > 0.5) {
-      router.back();
-    }
-
-    // Reset state
-    setSwipeProgress(0);
-    setIsSwiping(false);
-    setTouchStartX(0);
-  };
-
-  // Trackpad gesture handlers for laptops
-  const handleWheel = (e: React.WheelEvent) => {
-    // Check if it's a horizontal scroll (trackpad gesture)
-    // Mac trackpad: deltaX negative = left-to-right swipe (back gesture)
-    if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && e.deltaX < -50) {
-      // Left-to-right scroll - trigger back immediately
-      router.back();
-    }
-  };
-
   // Filter subjects by selected teacher
   const filteredSubjects = selectedTeacherId
     ? subjects.filter(s => s.teacherId === selectedTeacherId)
@@ -611,6 +621,10 @@ export default function SubjectsManagement() {
       'Sun': 'Sun'
     };
     return dayMap[day] || day;
+  };
+
+  const THAI_DAY_NAMES: Record<string, string> = {
+    Mon: 'วันจันทร์', Tue: 'วันอังคาร', Wed: 'วันพุธ', Thu: 'วันพฤหัสบดี', Fri: 'วันศุกร์', Sat: 'วันเสาร์', Sun: 'วันอาทิตย์',
   };
 
   // Day order for sorting (Monday to Sunday)
@@ -638,6 +652,7 @@ export default function SubjectsManagement() {
   };
 
   const selectedTeacher = teachers.find(t => t.teacherId === selectedTeacherId);
+  const subjectHues = buildHueMap(filteredSubjects);
 
   // Get teacher name by ID
   const getTeacherName = (teacherId: string) => {
@@ -647,298 +662,138 @@ export default function SubjectsManagement() {
 
   if (loading && subjects.length === 0 && !uploadProgress) {
     return (
-      <div className={`min-h-screen p-6 pb-24 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+      <div className="min-h-screen bg-surface px-4 pb-28 pt-2 text-gray-900 sm:px-6 dark:text-gray-50">
         <h1 className={`text-3xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-800'}`}>จัดการวิชาเรียน</h1>
-        <div className="animate-pulse space-y-4">
-          <div className={`h-12 rounded-2xl ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`} />
-          <div className={`h-10 w-48 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className={`rounded-2xl p-4 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}>
-              <div className="space-y-2">
-                <div className={`h-4 w-40 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
-                <div className={`h-3 w-28 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
-                <div className={`h-3 w-20 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
-              </div>
-            </div>
-          ))}
-        </div>
+        <SkeletonGroup label="กำลังโหลดรายวิชา" className="space-y-4">
+          <Bone className="h-12 w-full" />
+          <Bone className="h-4 w-40" />
+          <SkeletonRows rows={6} avatar={false} />
+        </SkeletonGroup>
       </div>
     );
   }
 
   return (
     <div
-      className={`min-h-screen p-6 pb-24 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onWheel={handleWheel}
+      className="min-h-screen bg-surface px-4 pb-28 pt-2 text-gray-900 sm:px-6 dark:text-gray-50"
     >
-      {/* Swipe visual feedback */}
-      {isSwiping && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: swipeProgress * 0.3 }}
-          className="fixed inset-0 bg-black pointer-events-none z-50"
+      <div className="mx-auto max-w-5xl">
+        <AdminPageHeader
+          title="วิชาเรียน"
+          subtitle={`${subjects.length} วิชา · ครู ${teachers.length} คน`}
+          onBack={() => (selectedTeacherId ? setSelectedTeacherId('') : router.push('/admin/dashboard'))}
+          actions={<>
+            <ActionButton icon={<Download size={18} />} label="ดาวน์โหลด" onClick={handleDownload} />
+            <UploadButton icon={<Upload size={18} />} label="อัปโหลด" onChange={handleUpload} />
+            <ActionButton icon={<Plus size={18} />} label="เพิ่มวิชา" onClick={() => openSubjectEditor(null)} primary />
+          </>}
         />
-      )}
-
-      {/* Swipe indicator arrow */}
-      {isSwiping && swipeProgress > 0.1 && (
-        <motion.div
-          initial={{ opacity: 0, x: -50 }}
-          animate={{ opacity: swipeProgress, x: swipeProgress * 100 - 50 }}
-          className="fixed left-4 top-1/2 -translate-y-1/2 z-50 pointer-events-none"
-        >
-          <ArrowLeft size={48} className="text-white opacity-50" />
-        </motion.div>
-      )}
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mb-6"
-      >
-        <h1 className={`text-3xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-800'}`}>
-          จัดการข้อมูลวิชาเรียน
-        </h1>
-
-        {/* Teacher Dropdown */}
-        <div className={`flex items-center gap-3 p-4 rounded-2xl shadow-sm ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
-          {/* Back Button */}
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => router.push('/admin/dashboard/users')}
-            className={`p-2 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
-          >
-            <ArrowLeft size={20} />
-          </motion.button>
-
-          {/* Custom Teacher Dropdown */}
-          <div className="flex-1 relative">
-            <div
-              onClick={() => setShowTeacherDropdown(!showTeacherDropdown)}
-              className={`w-full px-4 py-2 rounded-xl cursor-pointer flex items-center justify-between ${isDark ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-700'}`}
-            >
-              <span>{selectedTeacher ? selectedTeacher.name : 'เลือกครู'}</span>
-              <motion.span
-                animate={{ rotate: showTeacherDropdown ? 180 : 0 }}
-                className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}
-              >
-                ▼
-              </motion.span>
-            </div>
-
-            {/* Dropdown List */}
-            {showTeacherDropdown && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`absolute top-full left-0 right-0 mt-2 rounded-xl shadow-lg z-50 max-h-64 overflow-y-auto ${isDark ? 'bg-gray-800' : 'bg-white'}`}
-              >
-                {teachers.map((teacher) => (
-                  <div
-                    key={teacher.teacherId}
-                    onClick={() => handleTeacherSelect(teacher.teacherId)}
-                    className={`p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${isDark ? 'text-white' : 'text-gray-800'}`}
-                  >
-                    <div className="font-medium">{teacher.name}</div>
-                    <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                      {teacher.teacherId}
-                    </div>
-                  </div>
-                ))}
-              </motion.div>
-            )}
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Subjects List */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className={`rounded-2xl p-6 shadow-lg ${isDark ? 'bg-gray-800' : 'bg-white'}`}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
-            {selectedTeacherId
-              ? `ข้อมูลวิชาที่สอน (${Object.keys(groupedByDay).length} วัน)`
-              : 'รายชื่อวิชาเรียนทั้งหมด'
-            }
-          </h2>
-          {selectedSubjects.size > 0 && (
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleDeleteSelected}
-              className="flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-xl"
-            >
-              <Trash2 size={16} />
-              <span>ลบ {selectedSubjects.size} รายการ</span>
-            </motion.button>
-          )}
-        </div>
 
         {!selectedTeacherId ? (
-          <p className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-            กรุณาเลือกครูเพื่อดูวิชาที่สอน
-          </p>
-        ) : Object.keys(groupedByDay).length === 0 ? (
-          <p className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-            ยังไม่มีข้อมูลวิชาเรียนสำหรับครูท่านนี้
-          </p>
-        ) : (
-          <div className="space-y-4">
-            {Object.keys(groupedByDay)
-              .sort((a, b) => {
-                const dayA = convertDayToEnglish(a);
-                const dayB = convertDayToEnglish(b);
-                const indexA = dayOrder.indexOf(dayA);
-                const indexB = dayOrder.indexOf(dayB);
-                return indexA - indexB;
-              })
-              .map((day, dayIndex) => (
-                <div key={day}>
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 + dayIndex * 0.1 }}
-                    className={`rounded-2xl p-4 ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}
-                  >
-                    <h3 className={`text-lg font-semibold mb-3 ${isDark ? 'text-white' : 'text-gray-800'}`}>
-                      {convertDayToEnglish(day)}
-                    </h3>
-                    <div className="space-y-2">
-                      {groupedByDay[day]
-                        .sort((a: any, b: any) => {
-                          // Sort by time (extract start time from time range)
-                          const timeA = a.time.split('-')[0] || a.time;
-                          const timeB = b.time.split('-')[0] || b.time;
-                          return timeA.localeCompare(timeB);
-                        })
-                        .map((subject: any, index: number) => {
-                          const isElective = subject.subjectType === 'elective';
-                          const studentCount = isElective && Array.isArray(subject.studentIds) ? subject.studentIds.length : null;
-
-                          return (
-                            <motion.div
-                              key={subject.subjectId}
-                              initial={{ opacity: 0, x: -20 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              transition={{ delay: 0.3 + dayIndex * 0.1 + index * 0.02 }}
-                              whileHover={{ scale: 1.01, x: 5 }}
-                              onContextMenu={(e) => {
-                                e.preventDefault();
-                                toggleSubjectSelection(subject.subjectId);
-                              }}
-                              onTouchStart={() => handleSubjectTouchStart(subject.subjectId)}
-                              onTouchEnd={handleSubjectTouchEnd}
-                              onTouchMove={handleSubjectTouchMove}
-                              className={`rounded-xl p-3 cursor-pointer transition-all ${selectedSubjects.has(subject.subjectId) ? 'bg-red-100 border-2 border-red-500' : isDark ? 'bg-gray-600 hover:bg-gray-500' : 'bg-white hover:bg-blue-50'}`}
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                    <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>{subject.subjectName}</p>
-                                    <span
-                                      title={isElective ? `วิชาเพิ่มเติม${studentCount !== null ? ` (${studentCount} คน)` : ''}` : 'วิชาพื้นฐาน'}
-                                      className="inline-flex items-center shrink-0"
-                                    >
-                                      {isElective ? (
-                                        <GoogleElectiveSubjectIcon size={18} />
-                                      ) : (
-                                        <GoogleBasicSubjectIcon size={18} />
-                                      )}
-                                    </span>
-                                    {isElective && studentCount !== null && (
-                                      <span className={`text-[11px] px-2 py-0.5 rounded-md font-semibold ${
-                                        isDark ? 'bg-amber-950/40 text-amber-300' : 'bg-amber-100 text-amber-800'
-                                      }`}>
-                                        {studentCount} คน
-                                      </span>
-                                    )}
-                                  </div>
-                                  <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                                    ห้อง {subject.classroom} • {subject.time} • {subject.duration === '1' ? '1hr.' : `${subject.duration}hrs.`}
-                                  </p>
-                                </div>
-                                {selectedSubjects.has(subject.subjectId) && (
-                                  <span className="text-red-500">✓</span>
-                                )}
-                              </div>
-                            </motion.div>
-                          );
-                        })}
-                    </div>
-                  </motion.div>
+          <>
+            <SearchWell value={teacherQuery} onChange={setTeacherQuery} placeholder="ค้นหาครู" />
+            <SectionCard title="เลือกครูเพื่อดูวิชาที่สอน">
+              {teachers.length === 0 ? (
+                <p className="py-8 text-center text-gray-500 dark:text-gray-400">ยังไม่มีข้อมูลครู</p>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {teachers
+                    .filter(t => !teacherQuery || `${t.name} ${t.teacherId}`.toLowerCase().includes(teacherQuery.toLowerCase()))
+                    .map(teacher => {
+                      const count = subjects.filter(s => s.teacherId === teacher.teacherId).length;
+                      return (
+                        <button
+                          key={teacher.teacherId}
+                          type="button"
+                          onClick={() => handleTeacherSelect(teacher.teacherId)}
+                          className="flex items-center gap-3 rounded-2xl bg-surface p-3 text-left shadow-neu-sm transition-shadow active:shadow-neu-in-sm"
+                        >
+                          <Initial name={teacher.name} src={teacher.photoURL} />
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate font-semibold">{teacher.name}</div>
+                            <div className="truncate text-sm text-gray-500 dark:text-gray-400">{teacher.teacherId}</div>
+                          </div>
+                          <span className={`flex-none text-sm font-semibold tabular-nums ${count ? '' : 'text-gray-500 dark:text-gray-400'}`}>{count} วิชา</span>
+                          <ChevronRight size={18} className="flex-none text-gray-400" />
+                        </button>
+                      );
+                    })}
                 </div>
-              ))}
-          </div>
-        )}
-      </motion.div>
-
-      {/* Footer Dock */}
-      <motion.div
-        initial={{ y: 100 }}
-        animate={{ y: 0 }}
-        className="fixed bottom-0 left-0 right-0 z-40"
-      >
-        <div className={`dock-container relative px-6 py-3 shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
-          <div className="flex items-center justify-center gap-6 max-w-4xl mx-auto">
-            {/* Download Button */}
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleDownload}
-              className={`flex items-center justify-center p-4 rounded-xl transition-colors w-24 ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
-            >
-              <Download size={28} />
-            </motion.button>
-
-            {/* Hero Action Button (Larger) */}
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setShowAddModal(true)}
-              className="hero-action-button relative z-50 flex items-center justify-center p-5 rounded-3xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg transition-all w-32"
-              style={{
-                boxShadow: '0 8px 20px rgba(59, 130, 246, 0.4)'
-              }}
-            >
-              <Plus size={32} />
-            </motion.button>
-
-            {/* Upload Button */}
-            <div className={`relative p-4 rounded-xl transition-colors w-24 flex items-center justify-center ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
-              <input
-                type="file"
-                accept=".xlsx"
-                onChange={handleUpload}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              />
-              <Upload size={28} className={isDark ? 'text-gray-300' : 'text-gray-700'} />
+              )}
+            </SectionCard>
+          </>
+        ) : (
+          <>
+            <div className="mb-5 flex items-center gap-3 rounded-2xl bg-surface p-3 shadow-neu-in-sm">
+              {selectedTeacher && <Initial name={selectedTeacher.name} src={selectedTeacher.photoURL} />}
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-semibold">{selectedTeacher?.name ?? selectedTeacherId}</div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">{filteredSubjects.length} วิชา · สอน {Object.keys(groupedByDay).length} วัน</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedTeacherId('')}
+                className="flex h-9 flex-none items-center rounded-xl bg-surface px-3 text-sm font-semibold text-gray-700 shadow-neu-sm active:shadow-neu-in-sm dark:text-gray-200"
+              >
+                เปลี่ยนครู
+              </button>
             </div>
-          </div>
-        </div>
-      </motion.div>
+
+            {Object.keys(groupedByDay).length === 0 ? (
+              <SectionCard>
+                <p className="py-8 text-center text-gray-500 dark:text-gray-400">ยังไม่มีวิชาของครูท่านนี้</p>
+              </SectionCard>
+            ) : (
+              <div className="space-y-5">
+                {Object.keys(groupedByDay)
+                  .sort((a, b) => dayOrder.indexOf(convertDayToEnglish(a)) - dayOrder.indexOf(convertDayToEnglish(b)))
+                  .map(day => (
+                    <SectionCard key={day} title={THAI_DAY_NAMES[convertDayToEnglish(day)] ?? day}>
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        {groupedByDay[day]
+                          .sort((a: any, b: any) => (a.time.split('-')[0] || a.time).localeCompare(b.time.split('-')[0] || b.time))
+                          .map((subject: any, index: number) => {
+                            const isElective = subject.subjectType === 'elective';
+                            const studentCount = isElective && Array.isArray(subject.studentIds) ? subject.studentIds.length : null;
+                            return (
+                              <RosterRow
+                                key={`${subject.subjectId}-${index}`}
+                                leading={<span aria-hidden className="h-10 w-1.5 flex-none rounded-full" style={{ background: hueColor(subjectHues.get(subject.subjectName) ?? 'blue') }} />}
+                                title={<>{subject.subjectName}{subject.subjectCode && <span className="ml-2 text-sm font-normal text-gray-500 dark:text-gray-400">{subject.subjectCode}</span>}</>}
+                                meta={`ห้อง ${subject.classroom} · ${(subject.time || '').replace('-', '–')} · ${subject.duration || 1} ชม.`}
+                                trailing={
+                                  <span className={`flex-none rounded-full px-2.5 py-0.5 text-xs font-semibold ${isElective ? 'bg-amber-500/15 text-amber-800 dark:text-amber-300' : 'bg-gray-500/10 text-gray-600 dark:text-gray-300'}`}>
+                                    {isElective ? `เพิ่มเติม${studentCount !== null ? ` · ${studentCount} คน` : ''}` : 'พื้นฐาน'}
+                                  </span>
+                                }
+                                selected={selectedSubjects.has(subject.subjectId)}
+                                selecting={selectedSubjects.size > 0}
+                                onOpen={() => setDetailSubject(subjects.find(s => s.subjectId === subject.subjectId) ?? subject)}
+                                onToggle={() => toggleSubjectSelection(subject.subjectId)}
+                                touch={{
+                                  onTouchStart: () => handleSubjectTouchStart(subject.subjectId),
+                                  onTouchEnd: handleSubjectTouchEnd,
+                                  onTouchMove: handleSubjectTouchMove,
+                                }}
+                              />
+                            );
+                          })}
+                      </div>
+                    </SectionCard>
+                  ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      <SelectionBar count={selectedSubjects.size} onDelete={handleDeleteSelected} onClear={() => setSelectedSubjects(new Set())} />
 
       <UploadProgressModal progress={uploadProgress} isDark={isDark} />
 
       {/* Upload Confirmation Dialog */}
-      {pendingUpload && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className={`rounded-2xl p-6 max-w-lg w-full shadow-2xl max-h-[90vh] overflow-y-auto ${isDark ? 'bg-gray-800' : 'bg-white'}`}
-          >
+      <Modal open={!!pendingUpload} onClose={() => setPendingUpload(null)} size="lg" closeOnBackdrop={false}>
+        {pendingUpload && (<>
             <div className="mb-4">
               <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'} mb-2`}>
                 ⚠️ ยืนยันการอัพโหลดวิชาเรียน
@@ -947,6 +802,33 @@ export default function SubjectsManagement() {
                 วิชาเดิม {pendingUpload.updatedCount} วิชาจะอัปเดตตามไฟล์ โดยข้อมูลเช็คชื่อและคะแนนยังอยู่ครบ
               </p>
             </div>
+
+            {pendingUpload.kept.length > 0 && (
+              <div className={`max-h-40 overflow-y-auto mb-4 rounded-2xl p-4 ${isDark ? 'bg-amber-900/30' : 'bg-amber-50'}`}>
+                <p className={`text-sm mb-1 font-semibold ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
+                  ข้ามการเปลี่ยนห้อง/นักเรียนของวิชาที่มีข้อมูลแล้ว {pendingUpload.kept.length} วิชา
+                </p>
+                <p className={`text-xs mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>ข้อมูลอื่นในแถวยังอัปเดตตามไฟล์ ครูเปลี่ยนห้องหรือนักเรียนได้จากเมนูวิชาที่สอน</p>
+                {pendingUpload.kept.map((subject) => (
+                  <div key={subject.subjectId} className={`py-0.5 text-sm ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                    {subject.subjectName} - {subject.classroom} (ครู {subject.teacherId})
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {pendingUpload.emptyElectives.length > 0 && (
+              <div className={`max-h-40 overflow-y-auto mb-4 rounded-2xl p-4 ${isDark ? 'bg-amber-900/30' : 'bg-amber-50'}`}>
+                <p className={`text-sm mb-2 font-semibold ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
+                  วิชาเพิ่มเติมที่จะไม่มีนักเรียน ({pendingUpload.emptyElectives.length} วิชา)
+                </p>
+                {pendingUpload.emptyElectives.map((subject) => (
+                  <div key={subject.subjectId} className={`py-0.5 text-sm ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                    {subject.subjectName} - {subject.classroom} (ครู {subject.teacherId})
+                  </div>
+                ))}
+              </div>
+            )}
 
             {pendingUpload.toDelete.length > 0 && (
               <div className={`max-h-40 overflow-y-auto mb-4 rounded-2xl p-4 ${isDark ? 'bg-red-900/30' : 'bg-red-50'}`}>
@@ -984,7 +866,7 @@ export default function SubjectsManagement() {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => setPendingUpload(null)}
-                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'}`}
+                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
               >
                 ยกเลิก
               </motion.button>
@@ -997,32 +879,128 @@ export default function SubjectsManagement() {
                 ยืนยันและอัพโหลด
               </motion.button>
             </div>
-          </motion.div>
-        </motion.div>
-      )}
+        </>)}
+      </Modal>
+
+      {/* Subject details */}
+      <Modal open={!!detailSubject} onClose={() => setDetailSubject(null)} labelledBy="subject-detail-title">
+        {detailSubject && (() => {
+          const d = detailSubject;
+          const hue = buildHueMap(subjects.filter(x => x.teacherId === d.teacherId)).get(d.subjectName) ?? 'blue';
+          const teacher = teachers.find(t => t.teacherId === d.teacherId);
+          const elective = d.subjectType === 'elective';
+          const roster = rosterOf(d);
+          const slots = d.schedules?.length ? d.schedules : [{ day: d.day, time: d.time, duration: d.duration }];
+          const enrolled = elective
+            ? allStudents.filter(st => roster.includes(st.studentId)).sort((a, b) => a.class.localeCompare(b.class, 'th', { numeric: true }) || (parseInt(a.number) || 0) - (parseInt(b.number) || 0))
+            : [];
+          const facts: [string, string][] = [
+            ['ครูผู้สอน', teacher ? `${teacher.name} (${teacher.teacherId})` : d.teacherId],
+            ['ประเภท', elective ? 'วิชาเพิ่มเติม' : 'วิชาพื้นฐาน'],
+            ['ห้องเรียน', d.classroom || '–'],
+            ['ห้องที่สอน', d.room || (teacher?.defaultRoom ? `${teacher.defaultRoom} (ห้องประจำครู)` : '–')],
+            ['นักเรียน', `${roster.length} คน`],
+          ];
+          return (
+            <div className="text-gray-900 dark:text-gray-50">
+              <div className="mb-5 flex items-start gap-3">
+                <span aria-hidden className="mt-1 h-12 w-1.5 flex-none rounded-full" style={{ background: hueColor(hue) }} />
+                <div className="min-w-0 flex-1">
+                  <h3 id="subject-detail-title" className="text-xl font-bold leading-tight">{d.subjectName}</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{[d.subjectCode, `รหัสอ้างอิง ${d.subjectId}`].filter(Boolean).join(' · ')}</p>
+                </div>
+                <button type="button" onClick={() => setDetailSubject(null)} aria-label="ปิด" className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-surface shadow-neu-sm active:shadow-neu-in-sm">
+                  <X size={18} />
+                </button>
+              </div>
+
+              <dl className="grid grid-cols-2 gap-3">
+                {facts.map(([label, value]) => (
+                  <div key={label} className={`rounded-xl p-3 shadow-neu-in-sm ${label === 'ครูผู้สอน' ? 'col-span-2' : ''}`}>
+                    <dt className="text-xs text-gray-500 dark:text-gray-400">{label}</dt>
+                    <dd className="font-semibold">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+
+              <h4 className="mb-2 mt-5 text-sm font-semibold text-gray-500 dark:text-gray-400">คาบเรียน</h4>
+              <ul className="space-y-2">
+                {slots.filter(sl => sl.day || sl.time).map((sl, i) => (
+                  <li key={i} className="flex items-center justify-between rounded-xl p-3 shadow-neu-in-sm">
+                    <span className="font-semibold">{sl.day ? `วัน${sl.day.replace(/^วัน/, '')}` : '–'}</span>
+                    <span className="tabular-nums text-gray-600 dark:text-gray-300">{(sl.time || '').replace('-', '–')} · {sl.duration || 1} ชม.</span>
+                  </li>
+                ))}
+              </ul>
+
+              {elective && (
+                <>
+                  <h4 className="mb-2 mt-5 text-sm font-semibold text-gray-500 dark:text-gray-400">นักเรียนที่ลงทะเบียน</h4>
+                  <ul className="max-h-48 divide-y divide-gray-300/50 overflow-y-auto rounded-xl px-3 shadow-neu-in-sm dark:divide-white/5">
+                    {enrolled.length === 0 ? (
+                      <li className="py-3 text-sm text-gray-500 dark:text-gray-400">ยังไม่มีนักเรียน</li>
+                    ) : enrolled.map(st => (
+                      <li key={st.studentId} className="flex justify-between gap-3 py-2 text-sm">
+                        <span className="truncate">{st.name}</span>
+                        <span className="flex-none tabular-nums text-gray-500 dark:text-gray-400">{st.class} · {st.number}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              <div className="mt-6 flex gap-3">
+                <button type="button" onClick={() => setDetailSubject(null)} className="h-12 flex-1 rounded-xl bg-surface font-semibold text-gray-700 shadow-neu-sm active:shadow-neu-in-sm dark:text-gray-200">
+                  ปิด
+                </button>
+                <button type="button" onClick={() => openSubjectEditor(d)} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 font-semibold text-white shadow-neu-sm active:bg-red-700">
+                  <Pencil size={18} /> แก้ไข
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+      </Modal>
+
+      {/* Students leaving an edited subject lose its data: confirm first */}
+      <Modal open={!!removalConfirm} onClose={() => setRemovalConfirm(null)} dismissible={!isSavingSubject} labelledBy="admin-removal-title">
+        {removalConfirm && (
+          <div className="text-gray-900 dark:text-gray-50">
+            <h3 id="admin-removal-title" className="mb-2 text-lg font-bold">นักเรียน {removalConfirm.count} คนจะไม่อยู่ในวิชานี้แล้ว</h3>
+            <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+              ข้อมูลการเช็คชื่อและคะแนนของนักเรียนกลุ่มนี้ในวิชา {editingSubject?.subjectName} จะถูกลบถาวร และย้อนกลับไม่ได้
+            </p>
+            <div className="mt-6 flex gap-3">
+              <button type="button" onClick={() => setRemovalConfirm(null)} disabled={isSavingSubject} className="h-12 flex-1 rounded-xl bg-surface text-sm font-semibold text-gray-700 shadow-neu-sm active:shadow-neu-in-sm dark:text-gray-200">
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={async () => { await handleAddSubject(true); setRemovalConfirm(null); }}
+                disabled={isSavingSubject}
+                className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 text-sm font-semibold text-white active:bg-red-700 disabled:opacity-50"
+              >
+                {isSavingSubject && <Loader2 size={16} className="animate-spin" />}
+                ลบข้อมูลและบันทึก
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Add Subject Modal */}
-      <AnimatePresence>
-        {showAddModal && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className={`w-full max-w-lg max-h-[90vh] rounded-3xl p-6 shadow-2xl flex flex-col ${isDark ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                }`}
-            >
+      <Modal open={showAddModal} onClose={closeSubjectEditor} dismissible={!isSavingSubject} size="lg" closeOnBackdrop={false} className="flex flex-col p-6">
               {/* Modal Header */}
-              <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-300/60 dark:border-white/10">
                 <div className="flex items-center gap-2">
                   <div className={`p-2.5 rounded-xl ${isDark ? 'bg-blue-950/40 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>
                     <BookOpen size={22} />
                   </div>
-                  <h3 className="text-xl font-bold">เพิ่มวิชาเรียน</h3>
+                  <h3 className="text-xl font-bold">{editingSubject ? 'แก้ไขวิชาเรียน' : 'เพิ่มวิชาเรียน'}</h3>
                 </div>
                 <button
-                  onClick={() => setShowAddModal(false)}
-                  className={`p-2 rounded-xl transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}
+                  onClick={closeSubjectEditor}
+                  className={`p-2 rounded-xl transition-colors ${isDark ? 'hover:bg-white/5 text-gray-400' : 'hover:bg-black/5 text-gray-500'}`}
                 >
                   <X size={20} />
                 </button>
@@ -1037,8 +1015,9 @@ export default function SubjectsManagement() {
                   </label>
                   <select
                     value={newSubject.teacherId}
+                    disabled={!!editingSubject}
                     onChange={(e) => setNewSubject({ ...newSubject, teacherId: e.target.value })}
-                    className={`w-full p-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                    className={`w-full p-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                       }`}
                   >
                     <option value="">เลือกครู</option>
@@ -1060,9 +1039,39 @@ export default function SubjectsManagement() {
                     placeholder="เช่น คณิตศาสตร์พื้นฐาน, วิทยาการคำนวณ"
                     value={newSubject.subjectName}
                     onChange={(e) => setNewSubject({ ...newSubject, subjectName: e.target.value })}
-                    className={`w-full p-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                    className={`w-full p-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                       }`}
                   />
+                </div>
+
+                {/* Subject code and teaching room */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="admin-subject-code" className={`text-xs font-semibold block mb-1.5 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                      รหัสวิชา
+                    </label>
+                    <input
+                      id="admin-subject-code"
+                      type="text"
+                      placeholder="เช่น ค31101"
+                      value={newSubject.subjectCode}
+                      onChange={(e) => setNewSubject({ ...newSubject, subjectCode: e.target.value })}
+                      className="w-full p-3 rounded-xl border border-transparent bg-surface shadow-neu-in-sm text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="admin-subject-room" className={`text-xs font-semibold block mb-1.5 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                      ห้องที่สอน
+                    </label>
+                    <input
+                      id="admin-subject-room"
+                      type="text"
+                      placeholder="เว้นว่าง = ห้องประจำครู"
+                      value={newSubject.room}
+                      onChange={(e) => setNewSubject({ ...newSubject, room: e.target.value })}
+                      className="w-full p-3 rounded-xl border border-transparent bg-surface shadow-neu-in-sm text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-white"
+                    />
+                  </div>
                 </div>
 
                 {/* Subject Type: Basic vs Elective */}
@@ -1077,11 +1086,11 @@ export default function SubjectsManagement() {
                       className={`p-3 rounded-2xl border-2 flex items-center justify-center gap-2.5 transition-all ${
                         newSubject.subjectType === 'basic'
                           ? isDark
-                            ? 'border-blue-500 bg-blue-950/40 text-blue-300 font-bold shadow-md shadow-blue-500/10'
-                            : 'border-blue-500 bg-blue-50 text-blue-700 font-bold shadow-md shadow-blue-500/10'
+                            ? 'border-blue-500 bg-blue-950/40 text-blue-300 font-bold shadow-neu-in-sm'
+                            : 'border-blue-500 bg-blue-50 text-blue-700 font-bold shadow-neu-in-sm'
                           : isDark
-                            ? 'border-gray-700 bg-gray-900/40 text-gray-400 hover:border-gray-600'
-                            : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+                            ? 'border-transparent bg-surface shadow-neu-sm text-gray-400'
+                            : 'border-transparent bg-surface shadow-neu-sm text-gray-600'
                       }`}
                     >
                       <GoogleBasicSubjectIcon size={22} />
@@ -1094,11 +1103,11 @@ export default function SubjectsManagement() {
                       className={`p-3 rounded-2xl border-2 flex items-center justify-center gap-2.5 transition-all ${
                         newSubject.subjectType === 'elective'
                           ? isDark
-                            ? 'border-amber-500 bg-amber-950/40 text-amber-300 font-bold shadow-md shadow-amber-500/10'
-                            : 'border-amber-500 bg-amber-50 text-amber-800 font-bold shadow-md shadow-amber-500/10'
+                            ? 'border-amber-500 bg-amber-950/40 text-amber-300 font-bold shadow-neu-in-sm'
+                            : 'border-amber-500 bg-amber-50 text-amber-800 font-bold shadow-neu-in-sm'
                           : isDark
-                            ? 'border-gray-700 bg-gray-900/40 text-gray-400 hover:border-gray-600'
-                            : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+                            ? 'border-transparent bg-surface shadow-neu-sm text-gray-400'
+                            : 'border-transparent bg-surface shadow-neu-sm text-gray-600'
                       }`}
                     >
                       <GoogleElectiveSubjectIcon size={22} />
@@ -1117,7 +1126,7 @@ export default function SubjectsManagement() {
                       value={newSubject.classroom}
                       onChange={(e) => setNewSubject({ ...newSubject, classroom: e.target.value })}
                       className={`w-full p-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        isDark ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                        isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                       }`}
                     >
                       <option value="">-- เลือกห้องเรียน --</option>
@@ -1154,7 +1163,7 @@ export default function SubjectsManagement() {
                       value={newSubject.classroom}
                       onChange={(e) => setNewSubject({ ...newSubject, classroom: e.target.value })}
                       className={`w-full p-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        isDark ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                        isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                       }`}
                     />
                   </div>
@@ -1165,9 +1174,7 @@ export default function SubjectsManagement() {
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
-                    className={`p-3.5 rounded-2xl border ${
-                      isDark ? 'bg-gray-900/60 border-gray-700' : 'bg-gray-50 border-gray-200'
-                    }`}
+                    className={`p-3.5 rounded-2xl border border-transparent bg-surface shadow-neu-in-sm`}
                   >
                     <div className="flex items-center justify-between mb-2">
                       <label className={`text-xs font-bold ${isDark ? 'text-amber-400' : 'text-amber-700'}`}>
@@ -1199,7 +1206,7 @@ export default function SubjectsManagement() {
                           value={studentClassFilter}
                           onChange={(e) => setStudentClassFilter(e.target.value)}
                           className={`w-full p-2 rounded-lg border text-xs ${
-                            isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                            isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                           }`}
                         >
                           <option value="all">ทุกห้องเรียน ({allStudents.length} คน)</option>
@@ -1219,7 +1226,7 @@ export default function SubjectsManagement() {
                           value={studentSearchQuery}
                           onChange={(e) => setStudentSearchQuery(e.target.value)}
                           className={`w-full pl-8 pr-3 py-2 rounded-lg border text-xs ${
-                            isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                            isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                           }`}
                         />
                       </div>
@@ -1240,7 +1247,7 @@ export default function SubjectsManagement() {
                               className={`flex items-center gap-2.5 p-2 rounded-xl cursor-pointer text-xs transition-colors ${
                                 isChecked
                                   ? isDark ? 'bg-amber-950/40 text-amber-300' : 'bg-amber-100/70 text-amber-900'
-                                  : isDark ? 'hover:bg-gray-800/80' : 'hover:bg-gray-100'
+                                  : isDark ? 'hover:bg-white/5' : 'hover:bg-black/5'
                               }`}
                             >
                               <input
@@ -1250,7 +1257,7 @@ export default function SubjectsManagement() {
                                 className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
                               />
                               <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
-                                isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
+                                isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'
                               }`}>
                                 {student.class || '-'}
                               </span>
@@ -1269,7 +1276,7 @@ export default function SubjectsManagement() {
                 )}
 
                 {/* Day, Time, and Duration combined with multi-day support (up to 3 days) */}
-                <div className="space-y-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+                <div className="space-y-3 pt-2 border-t border-gray-300/60 dark:border-white/10">
                   <div className="flex items-center justify-between">
                     <label className={`text-xs font-bold flex items-center gap-1.5 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
                       <Calendar size={14} className="text-blue-500" />
@@ -1290,9 +1297,7 @@ export default function SubjectsManagement() {
                   {newSubject.schedules.map((slot, index) => (
                     <div
                       key={index}
-                      className={`p-3.5 rounded-2xl border transition-all ${
-                        isDark ? 'bg-gray-900/60 border-gray-700' : 'bg-gray-50 border-gray-200'
-                      }`}
+                      className={`p-3.5 rounded-2xl border transition-all border-transparent bg-surface shadow-neu-in-sm`}
                     >
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-bold text-blue-500 dark:text-blue-400">
@@ -1320,7 +1325,7 @@ export default function SubjectsManagement() {
                             value={slot.day}
                             onChange={(e) => handleUpdateScheduleSlot(index, 'day', e.target.value)}
                             className={`w-full p-2.5 rounded-xl border text-xs transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                              isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                              isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                             }`}
                           >
                             <option value="จันทร์">จันทร์</option>
@@ -1344,7 +1349,7 @@ export default function SubjectsManagement() {
                             value={slot.time}
                             onChange={(e) => handleUpdateScheduleSlot(index, 'time', e.target.value)}
                             className={`w-full p-2.5 rounded-xl border text-xs transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                              isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                              isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                             }`}
                           />
                         </div>
@@ -1358,7 +1363,7 @@ export default function SubjectsManagement() {
                             value={slot.duration || '1'}
                             onChange={(e) => handleUpdateScheduleSlot(index, 'duration', e.target.value)}
                             className={`w-full p-2.5 rounded-xl border text-xs transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                              isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+                              isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'
                             }`}
                           >
                             <option value="1">1 คาบ</option>
@@ -1377,8 +1382,8 @@ export default function SubjectsManagement() {
                       onClick={handleAddScheduleSlot}
                       className={`w-full py-2.5 px-3 rounded-xl border border-dashed text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
                         isDark
-                          ? 'border-gray-700 text-gray-400 hover:border-blue-500 hover:text-blue-400 bg-gray-900/40'
-                          : 'border-gray-300 text-gray-600 hover:border-blue-500 hover:text-blue-600 bg-gray-50'
+                          ? 'border-gray-600 text-gray-400 hover:border-blue-500 hover:text-blue-400'
+                          : 'border-gray-400 text-gray-600 hover:border-blue-500 hover:text-blue-700'
                       }`}
                     >
                       <Plus size={14} />
@@ -1388,14 +1393,16 @@ export default function SubjectsManagement() {
                 </div>
               </div>
 
+              <FormError message={subjectFormError} />
+
               {/* Modal Actions */}
-              <div className="flex gap-3 mt-5 pt-3 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex gap-3 mt-5 pt-3 border-t border-gray-300/60 dark:border-white/10">
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => setShowAddModal(false)}
+                  onClick={closeSubjectEditor}
                   disabled={isSavingSubject}
-                  className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all ${isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'
                     }`}
                 >
                   ยกเลิก
@@ -1403,18 +1410,15 @@ export default function SubjectsManagement() {
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={handleAddSubject}
+                  onClick={() => handleAddSubject()}
                   disabled={isSavingSubject}
-                  className="flex-1 py-3 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 transition-all disabled:opacity-50"
+                  className="flex-1 py-3 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-neu-sm transition-all disabled:opacity-50"
                 >
                   {isSavingSubject && <Loader2 size={16} className="animate-spin" />}
-                  {isSavingSubject ? 'กำลังบันทึก...' : 'บันทึกวิชาเรียน'}
+                  {isSavingSubject ? 'กำลังบันทึก...' : editingSubject ? 'บันทึกการแก้ไข' : 'บันทึกวิชาเรียน'}
                 </motion.button>
               </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      </Modal>
 
     </div>
   );

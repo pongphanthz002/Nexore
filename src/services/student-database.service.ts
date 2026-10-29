@@ -2,8 +2,10 @@ import { firebaseManager } from '@/lib/firebase';
 import { collection, doc, getDocs, getDoc, query, where, Firestore } from 'firebase/firestore';
 import { schoolDatabaseService, StudentData, SubjectData, TeacherFirebaseConfig } from './school-database.service';
 import { teacherDatabaseService, AttendanceData, AttendanceRecord, StudentScore, Assignment, AssignmentGroup, GradeConfig } from './teacher-database.service';
-import { buildColumns, computeBreakdown, isScored } from '@/lib/grade-calculation';
 import { TtlCache } from '@/lib/firestore-helpers';
+import { summarizeAttendance, type AttendanceStats } from '@/lib/attendance';
+import { buildStudentGradeInfo } from '@/lib/student-grade-info';
+import { buildHueMap, type SubjectHue } from '@/lib/timetable';
 import { firestoreService } from './firestore.service';
 import type { FirebaseConfig } from '@/types/firebase.types';
 
@@ -17,7 +19,31 @@ export interface StudentSubjectInfo {
   time: string;
   duration?: string;
   schedules?: Array<{ day: string; time: string }>;
+  /** Official code shown to users; may be empty */
+  subjectCode: string;
+  /** Teaching room (falls back to the teacher's default room); may be empty */
+  room: string;
+  /** Same hue as the subject has in the timetable */
+  hue: SubjectHue;
 }
+
+export interface StudentGradeDetail {
+  label: string;
+  /** null = not entered yet (pending); 0 is a real score */
+  score: number | null;
+  max: number;
+  description: string;
+  /** "YYYY-MM-DD" or empty */
+  deadline: string;
+}
+
+/**
+ * One row of the student's score list, in the teacher's column order: a plain assignment,
+ * or a group whose scaled points are what counts, with its assignments under it.
+ */
+export type StudentGradeRow =
+  | { kind: 'assignment'; item: StudentGradeDetail }
+  | { kind: 'group'; id: string; name: string; points: number; max: number; items: StudentGradeDetail[] };
 
 export interface StudentGradeInfo {
   subjectId: string;
@@ -29,22 +55,22 @@ export interface StudentGradeInfo {
   totalScore: number;
   grade: string;
   unsent: number;
-  details: any[];
+  /** Full points of each part (the subject's grade proportions) */
+  maxima: { collected: number; midterm: number; final: number };
+  /** Whether the teacher has entered the exam score (a missing exam counts as 0) */
+  midtermEntered: boolean;
+  finalEntered: boolean;
+  /** The subject's grade scale, lowest first */
+  scale: { grade: string; minScore: number }[];
+  details: StudentGradeDetail[];
+  rows: StudentGradeRow[];
 }
 
 export interface StudentAttendanceInfo {
   subjectId: string;
   subjectName: string;
   classroom: string;
-  totalHours: string;
-  attended: string;
-  absent: string;
-  late: string;
-  percentage: string;
-  history: any[];
-  counts: any;
-  maxStreak: number;
-  absentByDay: Record<string, any>;
+  stats: AttendanceStats;
 }
 
 export interface FanOutResult<T> {
@@ -161,6 +187,7 @@ class StudentDatabaseService {
         }
       }
 
+      const hues = buildHueMap(classSubjects);
       const subjects: StudentSubjectInfo[] = Array.from(uniqueSubjectsMap.values()).map(({ subject, schedules }) => ({
         subjectId: subject.subjectId,
         subjectName: subject.subjectName,
@@ -171,6 +198,9 @@ class StudentDatabaseService {
         time: subject.time,
         duration: subject.duration,
         schedules,
+        subjectCode: subject.subjectCode || '',
+        room: subject.room || activeTeachers.find(t => t.teacherId === subject.teacherId)?.defaultRoom || '',
+        hue: hues.get(subject.subjectName) || 'blue',
       }));
 
       return {
@@ -232,7 +262,8 @@ class StudentDatabaseService {
   }
 
   /**
-   * Remove a student everywhere: their data in every Teacher DB they have scores/attendance in,
+   * Remove a student everywhere: their scores, attendance-summary entries and attendance-session
+   * rows in every Teacher DB they have data in,
    * their School DB record and their Master Registry mapping. Teachers are found from the
    * student's subjects (plus any teacherNodes), so cleanup works even when teacherNodes is empty.
    * Returns teacher IDs whose database could not be cleaned.
@@ -246,18 +277,19 @@ class StudentDatabaseService {
     const teachers = await schoolDatabaseService.getTeachersByIds(schoolFirebaseConfig, teacherIds);
 
     // One cleanup per database (teachers without their own DB share the school DB)
-    const databases = new Map<string, { config: FirebaseConfig; teacherIds: string[] }>();
+    const databases = new Map<string, { config: FirebaseConfig; teacherIds: string[]; subjectIds: string[] }>();
     for (const teacher of teachers.filter(isActiveTeacher)) {
       const config = teacher.firebaseConfig || schoolFirebaseConfig;
-      const entry = databases.get(config.projectId) || { config, teacherIds: [] };
+      const entry = databases.get(config.projectId) || { config, teacherIds: [], subjectIds: [] };
       entry.teacherIds.push(teacher.teacherId);
+      entry.subjectIds.push(...subjects.filter(s => s.teacherId === teacher.teacherId).map(s => s.subjectId));
       databases.set(config.projectId, entry);
     }
 
     const failedTeacherIds: string[] = [];
-    await Promise.all(Array.from(databases.values()).map(async ({ config, teacherIds: ids }) => {
+    await Promise.all(Array.from(databases.values()).map(async ({ config, teacherIds: ids, subjectIds }) => {
       try {
-        await teacherDatabaseService.deleteAllStudentData(config, student.studentId);
+        await teacherDatabaseService.deleteAllStudentData(config, student.studentId, subjectIds);
       } catch (error) {
         console.error('Error deleting student data from teacher database:', ids, error);
         failedTeacherIds.push(...ids);
@@ -333,25 +365,13 @@ class StudentDatabaseService {
       const groups = groupsSnap.docs.map(d => d.data() as AssignmentGroup).filter(inClassroom);
       const gradeConfig = gradeConfigSnap.exists() ? gradeConfigSnap.data() as GradeConfig : null;
 
-      // Same calculation as the teacher's grade sheet
-      const breakdown = computeBreakdown(scoreData, assignments, groups, gradeConfig);
-      const ordered = buildColumns(assignments, groups).flatMap(c => (c.kind === 'assignment' ? [c.assignment] : []));
-
-      // Look up subject name from subjects list
+      // Same calculation as the teacher's grade sheet and the teacher's per-student popup
       const subjectInfo = subjects.find(s => s.subjectId === scoreData.subjectId);
-
-      return {
+      return buildStudentGradeInfo(scoreData, assignments, groups, gradeConfig, {
         subjectId: scoreData.subjectId,
         subjectName: subjectInfo?.subjectName || '',
         classroom: scoreData.classroom,
-        collectedScore: breakdown.collected,
-        midtermScore: breakdown.midterm,
-        finalScore: breakdown.final,
-        totalScore: breakdown.total,
-        grade: breakdown.grade,
-        unsent: breakdown.pending,
-        details: this.buildGradeDetails(scoreData, ordered),
-      };
+      });
     });
 
     const processedGrades = await Promise.all(scoreProcessPromises);
@@ -384,21 +404,15 @@ class StudentDatabaseService {
       const studentAttendanceDocs = await this._getStudentSessions(teacherDB, firebaseConfig, subject, studentData.studentId);
 
       if (studentAttendanceDocs.length > 0) {
-        const summary = this.calculateAttendanceSummary(studentAttendanceDocs);
+        const stats = summarizeAttendance(studentAttendanceDocs.flatMap(session => session.records
+          .filter(r => String(r.studentId) === studentData.studentId)
+          .map(r => ({ date: session.date, hours: session.hours, status: r.status }))));
         return {
           subjectId: subject.subjectId,
           subjectName: subject.subjectName,
           classroom: subject.classroom,
-          totalHours: summary.totalHours.toString(),
-          attended: summary.attended.toString(),
-          absent: summary.absent.toString(),
-          late: summary.late.toString(),
-          percentage: summary.percentage,
-          history: summary.history,
-          counts: summary.counts,
-          maxStreak: summary.maxStreak,
-          absentByDay: summary.absentByDay,
-        } as StudentAttendanceInfo;
+          stats,
+        };
       }
       return null;
     });
@@ -465,21 +479,6 @@ class StudentDatabaseService {
   }
 
   /**
-   * Helper: Build grade details array
-   */
-  private buildGradeDetails(scoreData: StudentScore, assignments: Assignment[]): any[] {
-    return assignments.map(assignment => ({
-      chapter: 'บทเรียน',
-      label: assignment.title,
-      // '' = not entered yet (pending); a stored 0 is shown as 0
-      score: isScored(scoreData.assignmentScores?.[assignment.id]) ? String(scoreData.assignmentScores[assignment.id]) : '',
-      max: assignment.maxScore.toString(),
-      description: assignment.description,
-      deadline: assignment.deadline || null,
-    }));
-  }
-
-  /**
    * Helper: Group attendance records by subject
    */
   private groupAttendanceBySubject(records: AttendanceData[]): Record<string, AttendanceData[]> {
@@ -492,95 +491,6 @@ class StudentDatabaseService {
     }, {} as Record<string, AttendanceData[]>);
   }
 
-  /**
-   * Helper: Calculate attendance summary
-   */
-  private calculateAttendanceSummary(records: AttendanceData[]): any {
-    let totalHours = 0;
-    let attended = 0;
-    let absent = 0;
-    let late = 0;
-    const history: any[] = [];
-    const counts = {
-      present: 0,
-      absent: 0,
-      late: 0,
-      sick: 0,
-      leave: 0,
-      activity: 0,
-      skip: 0,
-    };
-    const absentByDay: Record<string, any> = {
-      Mon: { total: 0, details: { ข: 0, ลป: 0, ลก: 0, หนี: 0 } },
-      Tue: { total: 0, details: { ข: 0, ลป: 0, ลก: 0, หนี: 0 } },
-      Wed: { total: 0, details: { ข: 0, ลป: 0, ลก: 0, หนี: 0 } },
-      Thu: { total: 0, details: { ข: 0, ลป: 0, ลก: 0, หนี: 0 } },
-      Fri: { total: 0, details: { ข: 0, ลป: 0, ลก: 0, หนี: 0 } },
-    };
-
-    for (const record of records) {
-      totalHours += record.hours;
-      
-      for (const studentRecord of record.records) {
-        if (studentRecord.status === 'มา') {
-          attended++;
-          counts.present++;
-        } else if (studentRecord.status === 'ขาด') {
-          absent++;
-          counts.absent++;
-        } else if (studentRecord.status === 'สาย') {
-          late++;
-          counts.late++;
-        } else if (studentRecord.status === 'ลาป่วย') {
-          counts.sick++;
-        } else if (studentRecord.status === 'ลากิจ') {
-          counts.leave++;
-        } else if (studentRecord.status === 'กิจกรรม') {
-          counts.activity++;
-        } else if (studentRecord.status === 'หนี') {
-          counts.skip++;
-        }
-
-        history.push({
-          date: record.date,
-          status: studentRecord.status,
-        });
-
-        // Track absent by day
-        if (['ขาด', 'ลาป่วย', 'ลากิจ', 'หนี'].includes(studentRecord.status)) {
-          const dayMap: Record<string, string> = {
-            'จันทร์': 'Mon',
-            'อังคาร': 'Tue',
-            'พุธ': 'Wed',
-            'พฤหัสบดี': 'Thu',
-            'ศุกร์': 'Fri',
-          };
-          const day = dayMap[record.date.split(' ')[0]] || 'Mon';
-          if (absentByDay[day]) {
-            absentByDay[day].total++;
-            if (studentRecord.status === 'ขาด') absentByDay[day].details.ข++;
-            if (studentRecord.status === 'ลาป่วย') absentByDay[day].details.ลป++;
-            if (studentRecord.status === 'ลากิจ') absentByDay[day].details.ลก++;
-            if (studentRecord.status === 'หนี') absentByDay[day].details.หนี++;
-          }
-        }
-      }
-    }
-
-    const percentage = totalHours > 0 ? ((attended + late) / totalHours * 100).toFixed(1) + '%' : '0%';
-
-    return {
-      totalHours,
-      attended,
-      absent,
-      late,
-      percentage,
-      history,
-      counts,
-      maxStreak: 0, // TODO: Calculate max streak
-      absentByDay,
-    };
-  }
   /**
    * Get student's pending (unsent) assignments from all teacher databases
    * Returns assignments that the student hasn't submitted yet, sorted by deadline

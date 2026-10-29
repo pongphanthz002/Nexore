@@ -1,8 +1,10 @@
 import { firebaseManager } from '@/lib/firebase';
-import { collection, doc, getDocs, getDoc, setDoc, query, where, deleteDoc, deleteField, writeBatch, Firestore } from 'firebase/firestore';
-import { chunkArray } from '@/lib/firestore-helpers';
+import { collection, doc, getDocs, getDoc, setDoc, query, where, limit, deleteDoc, deleteField, writeBatch, Firestore } from 'firebase/firestore';
+import { chunkArray, withRetry } from '@/lib/firestore-helpers';
 import { MASTER_REGISTRY_CONFIG } from '@/config/master-registry.config';
 import type { FirebaseConfig } from '@/types/firebase.types';
+import { GRADE_SUMMARY_VERSION, type GradeSummary } from '@/lib/class-stats';
+import { invalidateTeacherStats } from '@/lib/teacher-stats-cache';
 
 export interface AttendanceRecord {
   studentId: string;
@@ -40,10 +42,31 @@ export interface AttendanceSummary {
 export const ATTENDANCE_SUMMARY_VERSION = 1;
 const ATTENDANCE_SUMMARIES = 'attendanceSummaries';
 
+function summaryFromSessions(subjectId: string, sessions: AttendanceData[]): AttendanceSummary {
+  const summary: AttendanceSummary = {
+    subjectId,
+    version: ATTENDANCE_SUMMARY_VERSION,
+    sessions: {},
+    students: {},
+    updatedAt: new Date(),
+  };
+  for (const session of sessions) {
+    const docId = attendanceDocId(session.subjectId, session.classroom, session.date);
+    summary.sessions[docId] = { date: session.date, hours: Number(session.hours) || 1, classroom: session.classroom };
+    for (const r of session.records || []) {
+      (summary.students[r.studentId] ||= {})[docId] = r.status || '';
+    }
+  }
+  return summary;
+}
+/** `gradeSummaries/{subjectId}`: per-student totals for the home statistics (see src/lib/class-stats.ts). */
+const GRADE_SUMMARIES = 'gradeSummaries';
+
 /** Every collection a Teacher DB may contain (current and legacy). */
 const TEACHER_DB_COLLECTIONS = [
   'attendance',
   ATTENDANCE_SUMMARIES,
+  GRADE_SUMMARIES,
   'gradeConfigs',
   'assignments',
   'assignmentGroups',
@@ -215,23 +238,96 @@ class TeacherDatabaseService {
   }
 
   /**
-   * Delete all data for a specific student from a teacher's database:
-   * their score documents and their entries in attendance summaries.
-   * (Session documents in `attendance` keep the class roster as recorded.)
+   * Delete all data for a specific student from a teacher's database: their score documents,
+   * their entries in attendance summaries and their rows in attendance sessions. Sessions are
+   * searched in `subjectIds` (the student's current subjects) plus every subject whose summary
+   * lists the student, so subjects they already left are cleaned too.
    */
-  async deleteAllStudentData(teacherFirebaseConfig: FirebaseConfig, studentId: string): Promise<void> {
+  async deleteAllStudentData(teacherFirebaseConfig: FirebaseConfig, studentId: string, subjectIds: string[] = []): Promise<void> {
     const database = this.getTeacherDB(teacherFirebaseConfig);
 
-    const [scoresSnap, summariesSnap] = await Promise.all([
+    const [scoresSnap, summariesSnap, gradeSummariesSnap] = await Promise.all([
       getDocs(query(collection(database, 'studentScores'), where('studentId', '==', studentId))),
       getDocs(collection(database, ATTENDANCE_SUMMARIES)),
+      getDocs(collection(database, GRADE_SUMMARIES)),
     ]);
+    const summariesWithStudent = summariesSnap.docs.filter(d => (d.data() as AttendanceSummary).students?.[studentId]);
+    const gradeSummariesWithStudent = gradeSummariesSnap.docs.filter(d => (d.data() as GradeSummary).students?.[studentId]);
+
+    const sessionSubjectIds = Array.from(new Set([...subjectIds, ...summariesWithStudent.map(d => d.id)].filter(Boolean)));
+    const sessionSnaps = await Promise.all(chunkArray(sessionSubjectIds, 30).map(ids =>
+      getDocs(query(collection(database, 'attendance'), where('subjectId', 'in', ids)))));
 
     const writes: Array<(batch: ReturnType<typeof writeBatch>) => void> = [];
     scoresSnap.docs.forEach(d => writes.push(batch => batch.delete(d.ref)));
-    summariesSnap.docs
-      .filter(d => (d.data() as AttendanceSummary).students?.[studentId])
-      .forEach(d => writes.push(batch => batch.update(d.ref, { [`students.${studentId}`]: deleteField() })));
+    summariesWithStudent.forEach(d => writes.push(batch => batch.update(d.ref, { [`students.${studentId}`]: deleteField() })));
+    gradeSummariesWithStudent.forEach(d => writes.push(batch => batch.update(d.ref, { [`students.${studentId}`]: deleteField() })));
+    sessionSnaps.flatMap(snap => snap.docs).forEach(d => {
+      const records: AttendanceRecord[] = d.data().records || [];
+      const kept = records.filter(r => String(r.studentId) !== studentId);
+      if (kept.length !== records.length) writes.push(batch => batch.update(d.ref, { records: kept }));
+    });
+
+    for (const chunk of chunkArray(writes, 499)) {
+      const batch = writeBatch(database);
+      chunk.forEach(write => write(batch));
+      await batch.commit();
+    }
+  }
+
+  /**
+   * Whether a subject has any recorded attendance or scores (2 small queries).
+   */
+  async subjectHasData(teacherFirebaseConfig: FirebaseConfig, subjectId: string): Promise<boolean> {
+    const database = this.getTeacherDB(teacherFirebaseConfig);
+    const [sessions, scores] = await Promise.all([
+      getDocs(query(collection(database, 'attendance'), where('subjectId', '==', subjectId), limit(1))),
+      getDocs(query(collection(database, 'studentScores'), where('subjectId', '==', subjectId), limit(1))),
+    ]);
+    return !sessions.empty || !scores.empty;
+  }
+
+  /**
+   * Delete one subject's data for students who left it (room change or removed from an elective):
+   * their score documents, their rows in the subject's attendance sessions and their summary entries.
+   */
+  async deleteSubjectStudentData(teacherFirebaseConfig: FirebaseConfig, subjectId: string, studentIds: string[]): Promise<void> {
+    if (studentIds.length === 0) return;
+    const database = this.getTeacherDB(teacherFirebaseConfig);
+    const removed = new Set(studentIds);
+
+    const [scoresSnap, sessionsSnap, summarySnap, gradeSummarySnap] = await Promise.all([
+      getDocs(query(collection(database, 'studentScores'), where('subjectId', '==', subjectId))),
+      getDocs(query(collection(database, 'attendance'), where('subjectId', '==', subjectId))),
+      getDoc(doc(database, ATTENDANCE_SUMMARIES, subjectId)),
+      getDoc(doc(database, GRADE_SUMMARIES, subjectId)),
+    ]);
+
+    const writes: Array<(batch: ReturnType<typeof writeBatch>) => void> = [];
+    scoresSnap.docs
+      .filter(d => removed.has(String(d.data().studentId)))
+      .forEach(d => writes.push(batch => batch.delete(d.ref)));
+    sessionsSnap.docs.forEach(d => {
+      const records: AttendanceRecord[] = d.data().records || [];
+      const kept = records.filter(r => !removed.has(String(r.studentId)));
+      if (kept.length !== records.length) writes.push(batch => batch.update(d.ref, { records: kept }));
+    });
+    if (summarySnap.exists()) {
+      const present = studentIds.filter(id => (summarySnap.data() as AttendanceSummary).students?.[id]);
+      if (present.length) {
+        const patch: Record<string, unknown> = {};
+        present.forEach(id => { patch[`students.${id}`] = deleteField(); });
+        writes.push(batch => batch.update(summarySnap.ref, patch));
+      }
+    }
+    if (gradeSummarySnap.exists()) {
+      const present = studentIds.filter(id => (gradeSummarySnap.data() as GradeSummary).students?.[id]);
+      if (present.length) {
+        const patch: Record<string, unknown> = {};
+        present.forEach(id => { patch[`students.${id}`] = deleteField(); });
+        writes.push(batch => batch.update(gradeSummarySnap.ref, patch));
+      }
+    }
 
     for (const chunk of chunkArray(writes, 499)) {
       const batch = writeBatch(database);
@@ -329,6 +425,7 @@ class TeacherDatabaseService {
         students: studentsPatch,
         updatedAt: new Date(),
       }, { merge: true });
+      invalidateTeacherStats();
     } catch (err) {
       // The session itself is saved; the summary is rebuilt the next time the teacher opens the subject
       console.error('Error updating attendance summary:', err);
@@ -351,21 +448,18 @@ class TeacherDatabaseService {
       return;
     }
 
-    const summary: AttendanceSummary = {
-      subjectId,
-      version: ATTENDANCE_SUMMARY_VERSION,
-      sessions: {},
-      students: {},
-      updatedAt: new Date(),
-    };
-    for (const session of sessions) {
-      const docId = attendanceDocId(session.subjectId, session.classroom, session.date);
-      summary.sessions[docId] = { date: session.date, hours: Number(session.hours) || 1, classroom: session.classroom };
-      for (const r of session.records || []) {
-        (summary.students[r.studentId] ||= {})[docId] = r.status || '';
-      }
-    }
-    await setDoc(ref, summary);
+    await setDoc(ref, summaryFromSessions(subjectId, sessions));
+  }
+
+  /**
+   * A subject's attendance summary for the teacher's history view: the summary document
+   * (1 read), or, before it exists, built from the session documents (which also saves it).
+   */
+  async getSubjectAttendance(teacherFirebaseConfig: FirebaseConfig, subjectId: string, classroom: string): Promise<AttendanceSummary> {
+    const summary = await withRetry(() => this.getAttendanceSummary(teacherFirebaseConfig, subjectId));
+    if (summary) return summary;
+    const sessions = await this.getAttendanceBySubject(teacherFirebaseConfig, subjectId, classroom);
+    return summaryFromSessions(subjectId, sessions);
   }
 
   /**
@@ -377,6 +471,38 @@ class TeacherDatabaseService {
     if (!snap.exists()) return null;
     const summary = snap.data() as AttendanceSummary;
     return summary.version === ATTENDANCE_SUMMARY_VERSION ? summary : null;
+  }
+
+  /**
+   * Read the grade and attendance summaries of several subjects: two document reads per
+   * subject. A missing (or outdated) summary comes back as null.
+   */
+  async getSubjectSummaries(teacherFirebaseConfig: FirebaseConfig, subjectIds: string[]): Promise<Map<string, { grades: GradeSummary | null; attendance: AttendanceSummary | null }>> {
+    const database = this.getTeacherDB(teacherFirebaseConfig);
+    const entries = await Promise.all(subjectIds.map(async id => {
+      const [gradeSnap, attendanceSnap] = await Promise.all([
+        withRetry(() => getDoc(doc(database, GRADE_SUMMARIES, id))),
+        withRetry(() => getDoc(doc(database, ATTENDANCE_SUMMARIES, id))),
+      ]);
+      const grades = gradeSnap.exists() ? (gradeSnap.data() as GradeSummary) : null;
+      const attendance = attendanceSnap.exists() ? (attendanceSnap.data() as AttendanceSummary) : null;
+      return [id, {
+        grades: grades?.version === GRADE_SUMMARY_VERSION ? grades : null,
+        attendance: attendance?.version === ATTENDANCE_SUMMARY_VERSION ? attendance : null,
+      }] as const;
+    }));
+    return new Map(entries);
+  }
+
+  async getGradeSummary(teacherFirebaseConfig: FirebaseConfig, subjectId: string): Promise<GradeSummary | null> {
+    const snap = await getDoc(doc(this.getTeacherDB(teacherFirebaseConfig), GRADE_SUMMARIES, subjectId));
+    const summary = snap.exists() ? (snap.data() as GradeSummary) : null;
+    return summary?.version === GRADE_SUMMARY_VERSION ? summary : null;
+  }
+
+  async saveGradeSummary(teacherFirebaseConfig: FirebaseConfig, summary: GradeSummary): Promise<void> {
+    await setDoc(doc(this.getTeacherDB(teacherFirebaseConfig), GRADE_SUMMARIES, summary.subjectId), { ...summary, updatedAt: new Date() });
+    invalidateTeacherStats();
   }
 
   /**
@@ -541,6 +667,37 @@ class TeacherDatabaseService {
   async deleteAssignment(teacherFirebaseConfig: FirebaseConfig, assignmentId: string): Promise<void> {
     const database = this.getTeacherDB(teacherFirebaseConfig);
     await deleteDoc(doc(database, 'assignments', assignmentId));
+  }
+
+  /**
+   * Delete assignments of one subject/classroom together with their values in
+   * `studentScores.assignmentScores` (one score query, then batched writes).
+   */
+  async deleteAssignmentsWithScores(teacherFirebaseConfig: FirebaseConfig, subjectId: string, classroom: string, assignmentIds: string[]): Promise<void> {
+    if (assignmentIds.length === 0) return;
+    const database = this.getTeacherDB(teacherFirebaseConfig);
+    const scoresSnap = await getDocs(query(
+      collection(database, 'studentScores'),
+      where('subjectId', '==', subjectId),
+      where('classroom', '==', classroom)
+    ));
+
+    const writes: Array<(batch: ReturnType<typeof writeBatch>) => void> = [];
+    scoresSnap.docs.forEach(d => {
+      const scores = (d.data().assignmentScores || {}) as Record<string, unknown>;
+      const present = assignmentIds.filter(id => id in scores);
+      if (present.length === 0) return;
+      const patch: Record<string, unknown> = {};
+      present.forEach(id => { patch[`assignmentScores.${id}`] = deleteField(); });
+      writes.push(batch => batch.update(d.ref, patch));
+    });
+    assignmentIds.forEach(id => writes.push(batch => batch.delete(doc(database, 'assignments', id))));
+
+    for (const chunk of chunkArray(writes, 499)) {
+      const batch = writeBatch(database);
+      chunk.forEach(write => write(batch));
+      await batch.commit();
+    }
   }
 
   async getAssignmentGroups(teacherFirebaseConfig: FirebaseConfig, subjectId: string, classroom: string): Promise<AssignmentGroup[]> {

@@ -1,7 +1,7 @@
 'use client';
 
 import { motion, useMotionValue, useTransform } from 'framer-motion';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 interface ThemeToggleProps {
   isDark: boolean;
@@ -14,6 +14,7 @@ const ThemeToggle = ({ isDark, toggle }: ThemeToggleProps) => {
   const padding = 5;
   const travelDist = containerWidth - orbSize - (padding * 2);
   const x = useMotionValue(isDark ? travelDist : 0);
+  const dragged = useRef(false);
   const background = useTransform(x, [0, travelDist], ['#2071b5', '#2a2a2a']);
   const glowX = useTransform(x, (val) => val - 35);
 
@@ -43,11 +44,18 @@ const ThemeToggle = ({ isDark, toggle }: ThemeToggleProps) => {
   );
 
   return (
-    <div className="relative w-[90px] h-[40px] select-none">
-      <motion.div
+    // Sky-and-sun / night-and-moon switch, set into the soft-UI surface (sunk groove, raised orb)
+    <button
+      type="button"
+      role="switch"
+      aria-checked={isDark}
+      aria-label="โหมดมืด"
+      onClick={() => toggle()}
+      className="relative block w-[90px] h-[40px] flex-none select-none rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+    >
+      <motion.span
         style={{ backgroundColor: background }}
-        className="relative w-full h-full rounded-full cursor-pointer overflow-hidden shadow-[inset_0_4px_8px_rgba(0,0,0,0.3),inset_0_-2px_4px_rgba(255,255,255,0.2)]"
-        onClick={() => toggle()}
+        className="relative block w-full h-full rounded-full cursor-pointer overflow-hidden"
       >
         <motion.div
           style={{ x: glowX }}
@@ -98,6 +106,8 @@ const ThemeToggle = ({ isDark, toggle }: ThemeToggleProps) => {
           dragConstraints={{ left: 0, right: travelDist }}
           dragElastic={0}
           dragMomentum={false}
+          onClick={e => { if (dragged.current) { e.stopPropagation(); dragged.current = false; } }}
+          onDragStart={() => { dragged.current = true; }}
           onDragEnd={(_, info) => {
             if (info.offset.x > 20 && !isDark) toggle();
             else if (info.offset.x < -20 && isDark) toggle();
@@ -109,14 +119,16 @@ const ThemeToggle = ({ isDark, toggle }: ThemeToggleProps) => {
         >
           {isDark && (
             <div className="relative w-full h-full opacity-60">
-              <div className="absolute top-1.5 left-1.5 w-1.5 h-1.5 bg-slate-500 rounded-full" />
-              <div className="absolute top-4 left-4 w-2.5 h-2.5 bg-slate-500 rounded-full" />
-              <div className="absolute top-2.5 left-5 w-1 h-1 bg-slate-500 rounded-full" />
+              <div className="absolute top-1.5 left-1.5 w-1.5 h-1.5 bg-stone-500 rounded-full" />
+              <div className="absolute top-4 left-4 w-2.5 h-2.5 bg-stone-500 rounded-full" />
+              <div className="absolute top-2.5 left-5 w-1 h-1 bg-stone-500 rounded-full" />
             </div>
           )}
         </motion.div>
-      </motion.div>
-    </div>
+        {/* Sunk rim drawn over the sky, clouds and stars so they sit inside the groove */}
+        <span aria-hidden className="pointer-events-none absolute inset-0 z-[25] rounded-full shadow-[inset_3px_3px_7px_rgb(0_0_0/0.45),inset_-2px_-2px_5px_rgb(255_255_255/0.22)]" />
+      </motion.span>
+    </button>
   );
 };
 

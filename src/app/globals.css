@@ -4,28 +4,77 @@
 
 :root {
   --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
+  /* Soft UI ("neumorphic") surface: page, cards and controls share one colour and get
+     their depth only from two shadows, light from the top left and dark from the bottom
+     right. Raised = outer shadows (big cards, buttons, the selected knob), sunken = inset
+     shadows (small cards, wells, inputs, tracks). Tailwind: bg-surface, shadow-neu-lg,
+     shadow-neu, shadow-neu-sm, shadow-neu-in, shadow-neu-in-sm, shadow-neu-in-xs. */
+  --surface: 232 235 240;
+  --neu-lo: rgb(146 158 182 / 0.55);
+  --neu-hi: rgb(255 255 255 / 0.95);
+  /* Tailwind's gray-* as RGB triplets (tailwind.config.ts), so dark mode can swap in warm
+     neutrals; 500 is darker than Tailwind's so grey text keeps 4.5:1 on the light surface. */
+  --gray-50: 249 250 251;
+  --gray-100: 243 244 246;
+  --gray-200: 229 231 235;
+  --gray-300: 209 213 219;
+  --gray-400: 156 163 175;
+  --gray-500: 95 102 117;
+  --gray-600: 75 85 99;
+  --gray-700: 55 65 81;
+  --gray-800: 31 41 55;
+  --gray-900: 17 24 39;
+  --gray-950: 3 7 18;
   /* The app has its own theme toggle (html.dark, see ThemeContext); the phone's
      dark mode must not restyle native controls or the body. */
   color-scheme: light;
 }
 
-/* Only the backdrop follows the app theme (safe-area strips, overscroll).
-   Text colour stays dark: pages set their own text colours for dark mode. */
+/* Dark: a warm charcoal (no blue cast), with matching warm greys for text */
 html.dark {
-  --background-start-rgb: 17, 24, 39;
-  --background-end-rgb: 17, 24, 39;
+  --surface: 37 36 35;
+  --neu-lo: rgb(10 9 8 / 0.72);
+  --gray-50: 250 249 247;
+  --gray-100: 244 243 241;
+  --gray-200: 231 229 226;
+  --gray-300: 214 211 207;
+  --gray-400: 170 166 161;
+  --gray-500: 140 136 131;
+  --gray-600: 96 93 89;
+  --gray-700: 70 68 65;
+  --gray-800: 46 44 42;
+  --gray-900: 27 26 25;
+  --gray-950: 14 13 12;
 }
 
+/* Re-declared wherever the two shadow colours change, so the composites pick up the local ones */
+:root, html.dark {
+  --neu-raised-lg: 10px 10px 24px var(--neu-lo), -10px -10px 24px var(--neu-hi);
+  --neu-raised: 6px 6px 14px var(--neu-lo), -6px -6px 14px var(--neu-hi);
+  --neu-raised-sm: 3px 3px 7px var(--neu-lo), -3px -3px 7px var(--neu-hi);
+  --neu-inset: inset 5px 5px 10px var(--neu-lo), inset -5px -5px 10px var(--neu-hi);
+  --neu-inset-sm: inset 3px 3px 6px var(--neu-lo), inset -3px -3px 6px var(--neu-hi);
+  /* thin tracks (progress bars, h-2 to h-3) */
+  --neu-inset-xs: inset 1.5px 1.5px 3px var(--neu-lo), inset -1.5px -1.5px 3px var(--neu-hi);
+}
+
+/* Dark: a light edge spread as far as the shadow reads as a grey haze on charcoal, so the
+   highlight stays short and faint; depth comes mostly from the dark side */
+html.dark {
+  --neu-hi: rgb(255 248 238 / 0.06);
+  --neu-raised-lg: 10px 10px 24px var(--neu-lo), -3px -3px 8px var(--neu-hi);
+  --neu-raised: 6px 6px 14px var(--neu-lo), -2px -2px 6px var(--neu-hi);
+  --neu-raised-sm: 3px 3px 7px var(--neu-lo), -1px -1px 3px var(--neu-hi);
+  --neu-inset: inset 5px 5px 10px var(--neu-lo), inset -2px -2px 5px var(--neu-hi);
+  --neu-inset-sm: inset 3px 3px 6px var(--neu-lo), inset -1.5px -1.5px 3px var(--neu-hi);
+  --neu-inset-xs: inset 1.5px 1.5px 3px var(--neu-lo), inset -1px -1px 2px var(--neu-hi);
+}
+
+/* Body text stays dark (pages set their own dark-mode text colours); the backdrop is the
+   surface in both themes (safe-area strips, overscroll). */
 body {
   color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  background: rgb(var(--surface));
   user-select: none;
   -webkit-user-select: none;
   -moz-user-select: none;
@@ -39,6 +88,11 @@ body {
   /* Allow vertical scroll and pinch zoom */
   touch-action: pan-y pinch-zoom;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* No double-tap-to-zoom wait on controls, so taps register at once */
+a, button, input, select, textarea, label, summary, [role="button"], [role="tab"] {
+  touch-action: manipulation;
 }
 
 /* Allow text selection for inputs and textareas */
@@ -80,4 +134,47 @@ pre, code {
 html, body {
   overscroll-behavior: none;
   overscroll-behavior-y: none;
+}
+
+/* Timetable subject blocks (colours come from hueVars in src/lib/timetable.ts). Periods sit
+   sunk into the card; the one running now rises out of it. */
+:root {
+  --tt-card: rgb(var(--surface));
+}
+.timetable-block {
+  background: var(--sb);
+  box-shadow: inset 4px 0 0 var(--sbar), var(--neu-inset-sm);
+}
+.timetable-block.current {
+  box-shadow: inset 4px 0 0 var(--sbar), 0 0 0 2px var(--sbar), var(--neu-raised);
+}
+/* Today's finished periods: a little quieter than what is still to come, but stronger than other days */
+.timetable-block.past {
+  background: color-mix(in srgb, var(--sb) 80%, var(--tt-card));
+  box-shadow: inset 4px 0 0 color-mix(in srgb, var(--sbar) 75%, var(--tt-card)), var(--neu-inset-sm);
+}
+.timetable-block.past > * {
+  opacity: 0.85;
+}
+/* Days other than today: clearly lighter, so today always stands out */
+.timetable-block.other {
+  background: color-mix(in srgb, var(--sb) 35%, var(--tt-card));
+  box-shadow: inset 4px 0 0 color-mix(in srgb, var(--sbar) 40%, var(--tt-card)), var(--neu-inset-sm);
+}
+.timetable-block.other > * {
+  opacity: 0.6;
+}
+
+/* Loading placeholders (src/components/Skeleton.tsx): sunk into the surface, breathing slowly */
+.skeleton {
+  background: rgb(var(--surface));
+  box-shadow: var(--neu-inset-xs);
+  animation: skeleton-breathe 1.6s ease-in-out infinite;
+}
+@keyframes skeleton-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
 }

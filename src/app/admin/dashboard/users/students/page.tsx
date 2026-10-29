@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { studentDatabaseService } from '@/services/student-database.service';
@@ -9,9 +9,14 @@ import { schoolDatabaseService } from '@/services/school-database.service';
 import { firestoreService } from '@/services/firestore.service';
 import { runPool } from '@/lib/firestore-helpers';
 import UploadProgressModal, { UploadProgress } from '@/components/UploadProgressModal';
+import { ActionButton, AdminPageHeader, Initial, RosterRow, SearchWell, SectionCard, SelectionBar, StatusPill, UploadButton } from '@/components/admin/AdminUI';
 import * as XLSX from 'xlsx';
 import { Download, Upload, Trash2, Edit, Eye, EyeOff, RefreshCw, Plus, ArrowLeft, Search, X } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
+import Modal, { FormError } from '@/components/Modal';
+import { Bone, SkeletonGroup, SkeletonRows } from '@/components/Skeleton';
+import { toast } from '@/components/Toast';
+import { askConfirm } from '@/components/ConfirmHost';
 
 export default function StudentsManagement() {
   const router = useRouter();
@@ -28,6 +33,7 @@ export default function StudentsManagement() {
   const [openClass, setOpenClass] = useState<string | null>(null);
   const [showUID, setShowUID] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [formError, setFormError] = useState('');
   const [editStudentData, setEditStudentData] = useState({
     studentId: '',
     name: '',
@@ -37,9 +43,6 @@ export default function StudentsManagement() {
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
   const [showAddModal, setShowAddModal] = useState(false);
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
-  const [swipeProgress, setSwipeProgress] = useState(0);
-  const [isSwiping, setIsSwiping] = useState(false);
-  const [touchStartX, setTouchStartX] = useState(0);
   const [newStudentData, setNewStudentData] = useState({
     studentId: '',
     name: '',
@@ -52,11 +55,7 @@ export default function StudentsManagement() {
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const lastLoadedConfigRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    loadStudents();
-  }, [userAccount]);
-
-  const loadStudents = async (force = false) => {
+  const loadStudents = useCallback(async (force = false) => {
     try {
       if (!userAccount?.schoolFirebaseConfig) return;
       const configKey = userAccount.schoolFirebaseConfig.projectId;
@@ -70,7 +69,11 @@ export default function StudentsManagement() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userAccount]);
+
+  useEffect(() => {
+    loadStudents();
+  }, [loadStudents]);
 
   const filteredStudents = students.filter(student =>
     student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -122,7 +125,7 @@ export default function StudentsManagement() {
     if (!file) return;
 
     if (!userAccount?.schoolFirebaseConfig) {
-      alert('ไม่พบ School Firebase Config กรุณาทำ Admin Setup ก่อน');
+      toast.error('ไม่พบ School Firebase Config กรุณาทำ Admin Setup ก่อน');
       return;
     }
 
@@ -177,13 +180,13 @@ export default function StudentsManagement() {
       await loadStudents(true);
       setUploadProgress(null);
       if (unknownTeacherIds.length > 0) {
-        alert(`คำเตือน: ไม่พบครูรหัส ${unknownTeacherIds.join(', ')} ในระบบ (teacherNodes) ข้อมูลนักเรียนถูกบันทึกแล้ว`);
+        toast.error(`ไม่พบครูรหัส ${unknownTeacherIds.join(', ')} ในระบบ (teacherNodes) ข้อมูลนักเรียนถูกบันทึกแล้ว`);
       }
-      alert('อัพโหลดรายชื่อนักเรียนสำเร็จ');
+      toast.success('อัพโหลดรายชื่อนักเรียนสำเร็จ');
     } catch (error) {
       console.error('Error uploading students:', error);
       setUploadProgress(null);
-      alert('ไม่สามารถอัพโหลดรายชื่อนักเรียนได้');
+      toast.error('ไม่สามารถอัพโหลดรายชื่อนักเรียนได้');
     } finally {
       setUploadProgress(null);
       setLoading(false);
@@ -192,7 +195,7 @@ export default function StudentsManagement() {
 
   const confirmDeleteAndUpload = async () => {
     if (!userAccount?.schoolFirebaseConfig) {
-      alert('ไม่พบ School Firebase Config');
+      toast.error('ไม่พบ School Firebase Config');
       setShowDeleteConfirm(false);
       setLoading(false);
       return;
@@ -237,19 +240,19 @@ export default function StudentsManagement() {
       setUploadProgress(null);
 
       if (failedStudentIds.length > 0) {
-        alert(`ลบนักเรียนบางคนไม่สำเร็จ: ${failedStudentIds.join(', ')}`);
+        toast.warn(`ลบนักเรียนบางคนไม่สำเร็จ: ${failedStudentIds.join(', ')}`);
       }
       if (failedTeacherIds.size > 0) {
-        alert(`ลบข้อมูลในฐานข้อมูลครูบางคนไม่สำเร็จ: ${Array.from(failedTeacherIds).join(', ')}`);
+        toast.warn(`ลบข้อมูลในฐานข้อมูลครูบางคนไม่สำเร็จ: ${Array.from(failedTeacherIds).join(', ')}`);
       }
       if (unknownTeacherIds.length > 0) {
-        alert(`คำเตือน: ไม่พบครูรหัส ${unknownTeacherIds.join(', ')} ในระบบ (teacherNodes) ข้อมูลนักเรียนถูกบันทึกแล้ว`);
+        toast.error(`ไม่พบครูรหัส ${unknownTeacherIds.join(', ')} ในระบบ (teacherNodes) ข้อมูลนักเรียนถูกบันทึกแล้ว`);
       }
-      alert('อัพโหลดรายชื่อนักเรียนสำเร็จ');
+      toast.success('อัพโหลดรายชื่อนักเรียนสำเร็จ');
     } catch (error) {
       console.error('Error uploading students:', error);
       setUploadProgress(null);
-      alert('ไม่สามารถอัพโหลดรายชื่อนักเรียนได้');
+      toast.error('ไม่สามารถอัพโหลดรายชื่อนักเรียนได้');
     } finally {
       setUploadProgress(null);
       setLoading(false);
@@ -271,6 +274,7 @@ export default function StudentsManagement() {
       class: selectedStudent.class,
       number: selectedStudent.number
     });
+    setFormError('');
     setShowEditModal(true);
     setShowPopup(false);
   };
@@ -278,11 +282,11 @@ export default function StudentsManagement() {
   const handleSaveStudentEdit = async () => {
     if (!userAccount?.schoolFirebaseConfig) return;
     if (!editStudentData.studentId || !editStudentData.name || !editStudentData.class || !editStudentData.number) {
-      alert('กรุณากรอกข้อมูลให้ครบ');
+      setFormError('กรุณากรอกข้อมูลให้ครบทุกช่อง');
       return;
     }
 
-    if (!confirm('ยืนยันการแก้ไขข้อมูลนักเรียน?')) return;
+    if (!(await askConfirm({ title: 'บันทึกการแก้ไขข้อมูลนักเรียน?', confirmLabel: 'บันทึก' }))) return;
 
     setLoading(true);
     try {
@@ -312,10 +316,10 @@ export default function StudentsManagement() {
       invalidateCache();
       setShowEditModal(false);
       setSelectedStudent(null);
-      alert('แก้ไขข้อมูลนักเรียนสำเร็จ');
+      toast.success('แก้ไขข้อมูลนักเรียนสำเร็จ');
     } catch (error) {
       console.error('Error editing student:', error);
-      alert('ไม่สามารถแก้ไขข้อมูลนักเรียนได้');
+      toast.error('ไม่สามารถแก้ไขข้อมูลนักเรียนได้');
     } finally {
       setLoading(false);
     }
@@ -323,7 +327,7 @@ export default function StudentsManagement() {
 
   const handleUnsyncStudent = async () => {
     if (!userAccount?.schoolFirebaseConfig) return;
-    if (!confirm('ยืนยันการยกเลิกการซิงค์? จะลบ email และ UID ออก')) return;
+    if (!(await askConfirm({ title: 'ยกเลิกการซิงค์บัญชี?', message: 'อีเมลและ UID ของบัญชีนี้จะถูกลบออก นักเรียนต้องลงทะเบียนใหม่จึงจะเข้าใช้ได้', confirmLabel: 'ยกเลิกการซิงค์', tone: 'danger' }))) return;
 
     setLoading(true);
     try {
@@ -342,10 +346,10 @@ export default function StudentsManagement() {
       await loadStudents(true);
       setShowPopup(false);
       setSelectedStudent(null);
-      alert('ยกเลิกการซิงค์สำเร็จ');
+      toast.success('ยกเลิกการซิงค์สำเร็จ');
     } catch (error) {
       console.error('Error unsyncing student:', error);
-      alert('ไม่สามารถยกเลิกการซิงค์ได้');
+      toast.error('ไม่สามารถยกเลิกการซิงค์ได้');
     } finally {
       setLoading(false);
     }
@@ -382,64 +386,11 @@ export default function StudentsManagement() {
     }
   };
 
-  // Swipe gesture handlers for back navigation
-  const handleTouchStart = (e: React.TouchEvent) => {
-    const touchX = e.touches[0].clientX;
-    
-    // Prevent iOS Safari edge swipe-to-go-back gesture
-    if (touchX < 50) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    
-    // Only allow swipe from left edge (within 50px)
-    if (touchX < 50) {
-      setTouchStartX(touchX);
-      setIsSwiping(true);
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isSwiping) return;
-    const currentX = e.touches[0].clientX;
-    const diff = currentX - touchStartX;
-    
-    // Only track left-to-right swipe
-    if (diff > 0) {
-      const progress = Math.min(diff / 200, 1); // 200px threshold
-      setSwipeProgress(progress);
-    }
-  };
-
-  const handleTouchEnd = () => {
-    if (!isSwiping) return;
-    
-    // If swiped more than 50% of threshold, go back
-    if (swipeProgress > 0.5) {
-      router.back();
-    }
-    
-    // Reset state
-    setSwipeProgress(0);
-    setIsSwiping(false);
-    setTouchStartX(0);
-  };
-
-  // Trackpad gesture handlers for laptops
-  const handleWheel = (e: React.WheelEvent) => {
-    // Check if it's a horizontal scroll (trackpad gesture)
-    // Mac trackpad: deltaX negative = left-to-right swipe (back gesture)
-    if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && e.deltaX < -50) {
-      // Left-to-right scroll - trigger back immediately
-      router.back();
-    }
-  };
-
   const handleDeleteSelectedStudents = async () => {
     if (selectedStudents.size === 0) return;
     if (!userAccount?.schoolFirebaseConfig) return;
 
-    if (!confirm(`ยืนยันการลบ ${selectedStudents.size} นักเรียน?`)) return;
+    if (!(await askConfirm({ title: `ลบนักเรียน ${selectedStudents.size} คน?`, message: 'ข้อมูลของนักเรียนที่เลือก รวมคะแนนและการเช็คชื่อ จะถูกลบและกู้คืนไม่ได้', confirmLabel: 'ลบ', tone: 'danger' }))) return;
 
     setLoading(true);
     try {
@@ -452,15 +403,15 @@ export default function StudentsManagement() {
         result.failedTeacherIds.forEach(id => failedTeacherIds.add(id));
       }
       if (failedTeacherIds.size > 0) {
-        alert(`ลบข้อมูลในฐานข้อมูลครูบางคนไม่สำเร็จ: ${Array.from(failedTeacherIds).join(', ')}`);
+        toast.warn(`ลบข้อมูลในฐานข้อมูลครูบางคนไม่สำเร็จ: ${Array.from(failedTeacherIds).join(', ')}`);
       }
       setSelectedStudents(new Set());
       await loadStudents(true);
       invalidateCache();
-      alert('ลบนักเรียนสำเร็จ');
+      toast.success('ลบนักเรียนสำเร็จ');
     } catch (error) {
       console.error('Error deleting students:', error);
-      alert('ไม่สามารถลบนักเรียนได้');
+      toast.error('ไม่สามารถลบนักเรียนได้');
     } finally {
       setLoading(false);
     }
@@ -469,7 +420,7 @@ export default function StudentsManagement() {
   const handleAddStudent = async () => {
     if (!userAccount?.schoolFirebaseConfig) return;
     if (!newStudentData.studentId || !newStudentData.name || !newStudentData.class || !newStudentData.number) {
-      alert('กรุณากรอกข้อมูลให้ครบ');
+      setFormError('กรุณากรอกข้อมูลให้ครบทุกช่อง');
       return;
     }
 
@@ -509,10 +460,10 @@ export default function StudentsManagement() {
         number: '',
         email: ''
       });
-      alert('เพิ่มนักเรียนสำเร็จ');
+      toast.success('เพิ่มนักเรียนสำเร็จ');
     } catch (error) {
       console.error('Error adding student:', error);
-      alert('ไม่สามารถเพิ่มนักเรียนได้');
+      toast.error('ไม่สามารถเพิ่มนักเรียนได้');
     } finally {
       setLoading(false);
     }
@@ -528,11 +479,10 @@ export default function StudentsManagement() {
     return acc;
   }, {});
 
-  // Sort each group by studentId
+  // Sort each class by number, then studentId
   Object.keys(groupedStudents).forEach(className => {
-    groupedStudents[className].sort((a: any, b: any) => {
-      return a.studentId.localeCompare(b.studentId);
-    });
+    groupedStudents[className].sort((a: any, b: any) =>
+      (parseInt(a.number) || 0) - (parseInt(b.number) || 0) || a.studentId.localeCompare(b.studentId));
   });
 
   // Group classes by base level (e.g., M.1/1, M.1/2, M.1/3 -> M.1)
@@ -548,11 +498,11 @@ export default function StudentsManagement() {
 
   // Sort classes within each group
   Object.keys(classGroups).forEach(baseLevel => {
-    classGroups[baseLevel].sort();
+    classGroups[baseLevel].sort((a: string, b: string) => a.localeCompare(b, 'th', { numeric: true }));
   });
 
   // Sort base levels
-  const sortedBaseLevels = Object.keys(classGroups).sort();
+  const sortedBaseLevels = Object.keys(classGroups).sort((a, b) => a.localeCompare(b, 'th', { numeric: true }));
 
   const handleClassClick = (className: string) => {
     setSelectedClass(className);
@@ -564,303 +514,124 @@ export default function StudentsManagement() {
 
   if (loading && students.length === 0 && !uploadProgress) {
     return (
-      <div className={`min-h-screen p-6 pb-24 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+      <div className="min-h-screen bg-surface px-4 pb-28 pt-2 text-gray-900 sm:px-6 dark:text-gray-50">
         <h1 className={`text-3xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-800'}`}>จัดการข้อมูลนักเรียน</h1>
-        <div className="animate-pulse space-y-4">
-          <div className={`h-12 rounded-2xl ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`} />
-          <div className={`h-10 w-48 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className={`rounded-2xl p-4 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}>
-              <div className="flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-full ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
-                <div className="flex-1 space-y-2">
-                  <div className={`h-4 w-32 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
-                  <div className={`h-3 w-24 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+        <SkeletonGroup label="กำลังโหลดรายชื่อนักเรียน" className="space-y-4">
+          <Bone className="h-12 w-full" />
+          <Bone className="h-4 w-40" />
+          <SkeletonRows rows={6} />
+        </SkeletonGroup>
       </div>
     );
   }
 
   return (
-    <div 
-      className={`min-h-screen p-6 pb-24 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onWheel={handleWheel}
+    <div
+      className="min-h-screen bg-surface px-4 pb-28 pt-2 text-gray-900 sm:px-6 dark:text-gray-50"
     >
-      {/* Swipe visual feedback */}
-      {isSwiping && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: swipeProgress * 0.3 }}
-          className="fixed inset-0 bg-black pointer-events-none z-50"
+      <div className="mx-auto max-w-5xl">
+        <AdminPageHeader
+          title="นักเรียน"
+          subtitle={`${students.length} คน · ลงทะเบียนแล้ว ${students.filter(st => st.uid).length} คน`}
+          onBack={() => router.push('/admin/dashboard')}
+          actions={<>
+            <ActionButton icon={<Download size={18} />} label="ดาวน์โหลด" onClick={handleDownload} />
+            <UploadButton icon={<Upload size={18} />} label="อัปโหลด" onChange={handleUpload} />
+            <ActionButton icon={<Plus size={18} />} label="เพิ่มนักเรียน" onClick={() => { setFormError(''); setShowAddModal(true); }} primary />
+          </>}
         />
-      )}
-      
-      {/* Swipe indicator arrow */}
-      {isSwiping && swipeProgress > 0.1 && (
-        <motion.div
-          initial={{ opacity: 0, x: -50 }}
-          animate={{ opacity: swipeProgress, x: swipeProgress * 100 - 50 }}
-          className="fixed left-4 top-1/2 -translate-y-1/2 z-50 pointer-events-none"
-        >
-          <ArrowLeft size={48} className="text-white opacity-50" />
-        </motion.div>
-      )}
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mb-6"
-      >
-        <h1 className={`text-3xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-800'}`}>
-          จัดการข้อมูลนักเรียน
-        </h1>
-        
-        {/* Search Header */}
-        <div className={`flex items-center gap-3 p-4 rounded-2xl shadow-sm ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
-          {/* Back Button */}
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => router.push('/admin/dashboard/users')}
-            className={`p-2 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
-          >
-            <ArrowLeft size={20} />
-          </motion.button>
+        <SearchWell value={searchQuery} onChange={handleSearch} placeholder="ค้นหาชื่อ เลขประจำตัว หรืออีเมล" />
 
-          {/* Search Input */}
-          <div className="flex-1">
-            <input
-              type="text"
-              placeholder="ค้นหานักเรียน..."
-              value={searchQuery}
-              onChange={(e) => handleSearch(e.target.value)}
-              className={`w-full px-4 py-2 rounded-xl outline-none ${isDark ? 'bg-gray-700 text-white placeholder-gray-400' : 'bg-gray-100 text-gray-700 placeholder-gray-400'}`}
-            />
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Students List Card */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className={`rounded-2xl p-6 shadow-lg ${isDark ? 'bg-gray-800' : 'bg-white'}`}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
-            {selectedClass ? `ชั้น ${selectedClass}` : searchQuery ? 'ผลการค้นหา' : 'รายชื่อห้องเรียนทั้งหมด'}
-          </h2>
-          {selectedClass && (
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleBackToClasses}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
-            >
-              <ArrowLeft size={16} />
-              <span>กลับ</span>
-            </motion.button>
-          )}
-          {selectedStudents.size > 0 && (
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleDeleteSelectedStudents}
-              className="flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-xl"
-            >
-              <Trash2 size={16} />
-              <span>ลบ {selectedStudents.size} รายการ</span>
-            </motion.button>
-          )}
-        </div>
-        {selectedClass ? (
-          // Show students in selected class
-          <div className="space-y-3">
-            {groupedStudents[selectedClass]?.map((student: any, studentIndex: number) => (
-              <motion.div
-                key={student.studentId}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: studentIndex * 0.02 }}
-                whileHover={{ scale: 1.01, x: 5 }}
-                whileTap={{ scale: 0.99 }}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  toggleStudentSelection(student.studentId);
-                }}
-                onTouchStart={() => handleStudentTouchStart(student.studentId)}
-                onTouchEnd={handleStudentTouchEnd}
-                onTouchMove={handleStudentTouchMove}
-                onClick={() => selectedStudents.size > 0 ? toggleStudentSelection(student.studentId) : handleStudentClick(student)}
-                className={`rounded-2xl p-4 cursor-pointer transition-all ${selectedStudents.has(student.studentId) ? 'bg-red-100 border-2 border-red-500' : isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-50 hover:bg-blue-50'}`}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>{student.name}</p>
-                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                      {student.studentId} • เลขที่ {student.number} • ชั้น {student.class}
-                    </p>
-                  </div>
-                  {selectedStudents.has(student.studentId) ? (
-                    <span className="text-red-500">✓</span>
-                  ) : (
-                    <span className="text-blue-500">→</span>
-                  )}
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        ) : searchQuery ? (
-          // Show filtered students directly when searching
-          <div className="space-y-3">
-            {filteredStudents.length === 0 ? (
-              <p className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                ไม่พบนักเรียนที่ค้นหา
-              </p>
-            ) : (
-              filteredStudents.map((student: any, studentIndex: number) => (
-                <motion.div
-                  key={student.studentId}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: studentIndex * 0.02 }}
-                  whileHover={{ scale: 1.01, x: 5 }}
-                  whileTap={{ scale: 0.99 }}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    toggleStudentSelection(student.studentId);
-                  }}
-                  onTouchStart={() => handleStudentTouchStart(student.studentId)}
-                  onTouchEnd={handleStudentTouchEnd}
-                  onTouchMove={handleStudentTouchMove}
-                  onClick={() => selectedStudents.size > 0 ? toggleStudentSelection(student.studentId) : handleStudentClick(student)}
-                  className={`rounded-2xl p-4 cursor-pointer transition-all ${selectedStudents.has(student.studentId) ? 'bg-red-100 border-2 border-red-500' : isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-50 hover:bg-blue-50'}`}
+        {selectedClass || searchQuery ? (
+          <SectionCard>
+            <div className="mb-3 flex items-center gap-3">
+              {selectedClass && !searchQuery && (
+                <button
+                  type="button"
+                  onClick={handleBackToClasses}
+                  className="flex h-9 items-center gap-1.5 rounded-xl bg-surface px-3 text-sm font-semibold text-gray-700 shadow-neu-sm active:shadow-neu-in-sm dark:text-gray-200"
                 >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>{student.name}</p>
-                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        {student.studentId} • เลขที่ {student.number} • ชั้น {student.class}
-                      </p>
-                    </div>
-                    {selectedStudents.has(student.studentId) ? (
-                      <span className="text-red-500">✓</span>
-                    ) : (
-                      <span className="text-blue-500">→</span>
-                    )}
-                  </div>
-                </motion.div>
-              ))
-            )}
-          </div>
-        ) : (
-          // Show class cards in grid layout grouped by base level
-          <div className="space-y-6">
-            {sortedBaseLevels.map((baseLevel, levelIndex) => (
-              <div key={baseLevel}>
-                <div className="grid grid-cols-2 gap-4">
-                  {classGroups[baseLevel].map((className: string, classIndex: number) => (
-                    <motion.div
-                      key={className}
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.3 + levelIndex * 0.1 + classIndex * 0.05 }}
-                      whileHover={{ scale: 1.02, y: -5 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => handleClassClick(className)}
-                      className={`rounded-2xl p-4 cursor-pointer transition-all shadow-md ${isDark ? 'bg-gray-800 hover:bg-gray-700' : 'bg-white hover:bg-blue-50'}`}
-                    >
-                      <h4 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
-                        ชั้น {className}
-                      </h4>
-                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        {groupedStudents[className].length} นักเรียน
-                      </p>
-                    </motion.div>
-                  ))}
-                </div>
+                  <ArrowLeft size={16} /> ทุกห้อง
+                </button>
+              )}
+              <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400">
+                {selectedClass && !searchQuery
+                  ? `ชั้น ${selectedClass} · ${groupedStudents[selectedClass]?.length ?? 0} คน`
+                  : `ผลการค้นหา ${filteredStudents.length} คน`}
+              </h2>
+            </div>
+            {(selectedClass && !searchQuery ? groupedStudents[selectedClass] ?? [] : filteredStudents).length === 0 ? (
+              <p className="py-8 text-center text-gray-500 dark:text-gray-400">ไม่พบนักเรียนที่ค้นหา</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {(selectedClass && !searchQuery ? groupedStudents[selectedClass] ?? [] : filteredStudents).map((student: any) => (
+                  <RosterRow
+                    key={student.studentId}
+                    leading={<Initial name={student.name} src={student.photoURL} />}
+                    title={student.name}
+                    meta={`${student.studentId} · ชั้น ${student.class} · เลขที่ ${student.number || '–'}`}
+                    trailing={<StatusPill ok={!!student.uid}>{student.uid ? 'ลงทะเบียนแล้ว' : 'ยังไม่ลงทะเบียน'}</StatusPill>}
+                    selected={selectedStudents.has(student.studentId)}
+                    selecting={selectedStudents.size > 0}
+                    onOpen={() => handleStudentClick(student)}
+                    onToggle={() => toggleStudentSelection(student.studentId)}
+                    touch={{
+                      onTouchStart: () => handleStudentTouchStart(student.studentId),
+                      onTouchEnd: handleStudentTouchEnd,
+                      onTouchMove: handleStudentTouchMove,
+                    }}
+                  />
+                ))}
               </div>
+            )}
+          </SectionCard>
+        ) : sortedBaseLevels.length === 0 ? (
+          <SectionCard>
+            <p className="py-8 text-center text-gray-500 dark:text-gray-400">ยังไม่มีข้อมูลนักเรียน อัปโหลดไฟล์ Excel หรือกด &quot;เพิ่มนักเรียน&quot;</p>
+          </SectionCard>
+        ) : (
+          <div className="space-y-5">
+            {sortedBaseLevels.map(baseLevel => (
+              <SectionCard key={baseLevel} title={baseLevel}>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                  {classGroups[baseLevel].map((className: string) => {
+                    const list = groupedStudents[className];
+                    const registered = list.filter((st: any) => st.uid).length;
+                    return (
+                      <button
+                        key={className}
+                        type="button"
+                        onClick={() => handleClassClick(className)}
+                        className="rounded-2xl bg-surface p-4 text-left shadow-neu-sm transition-shadow active:shadow-neu-in-sm"
+                      >
+                        <div className="text-xl font-bold tabular-nums">{className}</div>
+                        <div className="text-sm text-gray-500 dark:text-gray-400">{list.length} คน</div>
+                        <div className="mt-2 h-1.5 overflow-hidden rounded-full shadow-neu-in-xs">
+                          <div className="h-full rounded-full bg-emerald-500" style={{ width: `${list.length ? (registered / list.length) * 100 : 0}%` }} />
+                        </div>
+                        <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">ลงทะเบียน {registered}/{list.length}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </SectionCard>
             ))}
           </div>
         )}
-      </motion.div>
+      </div>
 
-      {/* Footer Dock */}
-      <motion.div
-        initial={{ y: 100 }}
-        animate={{ y: 0 }}
-        className="fixed bottom-0 left-0 right-0 z-40"
-      >
-        <div className={`dock-container relative px-6 py-3 shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
-          <div className="flex items-center justify-center gap-6 max-w-4xl mx-auto">
-            {/* Download Button */}
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleDownload}
-              className={`flex items-center justify-center p-4 rounded-xl transition-colors w-24 ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
-            >
-              <Download size={28} />
-            </motion.button>
-
-            {/* Hero Action Button (Larger) */}
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setShowAddModal(true)}
-              className="hero-action-button relative z-50 flex items-center justify-center p-5 rounded-3xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg transition-all w-32"
-              style={{
-                boxShadow: '0 8px 20px rgba(59, 130, 246, 0.4)'
-              }}
-            >
-              <Plus size={32} />
-            </motion.button>
-
-            {/* Upload Button */}
-            <div className={`relative p-4 rounded-xl transition-colors w-24 flex items-center justify-center ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
-              <input
-                type="file"
-                accept=".xlsx"
-                onChange={handleUpload}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              />
-              <Upload size={28} className={isDark ? 'text-gray-300' : 'text-gray-700'} />
-            </div>
-          </div>
-        </div>
-      </motion.div>
+      <SelectionBar count={selectedStudents.size} onDelete={handleDeleteSelectedStudents} onClear={() => setSelectedStudents(new Set())} />
 
       {/* Popup */}
-      {showPopup && selectedStudent && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-          onClick={() => setShowPopup(false)}
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            onClick={(e) => e.stopPropagation()}
-            className={`rounded-2xl p-6 max-w-md w-full shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
-          >
+      <Modal open={showPopup && !!selectedStudent} onClose={() => setShowPopup(false)}>
+        {selectedStudent && (<>
             <div className="flex items-center justify-between mb-4">
               <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
                 รายละเอียดนักเรียน
               </h3>
               <button
                 onClick={() => setShowPopup(false)}
-                className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-100 text-gray-400 hover:text-gray-600'}`}
+                className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-white/5 text-gray-400 hover:text-gray-200' : 'hover:bg-black/5 text-gray-500 hover:text-gray-700'}`}
               >
                 <X size={24} />
               </button>
@@ -892,7 +663,7 @@ export default function StudentsManagement() {
                     <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>UID</p>
                     <button
                       onClick={() => setShowUID(!showUID)}
-                      className={`p-1 rounded ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                      className={`p-1 rounded hover:bg-black/5 dark:hover:bg-white/5`}
                     >
                       {showUID ? <EyeOff size={16} className={isDark ? 'text-gray-400' : 'text-gray-500'} /> : <Eye size={16} className={isDark ? 'text-gray-400' : 'text-gray-500'} />}
                     </button>
@@ -935,26 +706,11 @@ export default function StudentsManagement() {
                 </motion.button>
               )}
             </div>
-          </motion.div>
-        </motion.div>
-      )}
+        </>)}
+      </Modal>
 
       {/* Edit Modal */}
-      {showEditModal && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-          onClick={() => setShowEditModal(false)}
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            onClick={(e) => e.stopPropagation()}
-            className={`rounded-2xl p-6 max-w-md w-full shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
-          >
+      <Modal open={showEditModal} onClose={() => setShowEditModal(false)}>
             <div className="flex items-center justify-between mb-4">
               <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
                 แก้ไขข้อมูลนักเรียน
@@ -975,7 +731,7 @@ export default function StudentsManagement() {
                   type="text"
                   value={editStudentData.studentId}
                   onChange={(e) => setEditStudentData({ ...editStudentData, studentId: e.target.value })}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-800'}`}
                 />
               </div>
               <div>
@@ -986,7 +742,7 @@ export default function StudentsManagement() {
                   type="text"
                   value={editStudentData.name}
                   onChange={(e) => setEditStudentData({ ...editStudentData, name: e.target.value })}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-800'}`}
                 />
               </div>
               <div>
@@ -997,7 +753,7 @@ export default function StudentsManagement() {
                   type="text"
                   value={editStudentData.class}
                   onChange={(e) => setEditStudentData({ ...editStudentData, class: e.target.value })}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-800'}`}
                 />
               </div>
               <div>
@@ -1008,16 +764,17 @@ export default function StudentsManagement() {
                   type="text"
                   value={editStudentData.number}
                   onChange={(e) => setEditStudentData({ ...editStudentData, number: e.target.value })}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-800'}`}
                 />
               </div>
             </div>
+            <FormError message={formError} />
             <div className="flex gap-3 mt-6">
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => setShowEditModal(false)}
-                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'}`}
+                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
               >
                 ยกเลิก
               </motion.button>
@@ -1030,24 +787,10 @@ export default function StudentsManagement() {
                 บันทึก
               </motion.button>
             </div>
-          </motion.div>
-        </motion.div>
-      )}
+      </Modal>
 
       {/* Delete Confirmation Dialog */}
-      {showDeleteConfirm && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            className={`rounded-2xl p-6 max-w-lg w-full shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
-          >
+      <Modal open={showDeleteConfirm} onClose={() => { setShowDeleteConfirm(false); setStudentsToDelete([]); setStudentsToAdd([]); setPendingStudentsData([]); }} size="lg" closeOnBackdrop={false}>
             <div className="mb-4">
               <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'} mb-2`}>
                 ⚠️ ยืนยันการอัพโหลดรายชื่อนักเรียน
@@ -1103,7 +846,7 @@ export default function StudentsManagement() {
                   setStudentsToAdd([]);
                   setPendingStudentsData([]);
                 }}
-                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'}`}
+                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
               >
                 ยกเลิก
               </motion.button>
@@ -1116,28 +859,12 @@ export default function StudentsManagement() {
                 ยืนยันและอัพโหลด
               </motion.button>
             </div>
-          </motion.div>
-        </motion.div>
-      )}
+      </Modal>
 
       <UploadProgressModal progress={uploadProgress} isDark={isDark} />
 
       {/* Add Student Modal */}
-      {showAddModal && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-          onClick={() => setShowAddModal(false)}
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            onClick={(e) => e.stopPropagation()}
-            className={`rounded-2xl p-6 max-w-md w-full shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
-          >
+      <Modal open={showAddModal} onClose={() => setShowAddModal(false)}>
             <div className="flex items-center justify-between mb-4">
               <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>
                 เพิ่มนักเรียน
@@ -1158,7 +885,7 @@ export default function StudentsManagement() {
                   type="text"
                   value={newStudentData.studentId}
                   onChange={(e) => setNewStudentData({ ...newStudentData, studentId: e.target.value })}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-800'}`}
                   placeholder="เช่น S001"
                 />
               </div>
@@ -1170,7 +897,7 @@ export default function StudentsManagement() {
                   type="text"
                   value={newStudentData.name}
                   onChange={(e) => setNewStudentData({ ...newStudentData, name: e.target.value })}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-800'}`}
                   placeholder="ชื่อ-สกุล"
                 />
               </div>
@@ -1182,7 +909,7 @@ export default function StudentsManagement() {
                   type="text"
                   value={newStudentData.class}
                   onChange={(e) => setNewStudentData({ ...newStudentData, class: e.target.value })}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-800'}`}
                   placeholder="เช่น M.1"
                 />
               </div>
@@ -1194,7 +921,7 @@ export default function StudentsManagement() {
                   type="text"
                   value={newStudentData.number}
                   onChange={(e) => setNewStudentData({ ...newStudentData, number: e.target.value })}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-800'}`}
                   placeholder="เช่น 1"
                 />
               </div>
@@ -1206,17 +933,18 @@ export default function StudentsManagement() {
                   type="email"
                   value={newStudentData.email}
                   onChange={(e) => setNewStudentData({ ...newStudentData, email: e.target.value })}
-                  className={`w-full p-3 rounded-xl border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                  className={`w-full p-3 rounded-xl border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-800'}`}
                   placeholder="email@example.com"
                 />
               </div>
             </div>
+            <FormError message={formError} />
             <div className="flex gap-3 mt-6">
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => setShowAddModal(false)}
-                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'}`}
+                className={`flex-1 py-3 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
               >
                 ยกเลิก
               </motion.button>
@@ -1229,9 +957,7 @@ export default function StudentsManagement() {
                 เพิ่ม
               </motion.button>
             </div>
-          </motion.div>
-        </motion.div>
-      )}
+      </Modal>
     </div>
   );
 }

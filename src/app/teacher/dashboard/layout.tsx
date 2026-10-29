@@ -21,11 +21,9 @@ export default function TeacherDashboardLayout({
   }, [userAccount]);
 
   return (
-    <div 
-      className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}
-    >
+    <div className="min-h-screen bg-surface">
       <TeacherHeader isDark={isDark} toggleTheme={toggleTheme} />
-      <div className="pt-24 pb-20">
+      <div className="pt-24 pb-32">
         {children}
       </div>
       <TeacherDock isDark={isDark} />

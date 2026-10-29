@@ -1,8 +1,9 @@
 import { firebaseManager } from '@/lib/firebase';
-import { collection, doc, setDoc, getDoc, getDocs, query, where, deleteDoc, writeBatch, WriteBatch, documentId, Firestore, DocumentReference } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, updateDoc, getDocs, query, where, deleteDoc, writeBatch, WriteBatch, documentId, Firestore, DocumentReference } from 'firebase/firestore';
 import { teacherDatabaseService, GradeConfig, Assignment, AssignmentGroup, StudentScore } from '@/services/teacher-database.service';
 import { firestoreService } from '@/services/firestore.service';
-import { TtlCache, withRetry, chunkArray, runPool, ProgressCallback } from '@/lib/firestore-helpers';
+import { TtlCache, dedupe, withRetry, chunkArray, runPool, ProgressCallback } from '@/lib/firestore-helpers';
+import { invalidateTeacherRoster } from '@/lib/teacher-roster-cache';
 import type { FirebaseConfig } from '@/types/firebase.types';
 
 export interface TeacherFirebaseConfig {
@@ -12,6 +13,10 @@ export interface TeacherFirebaseConfig {
   uid?: string;
   role?: 'teacher' | 'admin';
   firebaseConfig?: FirebaseConfig | null;
+  /** Room the teacher usually teaches in; subjects without their own `room` use it. */
+  defaultRoom?: string;
+  /** Google profile photo, saved when the teacher signs in. */
+  photoURL?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -26,6 +31,8 @@ export interface StudentData {
   number: string;
   schoolId: string;
   teacherNodes: string[];
+  /** Google profile photo, saved when the student signs in. */
+  photoURL?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -47,6 +54,10 @@ export interface SubjectData {
   subjectType?: 'basic' | 'elective'; // 'basic' = วิชาพื้นฐาน, 'elective' = วิชาเพิ่มเติม
   studentIds?: string[]; // IDs of enrolled students for elective subjects
   schedules?: ScheduleSlot[]; // Multiple teaching schedules (up to 3 days)
+  /** Official subject code shown to users (e.g. "อ31101"); subjectId stays the internal key. */
+  subjectCode?: string;
+  /** Room where the subject is taught; empty = the teacher's defaultRoom. */
+  room?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -82,6 +93,12 @@ export interface SubjectWhitelistRow {
   subjectType?: 'basic' | 'elective';
   /** Only written when provided; omit to keep the subject's existing schedules. */
   schedules?: ScheduleSlot[];
+  /** Only written when the file has the column (blank clears it). */
+  subjectCode?: string;
+  /** Only written when the file has the column (blank = the teacher's default room). */
+  room?: string;
+  /** Electives only; only written when the file has the column. */
+  studentIds?: string[];
 }
 
 /** Whitelist uploads commit this many writes per batch, several batches at a time. */
@@ -141,6 +158,7 @@ class SchoolDatabaseService {
   private invalidateTeachers(): void {
     this.teachersCache.invalidate();
     this.teachersByIdCache.invalidate();
+    invalidateTeacherRoster();
   }
 
   private invalidateStudents(): void {
@@ -148,12 +166,14 @@ class SchoolDatabaseService {
     this.studentCache.invalidate();
     this.studentSubjectsCache.invalidate();
     this.subjectStudentsCache.invalidate();
+    invalidateTeacherRoster();
   }
 
   private invalidateSubjects(): void {
     this.subjectsCache.invalidate();
     this.studentSubjectsCache.invalidate();
     this.teacherSubjectsCache.invalidate();
+    invalidateTeacherRoster();
   }
 
   private getSchoolDB(schoolFirebaseConfig: FirebaseConfig): Firestore {
@@ -238,12 +258,24 @@ class SchoolDatabaseService {
   }
 
   /**
+   * Save a member's Google photo on their teacher/student doc so other screens can show it.
+   * Called at sign-in only when it changed; caches are left alone (a stale photo is harmless).
+   */
+  async savePhotoURL(schoolFirebaseConfig: FirebaseConfig, kind: 'teacher' | 'student', id: string, photoURL: string): Promise<void> {
+    const collectionName = kind === 'teacher' ? this.teachersCollection : this.studentsCollection;
+    await updateDoc(doc(this.getSchoolDB(schoolFirebaseConfig), collectionName, id), { photoURL });
+  }
+
+  /**
    * Get teacher config from school database
    */
   async getTeacherConfig(schoolFirebaseConfig: FirebaseConfig, teacherId: string): Promise<TeacherFirebaseConfig | null> {
     const database = this.getSchoolDB(schoolFirebaseConfig);
-    const teacherSnap = await withRetry(() => getDoc(doc(database, this.teachersCollection, teacherId)));
-    return teacherSnap.exists() ? (teacherSnap.data() as TeacherFirebaseConfig) : null;
+    // The home timetable and statistics ask at the same time: share one read
+    return dedupe(`teacher-config:${schoolFirebaseConfig.projectId}:${teacherId}`, async () => {
+      const teacherSnap = await withRetry(() => getDoc(doc(database, this.teachersCollection, teacherId)));
+      return teacherSnap.exists() ? (teacherSnap.data() as TeacherFirebaseConfig) : null;
+    });
   }
 
   /**
@@ -660,6 +692,9 @@ class SchoolDatabaseService {
         };
         if (subject.subjectType) subjectData.subjectType = subject.subjectType;
         if (subject.schedules) subjectData.schedules = subject.schedules;
+        if (subject.subjectCode !== undefined) subjectData.subjectCode = subject.subjectCode;
+        if (subject.room !== undefined) subjectData.room = subject.room;
+        if (subject.studentIds !== undefined) subjectData.studentIds = subject.studentIds;
         if (!existingIds.has(subject.subjectId)) subjectData.createdAt = new Date();
         batch.set(doc(database, this.subjectsCollection, subject.subjectId), subjectData, { merge: true });
       }
@@ -700,6 +735,19 @@ class SchoolDatabaseService {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+  }
+
+  /** Teacher edits from the profile's subject menu (merge, keeps fields not passed). */
+  async updateSubject(schoolFirebaseConfig: FirebaseConfig, subjectId: string, patch: Partial<Omit<SubjectData, 'subjectId' | 'createdAt'>>): Promise<void> {
+    this.invalidateSubjects();
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    await setDoc(doc(database, this.subjectsCollection, subjectId), { ...patch, updatedAt: new Date() }, { merge: true });
+  }
+
+  async updateTeacherDefaultRoom(schoolFirebaseConfig: FirebaseConfig, teacherId: string, defaultRoom: string): Promise<void> {
+    this.invalidateTeachers();
+    const database = this.getSchoolDB(schoolFirebaseConfig);
+    await setDoc(doc(database, this.teachersCollection, teacherId), { defaultRoom, updatedAt: new Date() }, { merge: true });
   }
 
   async deleteSubject(schoolFirebaseConfig: FirebaseConfig, subjectId: string): Promise<void> {

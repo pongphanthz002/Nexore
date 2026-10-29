@@ -16,6 +16,11 @@ import { studentDatabaseService } from '@/services/student-database.service';
 import { isNetworkError } from '@/lib/firestore-helpers';
 import { STORAGE_KEYS } from '@/config/storage.keys';
 import type { FirebaseConfig, UserRole } from '@/types/firebase.types';
+import { googlePhotoURL } from '@/lib/google-photo';
+
+/** Width of the left-edge strip where touches are blocked to stop iOS swipe-back. */
+const EDGE_SWIPE_ZONE = 24;
+const INTERACTIVE_SELECTOR = 'a, button, input, select, textarea, label, summary, [role="button"], [role="tab"], [contenteditable="true"]';
 
 export interface UserAccount {
   id: string;
@@ -127,6 +132,14 @@ async function resolveAccount(currentUser: User): Promise<ResolveResult> {
   let role: UserRole = mappedRole;
   let userId = '';
   let name = currentUser.displayName || '';
+  const photoURL = googlePhotoURL(currentUser);
+  // Keep the member's Google photo on their School DB doc (one write, only when it changed)
+  const syncPhoto = (kind: 'teacher' | 'student', id: string, stored?: string) => {
+    if (photoURL && photoURL !== stored) {
+      schoolDatabaseService.savePhotoURL(schoolConfig, kind, id, photoURL)
+        .catch(err => console.error('Error saving profile photo:', err));
+    }
+  };
 
   if (mappedRole === 'student') {
     const member = await schoolDatabaseService.findMember<StudentData>(schoolConfig, 'student', {
@@ -135,6 +148,7 @@ async function resolveAccount(currentUser: User): Promise<ResolveResult> {
     if (!member) return { status: 'not-in-whitelist' };
     userId = member.id;
     if (member.data.name) name = member.data.name;
+    syncPhoto('student', member.id, member.data.photoURL);
   } else {
     const member = await schoolDatabaseService.findMember<TeacherFirebaseConfig>(schoolConfig, 'teacher', {
       userId: mapping.userId, uid: currentUser.uid, email,
@@ -143,6 +157,7 @@ async function resolveAccount(currentUser: User): Promise<ResolveResult> {
       userId = member.id;
       if (member.data.role) role = member.data.role;
       if (member.data.name) name = member.data.name;
+      syncPhoto('teacher', member.id, member.data.photoURL);
     } else if (mappedRole === 'admin') {
       // School owner without a teacher record
       userId = mapping.userId || currentUser.uid;
@@ -226,13 +241,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Prevent iOS Safari edge swipe-to-go-back gesture globally
+    // Prevent iOS Safari edge swipe-to-go-back gesture globally. preventDefault on touchstart
+    // also cancels the tap's click, so touches on controls are left alone and the zone is
+    // kept to the screen edge (where the back gesture starts).
     const preventEdgeSwipe = (e: TouchEvent) => {
-      const touchX = e.touches[0].clientX;
-      // Only prevent from left edge (50px) - right edge swipe is for forward navigation
-      if (touchX < 50) {
-        e.preventDefault();
-      }
+      if (e.touches[0].clientX >= EDGE_SWIPE_ZONE) return;
+      const target = e.target as Element | null;
+      if (target?.closest?.(INTERACTIVE_SELECTOR)) return;
+      e.preventDefault();
     };
 
     document.addEventListener('touchstart', preventEdgeSwipe, { passive: false });

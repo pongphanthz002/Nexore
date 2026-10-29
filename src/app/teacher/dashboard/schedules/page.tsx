@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { STORAGE_KEYS } from '@/config/storage.keys';
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, Fragment } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { schoolDatabaseService, SubjectData, StudentData } from '@/services/school-database.service';
@@ -15,7 +15,15 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import GoogleSheetsIcon from '@/components/GoogleSheetsIcon';
+import Modal, { ModalHeader } from '@/components/Modal';
+import AttendanceStatusSelect from '@/components/AttendanceStatusSelect';
+import SubjectPicker from '@/components/SubjectPicker';
+import Avatar from '@/components/Avatar';
+import { useTeacherRoster } from '@/hooks/useTeacherRoster';
+import { studentAttendanceTotals, type StudentAttendanceTotals } from '@/lib/attendance';
 import { useTheme } from '@/contexts/ThemeContext';
+import { Bone, SkeletonCard, SkeletonGroup, SkeletonRows } from '@/components/Skeleton';
+import { toast } from '@/components/Toast';
 
 // Parse "08:30-09:30" → { startMinutes, endMinutes }
 function parseTimeRange(time: string): { startMinutes: number; endMinutes: number } | null {
@@ -105,42 +113,20 @@ function parseInputDateToFormat(dateStr: string): string {
   return formatDate(date);
 }
 
-// Map attendance status to beautiful background/border/text colors
+// Row colour per attendance status: rows sit sunk into the card (soft UI), tinted by status
 function getStatusStyles(status: string, isDark: boolean): string {
-  switch (status) {
-    case 'มา':
-      return isDark 
-        ? 'bg-gray-800 border-gray-700 text-white' 
-        : 'bg-white border-gray-200 text-gray-900';
-    case 'ขาด':
-      return isDark 
-        ? 'bg-red-950/40 border-red-900/60 text-red-200' 
-        : 'bg-red-50 border-red-200 text-red-900';
-    case 'สาย':
-      return isDark 
-        ? 'bg-yellow-950/40 border-yellow-900/60 text-yellow-200' 
-        : 'bg-yellow-50 border-yellow-200 text-yellow-900';
-    case 'ลาป่วย':
-      return isDark 
-        ? 'bg-emerald-950/40 border-emerald-900/60 text-emerald-200' 
-        : 'bg-emerald-50 border-emerald-200 text-emerald-900';
-    case 'ลากิจ':
-      return isDark 
-        ? 'bg-fuchsia-950/40 border-fuchsia-900/60 text-fuchsia-200' 
-        : 'bg-fuchsia-50 border-fuchsia-200 text-fuchsia-900';
-    case 'กิจกรรม':
-      return isDark 
-        ? 'bg-sky-950/40 border-sky-900/60 text-sky-200' 
-        : 'bg-sky-50 border-sky-200 text-sky-900';
-    case 'หนี':
-      return isDark 
-        ? 'bg-orange-950/40 border-orange-900/60 text-orange-200' 
-        : 'bg-orange-50 border-orange-200 text-orange-900';
-    default:
-      return isDark 
-        ? 'bg-gray-700/50 border-gray-600 text-gray-300' 
-        : 'bg-gray-50 border-gray-100 text-gray-500';
-  }
+  // Same hues as AttendanceStatusSelect; "มา" stays neutral so exceptions stand out
+  const tint: Record<string, [string, string]> = {
+    'มา': ['text-gray-900', 'text-white'],
+    'ขาด': ['bg-red-50/80 text-red-900', 'bg-red-950/40 text-red-100'],
+    'สาย': ['bg-amber-50/80 text-amber-900', 'bg-amber-950/40 text-amber-100'],
+    'ลาป่วย': ['bg-sky-50/80 text-sky-900', 'bg-sky-950/40 text-sky-100'],
+    'ลากิจ': ['bg-fuchsia-50/80 text-fuchsia-900', 'bg-fuchsia-950/40 text-fuchsia-100'],
+    'กิจกรรม': ['bg-teal-50/80 text-teal-900', 'bg-teal-950/40 text-teal-100'],
+    'หนี': ['bg-orange-50/80 text-orange-900', 'bg-orange-950/40 text-orange-100'],
+  };
+  const pair = tint[status] ?? ['text-gray-600', 'text-gray-300'];
+  return `border-transparent shadow-neu-in-sm ${pair[isDark ? 1 : 0]}`;
 }
 
 function SchedulesContent() {
@@ -148,23 +134,25 @@ function SchedulesContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { isDark } = useTheme();
-  const [subjects, setSubjects] = useState<SubjectData[]>([]);
-  const [students, setStudents] = useState<StudentData[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { subjects, students, teacher: teacherConfig, loading } = useTeacherRoster();
   const [selectedSubject, setSelectedSubject] = useState<SubjectData | null>(null);
   const [filteredStudents, setFilteredStudents] = useState<StudentData[]>([]);
   const [nowMinutes, setNowMinutes] = useState(getNowMinutes());
-  const [teacherConfig, setTeacherConfig] = useState<any>(null);
   
   // Attendance state
   const [isAttendanceMode, setIsAttendanceMode] = useState(false);
   const [selectedDate, setSelectedDate] = useState(formatDateForInput(new Date()));
   const [selectedHours, setSelectedHours] = useState(1);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+  // Rooms checked together (one period taught to several rooms); each record keeps its subject in recordOwner
+  const [groupSubjects, setGroupSubjects] = useState<SubjectData[]>([]);
+  const [recordOwner, setRecordOwner] = useState<Record<string, string>>({});
+  // Rows of a not-yet-saved session still on their default "มา": drawn uncoloured until the teacher picks a status
+  const [defaultIds, setDefaultIds] = useState<Set<string>>(new Set());
   const [loadingAttendance, setLoadingAttendance] = useState(false);
   const [fromSection, setFromSection] = useState<'current' | 'all'>('current');
   const [paramsProcessed, setParamsProcessed] = useState(false);
-  const [attendanceSummaries, setAttendanceSummaries] = useState<Record<string, any>>({});
+  const [attendanceSummaries, setAttendanceSummaries] = useState<Record<string, StudentAttendanceTotals>>({});
   const [todayAttendance, setTodayAttendance] = useState<AttendanceData[]>([]);
   
   // Load todayAttendance from localStorage on mount
@@ -206,38 +194,16 @@ function SchedulesContent() {
     return () => clearInterval(interval);
   }, []);
 
+  // Today's sessions (which periods are already checked); not needed to show the subject list
+  const teacherDbConfig = teacherConfig?.firebaseConfig;
   useEffect(() => {
-    async function loadData() {
-      if (userAccount?.schoolFirebaseConfig && userAccount?.userId) {
-        try {
-          // Only this teacher's subjects and the students enrolled in them
-          const [teacherSubjects, teacherData] = await Promise.all([
-            schoolDatabaseService.getSubjectsForTeacher(userAccount.schoolFirebaseConfig, userAccount.userId),
-            schoolDatabaseService.getTeacherConfig(userAccount.schoolFirebaseConfig, userAccount.userId),
-          ]);
-          const subjectStudents = await schoolDatabaseService.getStudentsForSubjects(userAccount.schoolFirebaseConfig, teacherSubjects);
-          setSubjects(teacherSubjects);
-          setStudents(subjectStudents);
-          setTeacherConfig(teacherData);
-
-          // Fetch today's attendance to filter currently teaching subjects
-          if (teacherData?.firebaseConfig) {
-            const todayFormatted = formatDate(new Date());
-            const attendance = await teacherDatabaseService.getAttendanceByDate(
-              teacherData.firebaseConfig,
-              todayFormatted
-            );
-            setTodayAttendance(attendance);
-          }
-        } catch (error) {
-          console.error('Error loading data:', error);
-        } finally {
-          setLoading(false);
-        }
-      }
-    }
-    loadData();
-  }, [userAccount]);
+    if (!teacherDbConfig) return;
+    teacherDatabaseService.getAttendanceByDate(teacherDbConfig, formatDate(new Date()))
+      .then(setTodayAttendance)
+      .catch(error => console.error('Error loading today\'s attendance:', error));
+    // Once per teacher project: the cached and the re-read teacher record hold the same config
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teacherDbConfig?.projectId]);
 
   // Current subjects: show 15 min before start, hide 180 min after start
   // Also filter out subjects that have already been checked today
@@ -278,7 +244,20 @@ function SchedulesContent() {
     const subjectId = searchParams.get('subjectId');
     
     if (!loading && !paramsProcessed) {
-      if (subjectId) {
+      const subjectIds = searchParams.get('subjectIds');
+      if (subjectIds) {
+        // From the home timetable: every room of the current period, today, the period's hours
+        setParamsProcessed(true);
+        const group = subjectIds.split(',').map(id => subjects.find(s => s.subjectId === id)).filter((s): s is SubjectData => !!s);
+        if (group.length) {
+          const hours = parseInt(searchParams.get('hours') || '');
+          if (hours) setSelectedHours(hours);
+          setSelectedSubject(group[0]);
+          setFromSection('current');
+          setFilteredStudents(matchStudents(group[0]));
+          loadAttendanceGroup(group, hours || undefined);
+        }
+      } else if (subjectId) {
         // Find subject by ID
         const subject = subjects.find(s => s.subjectId === subjectId);
         if (subject) {
@@ -303,6 +282,8 @@ function SchedulesContent() {
         setParamsProcessed(true);
       }
     }
+    // Runs once the query params and subjects are ready; the handlers it calls read the latest state anyway
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, subjects, currentSubjects, loading, paramsProcessed]);
 
   // Helper to get status counts (Updated: Count by hours and new categories)
@@ -341,7 +322,7 @@ function SchedulesContent() {
 
   const handleDownloadExcel = async () => {
     if (selectedSubjectsForDownload.length === 0) {
-      alert('โปรดเลือกอย่างน้อยหนึ่งวิชา');
+      toast.warn('โปรดเลือกอย่างน้อยหนึ่งวิชา');
       return;
     }
 
@@ -466,7 +447,7 @@ function SchedulesContent() {
       }
 
       if (wb.SheetNames.length === 0) {
-        alert('ไม่พบข้อมูลในช่วงเวลาที่เลือก');
+        toast.error('ไม่พบข้อมูลในช่วงเวลาที่เลือก');
         return;
       }
 
@@ -478,86 +459,35 @@ function SchedulesContent() {
       setShowDownloadModal(false);
     } catch (error) {
       console.error('Download error:', error);
-      alert('เกิดข้อผิดพลาดในการดาวน์โหลด');
+      toast.error('เกิดข้อผิดพลาดในการดาวน์โหลด');
     } finally {
       setIsDownloading(false);
     }
   };
+  /** History table: every student's hours per status, from the subject's summary document (1 read). */
   const loadSummaries = async (subject?: SubjectData, studentsList?: StudentData[]) => {
     const targetSubject = subject || selectedSubject;
     const targetStudents = studentsList || filteredStudents;
-    
-    if (targetSubject && targetStudents.length > 0) {
-      try {
-        const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
-        if (!firebaseConfig) return;
-
-        let allAttendance: AttendanceData[] = [];
-        if (teacherConfig?.firebaseConfig) {
-          allAttendance = await teacherDatabaseService.getAttendanceBySubject(
-            teacherConfig.firebaseConfig,
-            targetSubject.subjectId,
-            targetSubject.classroom
-          );
-        } else {
-          allAttendance = await schoolDatabaseService.getAttendanceBySubject(
-            userAccount!.schoolFirebaseConfig,
-            targetSubject.subjectId,
-            targetSubject.classroom
-          );
-        }
-
-        const summaries: Record<string, any> = {};
-        for (const student of targetStudents) {
-          let present = 0;
-          let absent = 0;
-          let late = 0;
-          let sickLeave = 0;
-          let personalLeave = 0;
-          let activity = 0;
-          let skipped = 0;
-          let total = 0;
-
-          allAttendance.forEach((att: any) => {
-            const record = att.records?.find((r: any) => r.studentId === student.studentId);
-            if (record && record.status) {
-              const hours = Number(att.hours) || 1;
-              total += hours;
-              
-              if (record.status === 'มา') {
-                present += hours;
-              } else if (record.status === 'ขาด') {
-                absent += hours;
-              } else if (record.status === 'สาย') {
-                late += hours;
-              } else if (record.status === 'ลาป่วย') {
-                sickLeave += hours;
-              } else if (record.status === 'ลากิจ') {
-                personalLeave += hours;
-              } else if (record.status === 'กิจกรรม') {
-                activity += hours;
-              } else if (record.status === 'หนี') {
-                skipped += hours;
-              }
-            }
-          });
-
-          // percentage = (มา + สาย + กิจกรรม) / ทั้งหมด
-          const totalPresentHours = present + late + activity;
-          const percentage = total > 0 ? Math.round((totalPresentHours / total) * 100) : 0;
-          summaries[student.studentId] = { present, absent, late, sickLeave, personalLeave, activity, skipped, total, percentage };
-        }
-        setAttendanceSummaries(summaries);
-      } catch (error) {
-        console.error('Error loading attendance summaries:', error);
-      }
+    const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
+    if (!targetSubject || targetStudents.length === 0 || !firebaseConfig) return;
+    try {
+      const summary = await teacherDatabaseService.getSubjectAttendance(firebaseConfig, targetSubject.subjectId, targetSubject.classroom);
+      const totals: Record<string, StudentAttendanceTotals> = {};
+      for (const student of targetStudents) totals[student.studentId] = studentAttendanceTotals(summary, student.studentId);
+      setAttendanceSummaries(totals);
+    } catch (error) {
+      console.error('Error loading attendance summaries:', error);
     }
   };
 
-  // Load attendance summaries when subject is selected or teacher configuration changes
+  // History view only: checking attendance doesn't show the totals
   useEffect(() => {
+    if (fromSection !== 'all' || isAttendanceMode) return;
     loadSummaries();
-  }, [selectedSubject, filteredStudents, teacherConfig]);
+    // These are the values loadSummaries reads (the teacher record by project: a re-read copy
+    // is a new object with the same config); it is recreated every render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSubject, filteredStudents, teacherConfig?.firebaseConfig?.projectId]);
 
   // All unique subjects (unique by subjectName + classroom)
   const allUniqueSubjects = subjects
@@ -570,21 +500,24 @@ function SchedulesContent() {
     }, [] as SubjectData[])
     .sort((a, b) => a.classroom.localeCompare(b.classroom, 'th'));
 
+  // Google photos saved on student docs at sign-in, for the check list
+  const photoById = new Map(students.map(st => [st.studentId, st.photoURL]));
+
+  const matchStudents = (subject: SubjectData) => students
+    .filter(s => {
+      if (subject.subjectType === 'elective' && Array.isArray(subject.studentIds) && subject.studentIds.length > 0) {
+        return subject.studentIds.includes(s.studentId);
+      }
+      return s.class === subject.classroom;
+    })
+    .sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0));
+
   const handleSelectSubject = async (subject: SubjectData, section: 'current' | 'all' = 'current') => {
     setSelectedSubject(subject);
     setFromSection(section);
-    const matched = students
-      .filter(s => {
-        if (subject.subjectType === 'elective' && Array.isArray(subject.studentIds) && subject.studentIds.length > 0) {
-          return subject.studentIds.includes(s.studentId);
-        }
-        return s.class === subject.classroom;
-      })
-      .sort((a, b) => {
-        const numA = parseInt(a.number) || 0;
-        const numB = parseInt(b.number) || 0;
-        return numA - numB;
-      });
+    setGroupSubjects([]);
+    setAttendanceSummaries({});
+    const matched = matchStudents(subject);
     setFilteredStudents(matched);
     
     // Set default hours from subject duration
@@ -599,121 +532,131 @@ function SchedulesContent() {
   };
 
   const handleOpenAttendance = async (subject?: SubjectData | React.MouseEvent, studentList?: StudentData[]) => {
-    // Handle both direct subject parameter and click event
-    const targetSubject = (subject && 'subjectId' in subject) ? subject : selectedSubject;
-    const targetStudents = studentList || filteredStudents;
-    if (!targetSubject) return;
-    
+    // Handle both direct subject parameter and click event; without one, reload the open group
+    if (subject && 'subjectId' in subject) return loadAttendanceGroup([subject], undefined, studentList);
+    const group = groupSubjects.length ? groupSubjects : selectedSubject ? [selectedSubject] : [];
+    if (group.length) await loadAttendanceGroup(group, undefined, studentList);
+  };
+
+  /** Load (or start) the session of every subject in the group for the selected date. New sessions start as "มา". */
+  const loadAttendanceGroup = async (group: SubjectData[], hours?: number, studentList?: StudentData[]) => {
     // Use teacher's Firebase config if available, otherwise use school config (for admin teachers)
     const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
-    
     if (!firebaseConfig) {
-      alert('ไม่พบ Firebase Config กรุณาติดต่อผู้ดูแลระบบ');
+      toast.error('ไม่พบ Firebase Config กรุณาติดต่อผู้ดูแลระบบ');
       return;
     }
-    
+
+    setGroupSubjects(group);
     setIsAttendanceMode(true);
     setLoadingAttendance(true);
-    
-    try {
-      // Convert selectedDate from YYYY-MM-DD to "Mon 23/5" format
-      const formattedDate = parseInputDateToFormat(selectedDate);
-      const existingAttendance = await teacherDatabaseService.getAttendance(
-        firebaseConfig,
-        targetSubject.subjectId,
-        targetSubject.classroom,
-        formattedDate
-      );
-      
-      if (existingAttendance) {
-        setAttendanceRecords(existingAttendance.records);
-        setSelectedHours(existingAttendance.hours);
-      } else {
-        // Initialize empty records
-        const initialRecords: AttendanceRecord[] = targetStudents.map(s => ({
-          studentId: s.studentId,
-          name: s.name,
-          number: s.number,
-          status: ''
-        }));
-        setAttendanceRecords(initialRecords);
+    // Convert selectedDate from YYYY-MM-DD to "Mon 23/5" format
+    const formattedDate = parseInputDateToFormat(selectedDate);
+    const owner: Record<string, string> = {};
+    const records: AttendanceRecord[] = [];
+    const untouched = new Set<string>();
+    let savedHours: number | undefined;
+
+    await Promise.all(group.map(async (target, i) => {
+      const roster = (group.length === 1 && studentList) || matchStudents(target);
+      let existing: AttendanceData | null = null;
+      try {
+        existing = await teacherDatabaseService.getAttendance(firebaseConfig, target.subjectId, target.classroom, formattedDate);
+      } catch (error) {
+        console.error('Error loading attendance:', error);
       }
-    } catch (error) {
-      console.error('Error loading attendance:', error);
-      const initialRecords: AttendanceRecord[] = targetStudents.map(s => ({
-        studentId: s.studentId,
-        name: s.name,
-        number: s.number,
-        status: ''
-      }));
-      setAttendanceRecords(initialRecords);
-    } finally {
-      setLoadingAttendance(false);
-    }
+      if (existing && i === 0) savedHours = existing.hours;
+      const list = existing
+        ? existing.records
+        : roster.map(s => ({ studentId: s.studentId, name: s.name, number: s.number, status: 'มา' as const }));
+      if (!existing) list.forEach(r => untouched.add(r.studentId));
+      list.forEach(r => { owner[r.studentId] = target.subjectId; });
+      records.push(...list);
+    }));
+
+    // Keep rooms in group order
+    const order = new Map(group.map((g, i) => [g.subjectId, i]));
+    records.sort((a, b) => (order.get(owner[a.studentId]) ?? 0) - (order.get(owner[b.studentId]) ?? 0));
+    setRecordOwner(owner);
+    setAttendanceRecords(records);
+    setDefaultIds(untouched);
+    if (savedHours) setSelectedHours(savedHours);
+    else if (hours) setSelectedHours(hours);
+    setLoadingAttendance(false);
   };
 
   const handleMarkAllPresent = () => {
+    setDefaultIds(new Set());
     setAttendanceRecords(records => 
       records.map(r => ({ ...r, status: 'มา' as const }))
     );
   };
 
   const handleStatusChange = (studentId: string, status: string) => {
+    setDefaultIds(ids => {
+      if (!ids.has(studentId)) return ids;
+      const next = new Set(ids);
+      next.delete(studentId);
+      return next;
+    });
     setAttendanceRecords(records => 
       records.map(r => r.studentId === studentId ? { ...r, status: status as AttendanceRecord['status'] } : r)
     );
   };
 
   const handleSaveAttendance = async () => {
-    if (!selectedSubject) return;
-    
+    const group = groupSubjects.length ? groupSubjects : selectedSubject ? [selectedSubject] : [];
+    if (!group.length) return;
+
     // Use teacher's Firebase config if available, otherwise use school config (for admin teachers)
     const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
-    
     if (!firebaseConfig) {
-      alert('ไม่พบ Firebase Config กรุณาติดต่อผู้ดูแลระบบ');
+      toast.error('ไม่พบ Firebase Config กรุณาติดต่อผู้ดูแลระบบ');
       return;
     }
-    
+
     setLoadingAttendance(true);
     try {
       // Convert selectedDate from YYYY-MM-DD to "Mon 23/5" format
       const formattedDate = parseInputDateToFormat(selectedDate);
-      const attendanceData: AttendanceData = {
-        subjectId: selectedSubject.subjectId,
-        subjectName: selectedSubject.subjectName || '',
-        classroom: selectedSubject.classroom,
+      // One session per room, even when the rooms were checked together
+      const saved: AttendanceData[] = group.map(target => ({
+        subjectId: target.subjectId,
+        subjectName: target.subjectName || '',
+        classroom: target.classroom,
         date: formattedDate,
         hours: Number(selectedHours) || 1,
-        records: attendanceRecords,
+        records: group.length === 1
+          ? attendanceRecords
+          : attendanceRecords.filter(r => recordOwner[r.studentId] === target.subjectId),
         createdAt: new Date(),
         updatedAt: new Date(),
-      };
-      
-      await teacherDatabaseService.saveAttendance(firebaseConfig, attendanceData);
-      alert('บันทึกเช็คชื่อสำเร็จ');
-      
+      }));
+      await Promise.all(saved.map(data => teacherDatabaseService.saveAttendance(firebaseConfig, data)));
+      toast.success(group.length > 1 ? `บันทึกเช็คชื่อ ${group.length} ห้องสำเร็จ` : 'บันทึกเช็คชื่อสำเร็จ');
+
       // Update todayAttendance state after successful save
       const todayFormatted = formatDate(new Date());
       if (formattedDate === todayFormatted) {
-        setTodayAttendance(prev => {
-          const filtered = prev.filter(att => 
-            !(att.subjectId === attendanceData.subjectId && att.classroom === attendanceData.classroom)
-          );
-          return [...filtered, attendanceData];
-        });
+        setTodayAttendance(prev => [
+          ...prev.filter(att => !saved.some(d => d.subjectId === att.subjectId && d.classroom === att.classroom)),
+          ...saved,
+        ]);
       }
-      
-      if (fromSection === 'current') {
+
+      if (searchParams.get('subjectIds')) {
+        // Opened from the home timetable: go back there (its attendance bar is now gone)
+        router.push('/teacher/dashboard');
+      } else if (fromSection === 'current') {
         handleBackToMain();
       } else {
         // Reload summaries before returning to student list
-        await loadSummaries(selectedSubject, filteredStudents);
+        await loadSummaries(selectedSubject ?? group[0], filteredStudents);
         setIsAttendanceMode(false);
       }
     } catch (error) {
       console.error('Error saving attendance:', error);
-      alert('เกิดข้อผิดพลาดในการบันทึก');
+      toast.error('เกิดข้อผิดพลาดในการบันทึก');
     } finally {
       setLoadingAttendance(false);
     }
@@ -730,34 +673,18 @@ function SchedulesContent() {
     if (isAttendanceMode && selectedSubject) {
       handleOpenAttendance();
     }
+    // Only a date change should reload the open session, not every state change it reads
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate]);
 
   const handleBackToMain = () => {
     setSelectedSubject(null);
+    setGroupSubjects([]);
     setIsAttendanceMode(false);
     router.replace('/teacher/dashboard/schedules');
   };
 
-  if (loading) {
-    return (
-      <div className="p-6">
-        <div className="max-w-7xl mx-auto space-y-6">
-          <div className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg animate-pulse`}>
-            <div className={`h-8 w-48 rounded-lg mb-4 ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
-            <div className={`h-20 rounded-xl ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
-          </div>
-          <div className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg animate-pulse`}>
-            <div className={`h-8 w-40 rounded-lg mb-4 ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
-            <div className="space-y-3">
-              {[1, 2, 3].map(i => (
-                <div key={i} className={`h-16 rounded-xl ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <SchedulesSkeleton />;
 
   return (
     <div className="p-6">
@@ -791,11 +718,9 @@ function SchedulesContent() {
                     }}
                     disabled={allUniqueSubjects.length === 0}
                     title="ดาวน์โหลด Excel (Google Sheets)"
-                    className={`p-3 rounded-2xl border transition-all flex items-center justify-center shadow-sm hover:shadow-md ${
-                      isDark 
-                        ? 'bg-gray-800 border-gray-700 hover:bg-gray-700/80 hover:border-emerald-500/50 text-white' 
-                        : 'bg-white border-gray-200 hover:bg-gray-50 hover:border-emerald-400 text-gray-800'
-                    } disabled:opacity-40 disabled:cursor-not-allowed`}
+                    className={`p-3 rounded-2xl bg-surface shadow-neu-sm transition-shadow flex items-center justify-center active:shadow-neu-in-sm ${
+                      isDark ? 'text-white' : 'text-gray-800'
+                    } disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none`}
                   >
                     <GoogleSheetsIcon size={24} />
                   </motion.button>
@@ -803,53 +728,15 @@ function SchedulesContent() {
               </div>
               
               {allUniqueSubjects.length > 0 ? (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {allUniqueSubjects.map((subject) => (
-                      <motion.div
-                        key={`${subject.subjectName}-${subject.classroom}`}
-                        whileHover={{ scale: 1.01, y: -2 }}
-                        whileTap={{ scale: 0.99 }}
-                        onClick={() => handleSelectSubject(subject, 'all')}
-                        className={`p-4 rounded-xl cursor-pointer transition-all border-2 ${
-                          isDark 
-                            ? 'bg-gray-800 border-gray-700 hover:border-red-500/50 hover:bg-gray-750' 
-                            : 'bg-gray-50 border-gray-100 hover:border-red-200 hover:bg-white hover:shadow-lg hover:shadow-red-500/5'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                              {subject.subjectName}
-                            </div>
-                            <div className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                              ห้อง {subject.classroom}
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <motion.button
-                              whileHover={{ scale: 1.05 }}
-                              whileTap={{ scale: 0.95 }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSelectSubject(subject, 'all');
-                                handleOpenAttendance(subject);
-                              }}
-                              className={`p-2 rounded-xl ${isDark ? 'bg-red-950/30 text-red-400' : 'bg-red-50 text-red-600'}`}
-                            >
-                              <ClipboardList size={20} />
-                            </motion.button>
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
+                <SubjectPicker
+                  subjects={subjects}
+                  teacher={teacherConfig ? { teacherId: teacherConfig.teacherId, name: teacherConfig.name, defaultRoom: teacherConfig.defaultRoom } : null}
+                  countStudents={s => matchStudents(s).length}
+                  onSelect={s => handleSelectSubject(s, 'all')}
+                />
               ) : (
-                <div className={`flex flex-col items-center justify-center py-20 rounded-[3rem] border-2 border-dashed ${
-                  isDark ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'
-                }`}>
-                  <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${isDark ? 'bg-gray-700' : 'bg-white shadow-md'}`}>
+                <div className="flex flex-col items-center justify-center py-20 rounded-[3rem] shadow-neu-in">
+                  <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 bg-surface shadow-neu`}>
                     <ClipboardList className="opacity-20" size={32} />
                   </div>
                   <p className={`text-lg font-bold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -858,35 +745,14 @@ function SchedulesContent() {
                 </div>
               )}
               {/* Download Modal */}
-              <AnimatePresence>
-                {showDownloadModal && (
-                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                      className={`w-full max-w-lg rounded-3xl p-6 shadow-2xl ${isDark ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'}`}
-                    >
-                      <div className="flex items-center justify-between mb-6">
-                        <div className="flex items-center gap-2">
-                          <div className={`p-2 rounded-xl ${isDark ? 'bg-emerald-950/40' : 'bg-emerald-50'}`}>
-                            <GoogleSheetsIcon size={24} />
-                          </div>
-                          <h3 className="text-xl font-bold">ดาวน์โหลดรายงานเช็คชื่อ</h3>
-                        </div>
-                        <button 
-                          onClick={() => setShowDownloadModal(false)}
-                          className={`p-2 rounded-xl transition-colors ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
-                        >
-                          <X size={20} />
-                        </button>
-                      </div>
+              <Modal open={showDownloadModal} onClose={() => setShowDownloadModal(false)} size="lg" dismissible={!isDownloading} labelledBy="attendance-download-title">
+                      <ModalHeader id="attendance-download-title" title="ดาวน์โหลดรายงานเช็คชื่อ" icon={<GoogleSheetsIcon size={24} />} onClose={() => setShowDownloadModal(false)} />
 
                       <div className="space-y-6">
                         {/* Subject Selection */}
                         <div>
                           <label className="block text-sm font-bold mb-3 opacity-70">เลือกวิชาที่ต้องการ</label>
-                          <div className={`max-h-48 overflow-y-auto rounded-2xl p-2 border ${isDark ? 'bg-gray-900/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                          <div className="max-h-48 overflow-y-auto rounded-2xl p-2 shadow-neu-in-sm">
                             {allUniqueSubjects.map((subject) => {
                               const key = `${subject.subjectName}|||${subject.classroom}`;
                               const isSelected = selectedSubjectsForDownload.includes(key);
@@ -896,7 +762,7 @@ function SchedulesContent() {
                                   className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
                                     isSelected 
                                       ? (isDark ? 'bg-red-950/30 text-red-400' : 'bg-red-50 text-red-600') 
-                                      : (isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-100')
+                                      : 'hover:bg-black/5 dark:hover:bg-white/5'
                                   }`}
                                 >
                                   <input 
@@ -929,8 +795,8 @@ function SchedulesContent() {
                               onClick={() => setDownloadRange('term')}
                               className={`p-3 rounded-2xl border-2 font-bold transition-all ${
                                 downloadRange === 'term'
-                                  ? 'border-red-500 bg-red-500/10 text-red-500'
-                                  : (isDark ? 'border-gray-700 bg-gray-900/30' : 'border-gray-200 bg-gray-50')
+                                  ? 'border-red-500 bg-red-500/10 text-red-700 shadow-neu-in-sm dark:text-red-400'
+                                  : 'border-transparent bg-surface shadow-neu-sm'
                               }`}
                             >
                               ตลอดเทอม
@@ -939,8 +805,8 @@ function SchedulesContent() {
                               onClick={() => setDownloadRange('month')}
                               className={`p-3 rounded-2xl border-2 font-bold transition-all ${
                                 downloadRange === 'month'
-                                  ? 'border-red-500 bg-red-500/10 text-red-500'
-                                  : (isDark ? 'border-gray-700 bg-gray-900/30' : 'border-gray-200 bg-gray-50')
+                                  ? 'border-red-500 bg-red-500/10 text-red-700 shadow-neu-in-sm dark:text-red-400'
+                                  : 'border-transparent bg-surface shadow-neu-sm'
                               }`}
                             >
                               รายเดือน
@@ -956,7 +822,7 @@ function SchedulesContent() {
                               <select
                                 value={selectedMonth}
                                 onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                                className={`flex-1 p-3 rounded-2xl border ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'}`}
+                                className="flex-1 p-3 rounded-2xl border border-transparent bg-surface shadow-neu-in-sm"
                               >
                                 {Array.from({ length: 12 }).map((_, i) => (
                                   <option key={i + 1} value={i + 1}>
@@ -967,7 +833,7 @@ function SchedulesContent() {
                               <select
                                 value={selectedYear}
                                 onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                                className={`w-32 p-3 rounded-2xl border ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'}`}
+                                className="w-32 p-3 rounded-2xl border border-transparent bg-surface shadow-neu-in-sm"
                               >
                                 {Array.from({ length: 3 }).map((_, i) => (
                                   <option key={i} value={new Date().getFullYear() - i}>
@@ -984,7 +850,7 @@ function SchedulesContent() {
                           <button
                             onClick={handleDownloadExcel}
                             disabled={isDownloading || selectedSubjectsForDownload.length === 0}
-                            className={`w-full py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg ${
+                            className={`w-full py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-neu-sm ${
                               isDownloading || selectedSubjectsForDownload.length === 0
                                 ? 'bg-gray-500 cursor-not-allowed'
                                 : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-900/20'
@@ -1005,10 +871,7 @@ function SchedulesContent() {
                           </button>
                         </div>
                       </div>
-                    </motion.div>
-                  </div>
-                )}
-              </AnimatePresence>
+              </Modal>
             </motion.div>
           ) : isAttendanceMode ? (
             <motion.div
@@ -1017,10 +880,10 @@ function SchedulesContent() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 50 }}
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
+              className={`rounded-2xl p-6 bg-surface shadow-neu-lg`}
             >
               {/* Fixed Dock */}
-              <div className={`sticky top-0 z-10 -mx-6 px-6 py-4 mb-6 border-b ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+              <div className={`sticky top-0 z-10 -mx-6 px-6 py-4 mb-6 border-b bg-surface ${isDark ? 'border-white/5' : 'border-gray-300/50'}`}>
                 <div className="flex items-center gap-3 mb-4">
                   <motion.button
                     whileHover={{ scale: 1.1 }}
@@ -1032,7 +895,7 @@ function SchedulesContent() {
                         setIsAttendanceMode(false);
                       }
                     }}
-                    className={`p-2 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
+                    className={`p-2 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
                   >
                     <ChevronLeft size={24} />
                   </motion.button>
@@ -1041,7 +904,9 @@ function SchedulesContent() {
                       เช็คชื่อ: {selectedSubject.subjectName}
                     </h1>
                     <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                      ห้อง {selectedSubject.classroom}
+                      {groupSubjects.length > 1
+                        ? `ห้อง ${groupSubjects.map(g => g.classroom).join(', ')} · เรียนรวม บันทึกแยกห้อง`
+                        : `ห้อง ${selectedSubject.classroom}`}
                     </p>
                   </div>
                 </div>
@@ -1056,14 +921,14 @@ function SchedulesContent() {
                         setSelectedDate(e.target.value);
                       }
                     }}
-                    className={`px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+                    className={`px-3 py-2 rounded-lg border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'}`}
                   />
                   
                   {/* Hours dropdown */}
                   <select
                     value={selectedHours}
                     onChange={(e) => setSelectedHours(parseInt(e.target.value))}
-                    className={`px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+                    className={`px-3 py-2 rounded-lg border ${isDark ? 'border-transparent bg-surface shadow-neu-in-sm text-white' : 'border-transparent bg-surface shadow-neu-in-sm text-gray-900'}`}
                   >
                     <option value={1}>1 hr.</option>
                     <option value={2}>2 hrs.</option>
@@ -1076,7 +941,7 @@ function SchedulesContent() {
                     whileTap={{ scale: 0.95 }}
                     onClick={handleSaveAttendance}
                     disabled={loadingAttendance}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium shadow-md ${loadingAttendance ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${isDark ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-900/20' : 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/20'}`}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium shadow-neu-sm ${loadingAttendance ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${isDark ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-900/20' : 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/20'}`}
                   >
                     <Save size={18} />
                     บันทึก
@@ -1097,46 +962,48 @@ function SchedulesContent() {
 
               {/* Student list with status dropdown */}
               {loadingAttendance ? (
-                <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  กำลังโหลด...
-                </div>
+                <SkeletonGroup label="กำลังโหลดรายชื่อ">
+                  <SkeletonRows rows={8} trailing />
+                </SkeletonGroup>
               ) : attendanceRecords.length > 0 ? (
                 <div className="space-y-2">
                   {attendanceRecords.map((record, index) => {
                     const statusClass = getStatusStyles(record.status, isDark);
+                    const room = groupSubjects.length > 1 ? groupSubjects.find(g => g.subjectId === recordOwner[record.studentId]) : undefined;
+                    const firstOfRoom = !!room && (index === 0 || recordOwner[attendanceRecords[index - 1].studentId] !== room.subjectId);
                     return (
-                      <motion.div
-                        key={record.studentId}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: index * 0.02 }}
-                        className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${statusClass}`}
-                      >
-                        <span className="w-12 text-center font-medium opacity-80">
-                          {record.number}
-                        </span>
-                        <span className="flex-1 font-bold">
-                          {record.name}
-                        </span>
-                        <select
-                          value={record.status}
-                          onChange={(e) => handleStatusChange(record.studentId, e.target.value)}
-                          className={`px-3 py-2 rounded-lg border text-sm font-semibold transition-all ${
-                            isDark 
-                              ? 'bg-gray-800 border-gray-600 text-white focus:ring-2 focus:ring-blue-500' 
-                              : 'bg-white border-gray-300 text-gray-900 focus:ring-2 focus:ring-blue-500'
-                          }`}
+                      <Fragment key={record.studentId}>
+                        {firstOfRoom && (
+                          <div className={`flex items-baseline justify-between px-1 pb-1 ${index > 0 ? 'pt-4' : ''}`}>
+                            <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{room.classroom}</h2>
+                            <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                              {attendanceRecords.filter(r => recordOwner[r.studentId] === room.subjectId).length} คน
+                            </span>
+                          </div>
+                        )}
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: Math.min(index, 30) * 0.02 }}
+                          className={`flex items-center gap-2.5 py-2.5 pl-2 pr-2.5 md:gap-4 md:py-3 md:pl-3 md:pr-3 rounded-xl border transition-colors duration-300 ${statusClass}`}
                         >
-                          <option value="">เลือก</option>
-                          <option value="มา">มา</option>
-                          <option value="ขาด">ขาด</option>
-                          <option value="สาย">สาย</option>
-                          <option value="ลาป่วย">ลาป่วย</option>
-                          <option value="ลากิจ">ลากิจ</option>
-                          <option value="กิจกรรม">กิจกรรม</option>
-                          <option value="หนี">หนี</option>
-                        </select>
-                      </motion.div>
+                          <span className="flex flex-none items-center gap-1 md:gap-3">
+                            <span className="w-6 text-right text-sm font-medium tabular-nums opacity-80 md:w-7">
+                              {record.number}
+                            </span>
+                            <Avatar src={photoById.get(record.studentId)} name={record.name} />
+                          </span>
+                          <span className="flex-1 min-w-0 font-semibold leading-snug">
+                            {record.name}
+                          </span>
+                          <AttendanceStatusSelect
+                            value={record.status}
+                            muted={defaultIds.has(record.studentId)}
+                            label={record.name}
+                            onChange={status => handleStatusChange(record.studentId, status)}
+                          />
+                        </motion.div>
+                      </Fragment>
                     );
                   })}
                 </div>
@@ -1153,14 +1020,14 @@ function SchedulesContent() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 50 }}
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg`}
+              className={`rounded-2xl p-6 bg-surface shadow-neu-lg`}
             >
               <div className="flex items-center gap-3 mb-6">
                 <motion.button
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                   onClick={handleBackToMain}
-                  className={`p-2 rounded-xl ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
+                  className={`p-2 rounded-xl ${isDark ? 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-300' : 'bg-surface shadow-neu-sm active:shadow-neu-in-sm text-gray-700'}`}
                 >
                   <ChevronLeft size={24} />
                 </motion.button>
@@ -1177,7 +1044,7 @@ function SchedulesContent() {
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.9 }}
                     onClick={() => handleOpenAttendance()}
-                    className={`p-2 rounded-xl shadow-md ${isDark ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-900/20' : 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/20'}`}
+                    className={`p-2 rounded-xl shadow-neu-sm ${isDark ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-900/20' : 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/20'}`}
                   >
                     <ClipboardList size={24} />
                   </motion.button>
@@ -1189,7 +1056,7 @@ function SchedulesContent() {
                   <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className={isDark ? 'border-b border-gray-600' : 'border-b border-gray-200'}>
+                      <tr className={isDark ? 'border-b border-white/10' : 'border-b border-gray-300/70'}>
                         <th className={`py-3 px-4 text-left text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>เลขที่</th>
                         <th className={`py-3 px-4 text-left text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>เลขประจำตัว</th>
                         <th className={`py-3 px-4 text-left text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>ชื่อ</th>
@@ -1215,7 +1082,7 @@ function SchedulesContent() {
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: index * 0.03 }}
-                          className={isDark ? 'border-b border-gray-700' : 'border-b border-gray-100'}
+                          className={isDark ? 'border-b border-white/5' : 'border-b border-gray-300/40'}
                         >
                           <td className={`py-3 px-4 text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{student.number || '-'}</td>
                           <td className={`py-3 px-4 text-sm font-mono ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{student.studentId}</td>
@@ -1276,9 +1143,30 @@ function SchedulesContent() {
   );
 }
 
+function SchedulesSkeleton() {
+  return (
+    <div className="p-6">
+      <div className="max-w-7xl mx-auto space-y-6">
+        <SkeletonGroup label="กำลังโหลดวิชา" className="space-y-6">
+          <SkeletonCard>
+            <Bone className="mb-4 h-7 w-48" />
+            <Bone className="h-20 w-full !rounded-2xl" />
+          </SkeletonCard>
+          <SkeletonCard>
+            <Bone className="mb-4 h-7 w-40" />
+            <div className="space-y-3">
+              {[0, 1, 2].map(i => <Bone key={i} className="h-16 w-full !rounded-2xl" />)}
+            </div>
+          </SkeletonCard>
+        </SkeletonGroup>
+      </div>
+    </div>
+  );
+}
+
 export default function SchedulesPage() {
   return (
-    <Suspense fallback={<div className="p-6">กำลังโหลด...</div>}>
+    <Suspense fallback={<SchedulesSkeleton />}>
       <SchedulesContent />
     </Suspense>
   );
