@@ -34,7 +34,6 @@
 html.dark {
   --surface: 37 36 35;
   --neu-lo: rgb(10 9 8 / 0.72);
-  --neu-hi: rgb(74 72 69 / 0.5);
   --gray-50: 250 249 247;
   --gray-100: 244 243 241;
   --gray-200: 231 229 226;
@@ -57,6 +56,18 @@ html.dark {
   --neu-inset-sm: inset 3px 3px 6px var(--neu-lo), inset -3px -3px 6px var(--neu-hi);
   /* thin tracks (progress bars, h-2 to h-3) */
   --neu-inset-xs: inset 1.5px 1.5px 3px var(--neu-lo), inset -1.5px -1.5px 3px var(--neu-hi);
+}
+
+/* Dark: a light edge spread as far as the shadow reads as a grey haze on charcoal, so the
+   highlight stays short and faint; depth comes mostly from the dark side */
+html.dark {
+  --neu-hi: rgb(255 248 238 / 0.06);
+  --neu-raised-lg: 10px 10px 24px var(--neu-lo), -3px -3px 8px var(--neu-hi);
+  --neu-raised: 6px 6px 14px var(--neu-lo), -2px -2px 6px var(--neu-hi);
+  --neu-raised-sm: 3px 3px 7px var(--neu-lo), -1px -1px 3px var(--neu-hi);
+  --neu-inset: inset 5px 5px 10px var(--neu-lo), inset -2px -2px 5px var(--neu-hi);
+  --neu-inset-sm: inset 3px 3px 6px var(--neu-lo), inset -1.5px -1.5px 3px var(--neu-hi);
+  --neu-inset-xs: inset 1.5px 1.5px 3px var(--neu-lo), inset -1px -1px 2px var(--neu-hi);
 }
 
 /* Body text stays dark (pages set their own dark-mode text colours); the backdrop is the
