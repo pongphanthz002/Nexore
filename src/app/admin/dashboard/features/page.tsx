@@ -246,7 +246,7 @@ export default function AdminFeaturesPage() {
 
   return (
     <div className="px-4 pb-40 pt-2 text-gray-900 sm:px-6 dark:text-gray-50">
-      <div className="mx-auto max-w-3xl">
+      <div className="mx-auto max-w-5xl">
         <AdminPageHeader
           title="ระบบเพิ่มเติม"
           subtitle="เลือกว่าใครเห็นระบบใดบ้าง · มีผลบนเครื่องผู้ใช้ภายใน 10 นาที"
@@ -275,7 +275,7 @@ export default function AdminFeaturesPage() {
             transition={{ type: 'spring', stiffness: 380, damping: 32 }}
             className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(12px,env(safe-area-inset-bottom))]"
           >
-            <div className="mx-auto flex max-w-3xl items-center gap-3 rounded-[24px] bg-surface p-3 pl-5 shadow-neu-lg">
+            <div className="mx-auto flex max-w-5xl items-center gap-3 rounded-[24px] bg-surface p-3 pl-5 shadow-neu-lg">
               <span className="flex-1 text-sm font-medium">มีการเปลี่ยนแปลงที่ยังไม่บันทึก</span>
               <button
                 type="button"

@@ -118,7 +118,7 @@ export default function AdminDashboard() {
         </header>
 
         {[tiles, settingTiles].map((row, r) => (
-        <div key={r} className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div key={r} className={`grid grid-cols-1 gap-4 ${row.length > 1 ? 'sm:grid-cols-3' : ''}`}>
           {row.map((tile: (typeof tiles)[number]) => {
             const Icon = tile.icon;
             const share = tile.total ? (tile.registered ?? 0) / tile.total : 0;
