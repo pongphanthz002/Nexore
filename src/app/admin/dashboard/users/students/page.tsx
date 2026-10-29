@@ -9,7 +9,7 @@ import { schoolDatabaseService } from '@/services/school-database.service';
 import { firestoreService } from '@/services/firestore.service';
 import { runPool } from '@/lib/firestore-helpers';
 import UploadProgressModal, { UploadProgress } from '@/components/UploadProgressModal';
-import { ActionButton, AdminPageHeader, RosterRow, SearchWell, SectionCard, SelectionBar, StatusPill, UploadButton } from '@/components/admin/AdminUI';
+import { ActionButton, AdminPageHeader, Initial, RosterRow, SearchWell, SectionCard, SelectionBar, StatusPill, UploadButton } from '@/components/admin/AdminUI';
 import * as XLSX from 'xlsx';
 import { Download, Upload, Trash2, Edit, Eye, EyeOff, RefreshCw, Plus, ArrowLeft, Search, X } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -651,13 +651,9 @@ export default function StudentsManagement() {
                 {(selectedClass && !searchQuery ? groupedStudents[selectedClass] ?? [] : filteredStudents).map((student: any) => (
                   <RosterRow
                     key={student.studentId}
-                    leading={
-                      <span aria-hidden className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-surface text-sm font-semibold tabular-nums text-gray-700 shadow-neu-in-sm dark:text-gray-200">
-                        {student.number || '–'}
-                      </span>
-                    }
+                    leading={<Initial name={student.name} src={student.photoURL} />}
                     title={student.name}
-                    meta={`${student.studentId} · ชั้น ${student.class}`}
+                    meta={`${student.studentId} · ชั้น ${student.class} · เลขที่ ${student.number || '–'}`}
                     trailing={<StatusPill ok={!!student.uid}>{student.uid ? 'ลงทะเบียนแล้ว' : 'ยังไม่ลงทะเบียน'}</StatusPill>}
                     selected={selectedStudents.has(student.studentId)}
                     selecting={selectedStudents.size > 0}

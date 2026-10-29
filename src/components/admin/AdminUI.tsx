@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, type ReactNode } from 'react';
+import Avatar from '@/components/Avatar';
 import { ArrowLeft, Check, ChevronRight, Search, Trash2, X } from 'lucide-react';
 
 /**
@@ -86,14 +87,9 @@ export function StatusPill({ ok, children }: { ok: boolean; children: ReactNode 
   );
 }
 
-/** First character of a name in a sunk circle. */
-export function Initial({ name }: { name: string }) {
-  const ch = name.replace(/^(นาย|นางสาว|นาง|ด\.ช\.|ด\.ญ\.|เด็กชาย|เด็กหญิง|ครู)\s*/, '').trim().charAt(0) || '?';
-  return (
-    <span aria-hidden className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-surface text-base font-semibold text-gray-700 shadow-neu-in-sm dark:text-gray-200">
-      {ch}
-    </span>
-  );
+/** Person's Google photo (saved on their doc at sign-in), or the first letter of their name. */
+export function Initial({ name, src }: { name: string; src?: string | null }) {
+  return <Avatar src={src} name={name} />;
 }
 
 interface RosterRowProps {

@@ -16,6 +16,7 @@ import { studentDatabaseService } from '@/services/student-database.service';
 import { isNetworkError } from '@/lib/firestore-helpers';
 import { STORAGE_KEYS } from '@/config/storage.keys';
 import type { FirebaseConfig, UserRole } from '@/types/firebase.types';
+import { googlePhotoURL } from '@/lib/google-photo';
 
 /** Width of the left-edge strip where touches are blocked to stop iOS swipe-back. */
 const EDGE_SWIPE_ZONE = 24;
@@ -131,6 +132,14 @@ async function resolveAccount(currentUser: User): Promise<ResolveResult> {
   let role: UserRole = mappedRole;
   let userId = '';
   let name = currentUser.displayName || '';
+  const photoURL = googlePhotoURL(currentUser);
+  // Keep the member's Google photo on their School DB doc (one write, only when it changed)
+  const syncPhoto = (kind: 'teacher' | 'student', id: string, stored?: string) => {
+    if (photoURL && photoURL !== stored) {
+      schoolDatabaseService.savePhotoURL(schoolConfig, kind, id, photoURL)
+        .catch(err => console.error('Error saving profile photo:', err));
+    }
+  };
 
   if (mappedRole === 'student') {
     const member = await schoolDatabaseService.findMember<StudentData>(schoolConfig, 'student', {
@@ -139,6 +148,7 @@ async function resolveAccount(currentUser: User): Promise<ResolveResult> {
     if (!member) return { status: 'not-in-whitelist' };
     userId = member.id;
     if (member.data.name) name = member.data.name;
+    syncPhoto('student', member.id, member.data.photoURL);
   } else {
     const member = await schoolDatabaseService.findMember<TeacherFirebaseConfig>(schoolConfig, 'teacher', {
       userId: mapping.userId, uid: currentUser.uid, email,
@@ -147,6 +157,7 @@ async function resolveAccount(currentUser: User): Promise<ResolveResult> {
       userId = member.id;
       if (member.data.role) role = member.data.role;
       if (member.data.name) name = member.data.name;
+      syncPhoto('teacher', member.id, member.data.photoURL);
     } else if (mappedRole === 'admin') {
       // School owner without a teacher record
       userId = mapping.userId || currentUser.uid;

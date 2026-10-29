@@ -13,6 +13,8 @@ import { Edit, Save, X, Settings, Files, Eye, EyeOff, AlertTriangle, Loader2, Bo
 import { GoogleBasicSubjectIcon, GoogleElectiveSubjectIcon } from '@/components/GoogleSubjectIcons';
 import { useTheme } from '@/contexts/ThemeContext';
 import Modal from '@/components/Modal';
+import Avatar from '@/components/Avatar';
+import { googlePhotoURL } from '@/lib/google-photo';
 import { buildHueMap, hueVars } from '@/lib/timetable';
 
 function emptySubjectForm(): {
@@ -594,14 +596,7 @@ export default function ProfilePage() {
         {/* Identity */}
         <section className="rounded-2xl bg-surface p-5 shadow-neu-lg sm:p-6">
           <div className="flex items-start gap-4">
-            {user?.photoURL ? (
-              // eslint-disable-next-line @next/next/no-img-element -- Google profile photo, external and tiny
-              <img src={user.photoURL} alt="" referrerPolicy="no-referrer" className="h-16 w-16 flex-none rounded-full object-cover shadow-neu-sm" />
-            ) : (
-              <span aria-hidden className="flex h-16 w-16 flex-none items-center justify-center rounded-full bg-surface text-2xl font-bold text-red-600 shadow-neu-in-sm dark:text-red-400">
-                {(userAccount?.name || '?').replace(/^(นาย|นางสาว|นาง|ครู)\s*/, '').charAt(0)}
-              </span>
-            )}
+            <Avatar src={googlePhotoURL(user)} name={userAccount?.name} size="lg" />
             <div className="min-w-0 flex-1">
               <h1 className="truncate text-2xl font-bold leading-tight">{userAccount?.name || '-'}</h1>
               <p className="truncate text-sm text-gray-500 dark:text-gray-400">{userAccount?.email || '-'}</p>

@@ -3,6 +3,8 @@
 import { motion } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import Avatar from '@/components/Avatar';
+import { googlePhotoURL } from '@/lib/google-photo';
 import { schoolDatabaseService } from '@/services/school-database.service';
 import { studentDatabaseService } from '@/services/student-database.service';
 import StudentHeader from '@/components/StudentHeader';
@@ -57,7 +59,7 @@ function ProfileSkeleton({ isDark }: { isDark: boolean }) {
 }
 
 export default function StudentProfilePage() {
-  const { userAccount } = useAuth();
+  const { userAccount, user } = useAuth();
   const { isDark: isDarkMode, toggleTheme } = useTheme();
   const [studentInfo, setStudentInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -135,9 +137,7 @@ export default function StudentProfilePage() {
 
             {/* Profile Avatar + Name */}
             <div className="flex items-center gap-4 mb-5">
-              <div className="w-20 h-20 bg-white/15 backdrop-blur-xl rounded-[1.8rem] border-2 border-white/30 flex items-center justify-center shadow-lg shrink-0">
-                <User className="w-10 h-10 text-white" />
-              </div>
+              <Avatar src={googlePhotoURL(user)} name={studentInfo?.name} size="xl" className="ring-2 ring-white/40" />
               <div className="min-w-0 flex-1">
                 <h2 className="text-2xl font-black leading-tight truncate text-white drop-shadow-sm">
                   {studentInfo?.name || '-'}

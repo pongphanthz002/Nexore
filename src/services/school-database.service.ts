@@ -1,5 +1,5 @@
 import { firebaseManager } from '@/lib/firebase';
-import { collection, doc, setDoc, getDoc, getDocs, query, where, deleteDoc, writeBatch, WriteBatch, documentId, Firestore, DocumentReference } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, updateDoc, getDocs, query, where, deleteDoc, writeBatch, WriteBatch, documentId, Firestore, DocumentReference } from 'firebase/firestore';
 import { teacherDatabaseService, GradeConfig, Assignment, AssignmentGroup, StudentScore } from '@/services/teacher-database.service';
 import { firestoreService } from '@/services/firestore.service';
 import { TtlCache, dedupe, withRetry, chunkArray, runPool, ProgressCallback } from '@/lib/firestore-helpers';
@@ -15,6 +15,8 @@ export interface TeacherFirebaseConfig {
   firebaseConfig?: FirebaseConfig | null;
   /** Room the teacher usually teaches in; subjects without their own `room` use it. */
   defaultRoom?: string;
+  /** Google profile photo, saved when the teacher signs in. */
+  photoURL?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,6 +31,8 @@ export interface StudentData {
   number: string;
   schoolId: string;
   teacherNodes: string[];
+  /** Google profile photo, saved when the student signs in. */
+  photoURL?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -251,6 +255,15 @@ class SchoolDatabaseService {
       firebaseConfig,
       updatedAt: new Date(),
     }, { merge: true });
+  }
+
+  /**
+   * Save a member's Google photo on their teacher/student doc so other screens can show it.
+   * Called at sign-in only when it changed; caches are left alone (a stale photo is harmless).
+   */
+  async savePhotoURL(schoolFirebaseConfig: FirebaseConfig, kind: 'teacher' | 'student', id: string, photoURL: string): Promise<void> {
+    const collectionName = kind === 'teacher' ? this.teachersCollection : this.studentsCollection;
+    await updateDoc(doc(this.getSchoolDB(schoolFirebaseConfig), collectionName, id), { photoURL });
   }
 
   /**

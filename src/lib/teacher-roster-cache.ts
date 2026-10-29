@@ -14,7 +14,7 @@ export const TEACHER_ROSTER_FRESH_MS = 10 * 60 * 1000;
 const TEACHER_ROSTER_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Bump when the cached shape changes, so older copies are ignored. */
-const TEACHER_ROSTER_VERSION = 1;
+const TEACHER_ROSTER_VERSION = 2;
 
 export interface TeacherRoster {
   teacher: TeacherFirebaseConfig | null;
@@ -45,7 +45,7 @@ export function readTeacherRoster(owner: string): (TeacherRoster & { savedAt: nu
 
 export function writeTeacherRoster(owner: string, roster: TeacherRoster): void {
   // Only the fields the pages use: keeps the copy small and leaves out emails/uids
-  const students = roster.students.map(s => ({ studentId: s.studentId, name: s.name, number: s.number, class: s.class }));
+  const students = roster.students.map(s => ({ studentId: s.studentId, name: s.name, number: s.number, class: s.class, photoURL: s.photoURL }));
   const value = { version: TEACHER_ROSTER_VERSION, owner, savedAt: Date.now(), ...roster, students };
   try {
     localStorage.setItem(STORAGE_KEYS.TEACHER_ROSTER, JSON.stringify(value));

@@ -16,6 +16,7 @@ import type { SubjectHue } from '@/lib/timetable';
 import { useTheme } from '@/contexts/ThemeContext';
 import Modal from '@/components/Modal';
 import { AssignmentSheet, AttendanceView, EASE, GradesView, SubjectHeader } from '@/components/StudentSubjectViews';
+import Avatar from '@/components/Avatar';
 
 /**
  * Per-student popup on the teacher grades page. It shows exactly what the student sees on their
@@ -98,9 +99,7 @@ export default function StudentSubjectSheet({ student, subject, teacher, hue, as
         {student && info && (
           <div className="space-y-4">
             <div className="flex items-center gap-3">
-              <span className="grid h-12 w-12 flex-none place-items-center rounded-full bg-gray-900 text-base font-semibold text-white shadow-neu-sm dark:bg-white dark:text-gray-900">
-                {student.number || '–'}
-              </span>
+              <Avatar src={student.photoURL} name={student.name} size="md" />
               <div className="min-w-0 flex-1">
                 <h2 id="student-sheet-title" className="truncate text-xl font-semibold leading-snug">{student.name}</h2>
                 <p className="text-sm text-gray-600 dark:text-gray-400">เลขที่ {student.number || '–'} · ชั้น {student.class}</p>

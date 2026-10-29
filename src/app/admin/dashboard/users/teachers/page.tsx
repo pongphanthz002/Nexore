@@ -581,7 +581,7 @@ export default function TeachersManagement() {
               {filteredTeachers.map(teacher => (
                 <RosterRow
                   key={teacher.teacherId}
-                  leading={<Initial name={teacher.name} />}
+                  leading={<Initial name={teacher.name} src={teacher.photoURL} />}
                   title={teacher.name}
                   meta={teacher.teacherId}
                   trailing={<StatusPill ok={!!teacher.uid}>{teacher.uid ? 'ลงทะเบียนแล้ว' : 'ยังไม่ลงทะเบียน'}</StatusPill>}

@@ -18,6 +18,7 @@ import GoogleSheetsIcon from '@/components/GoogleSheetsIcon';
 import Modal, { ModalHeader } from '@/components/Modal';
 import AttendanceStatusSelect from '@/components/AttendanceStatusSelect';
 import SubjectPicker from '@/components/SubjectPicker';
+import Avatar from '@/components/Avatar';
 import { useTeacherRoster } from '@/hooks/useTeacherRoster';
 import { studentAttendanceTotals, type StudentAttendanceTotals } from '@/lib/attendance';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -494,6 +495,9 @@ function SchedulesContent() {
       return acc;
     }, [] as SubjectData[])
     .sort((a, b) => a.classroom.localeCompare(b.classroom, 'th'));
+
+  // Google photos saved on student docs at sign-in, for the check list
+  const photoById = new Map(students.map(st => [st.studentId, st.photoURL]));
 
   const matchStudents = (subject: SubjectData) => students
     .filter(s => {
@@ -988,9 +992,10 @@ function SchedulesContent() {
                           transition={{ delay: Math.min(index, 30) * 0.02 }}
                           className={`flex items-center gap-3 p-3 rounded-xl border transition-colors duration-300 ${statusClass}`}
                         >
-                          <span className="w-10 text-center font-medium tabular-nums opacity-80">
+                          <span className="w-7 text-center font-medium tabular-nums opacity-80">
                             {record.number}
                           </span>
+                          <Avatar src={photoById.get(record.studentId)} name={record.name} />
                           <span className="flex-1 min-w-0 font-semibold">
                             {record.name}
                           </span>

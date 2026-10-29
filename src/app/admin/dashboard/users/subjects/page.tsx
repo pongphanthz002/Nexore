@@ -789,7 +789,7 @@ export default function SubjectsManagement() {
                           onClick={() => handleTeacherSelect(teacher.teacherId)}
                           className="flex items-center gap-3 rounded-2xl bg-surface p-3 text-left shadow-neu-sm transition-shadow active:shadow-neu-in-sm"
                         >
-                          <Initial name={teacher.name} />
+                          <Initial name={teacher.name} src={teacher.photoURL} />
                           <div className="min-w-0 flex-1">
                             <div className="truncate font-semibold">{teacher.name}</div>
                             <div className="truncate text-sm text-gray-500 dark:text-gray-400">{teacher.teacherId}</div>
@@ -806,7 +806,7 @@ export default function SubjectsManagement() {
         ) : (
           <>
             <div className="mb-5 flex items-center gap-3 rounded-2xl bg-surface p-3 shadow-neu-in-sm">
-              {selectedTeacher && <Initial name={selectedTeacher.name} />}
+              {selectedTeacher && <Initial name={selectedTeacher.name} src={selectedTeacher.photoURL} />}
               <div className="min-w-0 flex-1">
                 <div className="truncate font-semibold">{selectedTeacher?.name ?? selectedTeacherId}</div>
                 <div className="text-sm text-gray-500 dark:text-gray-400">{filteredSubjects.length} วิชา · สอน {Object.keys(groupedByDay).length} วัน</div>
