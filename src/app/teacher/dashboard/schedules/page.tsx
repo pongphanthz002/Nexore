@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { STORAGE_KEYS } from '@/config/storage.keys';
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, Fragment } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { schoolDatabaseService, SubjectData, StudentData } from '@/services/school-database.service';
@@ -990,7 +990,7 @@ function SchedulesContent() {
                     const room = groupSubjects.length > 1 ? groupSubjects.find(g => g.subjectId === recordOwner[record.studentId]) : undefined;
                     const firstOfRoom = !!room && (index === 0 || recordOwner[attendanceRecords[index - 1].studentId] !== room.subjectId);
                     return (
-                      <div key={record.studentId}>
+                      <Fragment key={record.studentId}>
                         {firstOfRoom && (
                           <div className={`flex items-baseline justify-between px-1 pb-1 ${index > 0 ? 'pt-4' : ''}`}>
                             <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{room.classroom}</h2>
@@ -1003,10 +1003,10 @@ function SchedulesContent() {
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: Math.min(index, 30) * 0.02 }}
-                          className={`flex items-center gap-2.5 py-2.5 pl-2 pr-2.5 rounded-xl border transition-colors duration-300 ${statusClass}`}
+                          className={`flex items-center gap-2.5 py-2.5 pl-2 pr-2.5 md:gap-4 md:py-3 md:pl-3 md:pr-3 rounded-xl border transition-colors duration-300 ${statusClass}`}
                         >
-                          <span className="flex flex-none items-center gap-1">
-                            <span className="w-6 text-right text-sm font-medium tabular-nums opacity-80">
+                          <span className="flex flex-none items-center gap-1 md:gap-3">
+                            <span className="w-6 text-right text-sm font-medium tabular-nums opacity-80 md:w-7">
                               {record.number}
                             </span>
                             <Avatar src={photoById.get(record.studentId)} name={record.name} />
@@ -1021,7 +1021,7 @@ function SchedulesContent() {
                             onChange={status => handleStatusChange(record.studentId, status)}
                           />
                         </motion.div>
-                      </div>
+                      </Fragment>
                     );
                   })}
                 </div>
