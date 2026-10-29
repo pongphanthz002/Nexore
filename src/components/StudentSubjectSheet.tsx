@@ -22,7 +22,8 @@ import { SkeletonCard, SkeletonGroup } from '@/components/Skeleton';
 /**
  * Per-student popup on the teacher grades page. It shows exactly what the student sees on their
  * own subject page (same views, same numbers): scores come from what the grades page already
- * loaded, attendance from the subject's summary doc (1 read, cached 2 minutes).
+ * loaded, attendance from the subject's summary doc (1 read, cached 2 minutes; built from the
+ * sessions when a subject has none yet).
  */
 
 const attendanceCache = new TtlCache<AttendanceSummary | null>(2 * 60 * 1000);
@@ -58,7 +59,8 @@ export default function StudentSubjectSheet({ student, subject, teacher, hue, as
     const key = `${dbConfig.projectId}:${subjectId}`;
     setSummary(attendanceCache.get(key) ?? 'loading');
     attendanceCache
-      .getOrLoad(key, () => teacherDatabaseService.getAttendanceSummary(dbConfig, subjectId))
+      // The summary, or (for sessions recorded before summaries existed) one built from the sessions
+      .getOrLoad(key, () => teacherDatabaseService.getSubjectAttendance(dbConfig, subjectId))
       .then(result => { if (!cancelled) setSummary(result); })
       .catch(err => { console.error('Error loading attendance summary:', err); if (!cancelled) setSummary(null); });
     return () => { cancelled = true; };
@@ -66,6 +68,7 @@ export default function StudentSubjectSheet({ student, subject, teacher, hue, as
 
   const info: StudentSubjectInfo | null = useMemo(() => subject && ({
     subjectId: subject.subjectId,
+    subjectIds: [subject.subjectId],
     subjectName: subject.subjectName,
     classroom: subject.classroom,
     teacherId: subject.teacherId,

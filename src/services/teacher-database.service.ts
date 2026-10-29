@@ -39,7 +39,12 @@ export interface AttendanceSummary {
   updatedAt: Date;
 }
 
-export const ATTENDANCE_SUMMARY_VERSION = 1;
+/**
+ * 2: a summary always holds every session of its subject. Version 1 docs could be partial (a
+ * session save created the summary on a subject whose earlier sessions were recorded before
+ * summaries existed), so they count as missing and are rebuilt from the session documents.
+ */
+export const ATTENDANCE_SUMMARY_VERSION = 2;
 const ATTENDANCE_SUMMARIES = 'attendanceSummaries';
 
 function summaryFromSessions(subjectId: string, sessions: AttendanceData[]): AttendanceSummary {
@@ -54,7 +59,7 @@ function summaryFromSessions(subjectId: string, sessions: AttendanceData[]): Att
     const docId = attendanceDocId(session.subjectId, session.classroom, session.date);
     summary.sessions[docId] = { date: session.date, hours: Number(session.hours) || 1, classroom: session.classroom };
     for (const r of session.records || []) {
-      (summary.students[r.studentId] ||= {})[docId] = r.status || '';
+      (summary.students[String(r.studentId)] ||= {})[docId] = r.status || '';
     }
   }
   return summary;
@@ -418,13 +423,20 @@ class TeacherDatabaseService {
       }
     }
     try {
-      await setDoc(doc(database, ATTENDANCE_SUMMARIES, saveData.subjectId), {
-        subjectId: saveData.subjectId,
-        version: ATTENDANCE_SUMMARY_VERSION,
-        sessions: { [docId]: { date: saveData.date, hours: saveData.hours, classroom: saveData.classroom } },
-        students: studentsPatch,
-        updatedAt: new Date(),
-      }, { merge: true });
+      const summaryRef = doc(database, ATTENDANCE_SUMMARIES, saveData.subjectId);
+      const current = await getDoc(summaryRef);
+      if (current.exists() && current.data().version === ATTENDANCE_SUMMARY_VERSION) {
+        await setDoc(summaryRef, {
+          subjectId: saveData.subjectId,
+          version: ATTENDANCE_SUMMARY_VERSION,
+          sessions: { [docId]: { date: saveData.date, hours: saveData.hours, classroom: saveData.classroom } },
+          students: studentsPatch,
+          updatedAt: new Date(),
+        }, { merge: true });
+      } else {
+        // No complete summary yet: build it from every session (this one included), not just this one
+        await this.rebuildAttendanceSummary(teacherFirebaseConfig, saveData.subjectId);
+      }
       invalidateTeacherStats();
     } catch (err) {
       // The session itself is saved; the summary is rebuilt the next time the teacher opens the subject
@@ -452,14 +464,26 @@ class TeacherDatabaseService {
   }
 
   /**
-   * A subject's attendance summary for the teacher's history view: the summary document
-   * (1 read), or, before it exists, built from the session documents (which also saves it).
+   * A subject's attendance summary (teacher history view, per-student popup, home dashboard):
+   * the summary document (1 read), or, when it is missing or outdated, built from the session
+   * documents and saved. `classroom` is kept for callers; a summary covers every room.
    */
-  async getSubjectAttendance(teacherFirebaseConfig: FirebaseConfig, subjectId: string, classroom: string): Promise<AttendanceSummary> {
+  async getSubjectAttendance(teacherFirebaseConfig: FirebaseConfig, subjectId: string, _classroom?: string): Promise<AttendanceSummary> {
     const summary = await withRetry(() => this.getAttendanceSummary(teacherFirebaseConfig, subjectId));
-    if (summary) return summary;
-    const sessions = await this.getAttendanceBySubject(teacherFirebaseConfig, subjectId, classroom);
-    return summaryFromSessions(subjectId, sessions);
+    return summary ?? this.rebuildAttendanceSummary(teacherFirebaseConfig, subjectId);
+  }
+
+  /**
+   * Builds a subject's summary from all its session documents and saves it (best effort: the
+   * built summary is returned even if the write fails).
+   */
+  async rebuildAttendanceSummary(teacherFirebaseConfig: FirebaseConfig, subjectId: string): Promise<AttendanceSummary> {
+    const database = this.getTeacherDB(teacherFirebaseConfig);
+    const snap = await getDocs(query(collection(database, 'attendance'), where('subjectId', '==', subjectId)));
+    const summary = summaryFromSessions(subjectId, snap.docs.map(d => d.data() as AttendanceData));
+    await setDoc(doc(database, ATTENDANCE_SUMMARIES, subjectId), summary)
+      .catch(err => console.error(`Error saving attendance summary for ${subjectId}:`, err));
+    return summary;
   }
 
   /**

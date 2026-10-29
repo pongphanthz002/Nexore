@@ -6,7 +6,7 @@ import { firestoreService } from '@/services/firestore.service';
 import { schoolDatabaseService } from '@/services/school-database.service';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { Book, Check, ChevronRight, Copy, GraduationCap, Users } from 'lucide-react';
+import { Book, Check, ChevronRight, Copy, GraduationCap, SlidersHorizontal, Users } from 'lucide-react';
 import SchoolDangerZone from '@/components/admin/SchoolDangerZone';
 import { Bone } from '@/components/Skeleton';
 
@@ -88,6 +88,10 @@ export default function AdminDashboard() {
     { href: '/admin/dashboard/users/students', icon: GraduationCap, title: 'นักเรียน', total: stats.students, registered: stats.signedUpStudents },
     { href: '/admin/dashboard/users/subjects', icon: Book, title: 'วิชาเรียน', hint: 'รายวิชาและตารางสอนของครู' },
   ];
+  // School settings sit on their own row under the rosters
+  const settingTiles = [
+    { href: '/admin/dashboard/features', icon: SlidersHorizontal, title: 'ระบบเพิ่มเติม', hint: 'เลือกว่าครูและนักเรียนคนไหนเห็นระบบใดบ้าง' },
+  ];
 
   return (
     <div className="px-4 pb-16 pt-2 text-gray-900 sm:px-6 dark:text-gray-50">
@@ -113,8 +117,9 @@ export default function AdminDashboard() {
           )}
         </header>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {tiles.map(tile => {
+        {[tiles, settingTiles].map((row, r) => (
+        <div key={r} className={`grid grid-cols-1 gap-4 ${row.length > 1 ? 'sm:grid-cols-3' : ''}`}>
+          {row.map((tile: (typeof tiles)[number]) => {
             const Icon = tile.icon;
             const share = tile.total ? (tile.registered ?? 0) / tile.total : 0;
             return (
@@ -159,6 +164,7 @@ export default function AdminDashboard() {
             );
           })}
         </div>
+        ))}
 
         <SchoolDangerZone />
       </div>

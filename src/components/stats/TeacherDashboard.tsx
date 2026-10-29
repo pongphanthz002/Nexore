@@ -15,6 +15,7 @@ import {
 } from '@/lib/class-stats';
 import { allowAction } from '@/lib/firestore-helpers';
 import { THEME_COLORS } from '@/config/theme';
+import { refreshFeatureSettings } from '@/hooks/useFeatureAccess';
 
 /**
  * Teacher home dashboard over every subject the teacher teaches: the top three scores (podium),
@@ -100,6 +101,8 @@ export default function TeacherDashboard() {
   // Pull-to-refresh on the teacher home re-reads the dashboard
   const refresh = () => {
     if (refreshing || !allowAction('teacher-stats-refresh', 10_000)) return;
+    // The admin's feature settings (dock tabs) refresh with it
+    if (schoolConfig) refreshFeatureSettings(schoolConfig);
     return load(true);
   };
   const pull = <PullToRefresh onRefresh={refresh} disabled={!schoolConfig || !teacherId} />;

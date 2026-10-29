@@ -15,7 +15,8 @@ import { THAI_MONTHS_SHORT } from './timetable';
  * document reads per subject, whatever the class size or number of assignments.
  */
 
-export const GRADE_SUMMARY_VERSION = 2;
+/** 3: rebuilds every summary once, since scores edited by an older app version left some stale. */
+export const GRADE_SUMMARY_VERSION = 3;
 
 export interface GradeSummaryStudent {
   name: string;

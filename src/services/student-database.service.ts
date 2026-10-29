@@ -11,6 +11,11 @@ import type { FirebaseConfig } from '@/types/firebase.types';
 
 export interface StudentSubjectInfo {
   subjectId: string;
+  /**
+   * Every subject doc shown as this card, `subjectId` first. Older data split one subject over
+   * several docs (one per period); the card reads grades and attendance from all of them.
+   */
+  subjectIds: string[];
   subjectName: string;
   classroom: string;
   teacherId: string;
@@ -170,11 +175,14 @@ class StudentDatabaseService {
       const activeTeachers = teachers.filter(isActiveTeacher);
       const activeIds = new Set(activeTeachers.map(t => t.teacherId));
 
-      // Group by subjectName + teacherId to get unique subjects with all their periods
-      const uniqueSubjectsMap = new Map<string, { subject: SubjectData; schedules: Array<{ day: string; time: string }> }>();
+      // One card per subject the student takes: same teacher, name, code and room (as the
+      // teacher's subject picker tells them apart). Two subjects that only share a name, like a
+      // basic and an additional "คณิตศาสตร์" with different codes, get their own cards; docs that
+      // are the same subject split per period share one card that reads all of them.
+      const uniqueSubjectsMap = new Map<string, { subject: SubjectData; ids: string[]; schedules: Array<{ day: string; time: string }> }>();
       for (const subject of classSubjects) {
         if (!activeIds.has(subject.teacherId)) continue;
-        const key = `${subject.subjectName}-${subject.teacherId}`;
+        const key = [subject.teacherId, subject.subjectName, subject.subjectCode || '', subject.classroom].join('|');
         const subjectSchedules = (subject.schedules && subject.schedules.length > 0)
           ? subject.schedules.map(s => ({ day: s.day, time: s.time }))
           : [{ day: subject.day, time: subject.time }];
@@ -182,14 +190,16 @@ class StudentDatabaseService {
         const existing = uniqueSubjectsMap.get(key);
         if (existing) {
           existing.schedules.push(...subjectSchedules);
+          if (!existing.ids.includes(subject.subjectId)) existing.ids.push(subject.subjectId);
         } else {
-          uniqueSubjectsMap.set(key, { subject, schedules: [...subjectSchedules] });
+          uniqueSubjectsMap.set(key, { subject, ids: [subject.subjectId], schedules: [...subjectSchedules] });
         }
       }
 
       const hues = buildHueMap(classSubjects);
-      const subjects: StudentSubjectInfo[] = Array.from(uniqueSubjectsMap.values()).map(({ subject, schedules }) => ({
+      const subjects: StudentSubjectInfo[] = Array.from(uniqueSubjectsMap.values()).map(({ subject, ids, schedules }) => ({
         subjectId: subject.subjectId,
+        subjectIds: ids,
         subjectName: subject.subjectName,
         classroom: subject.classroom,
         teacherId: subject.teacherId,
@@ -375,7 +385,22 @@ class StudentDatabaseService {
     });
 
     const processedGrades = await Promise.all(scoreProcessPromises);
-    grades.push(...processedGrades);
+
+    // Show each grade on its card (keyed by the card's first subject id); when a card's subject is
+    // split over several docs with scores, keep the one with the most entered.
+    const entered = (g: StudentGradeInfo) => g.details.filter(d => d.score !== null).length + Number(g.midtermEntered) + Number(g.finalEntered);
+    const byCard = new Map<string, StudentGradeInfo>();
+    for (const grade of processedGrades) {
+      const card = subjects.find(s => s.teacherId === teacher.teacherId && s.subjectIds.includes(grade.subjectId));
+      if (!card) {
+        grades.push(grade);
+        continue;
+      }
+      const shown = { ...grade, subjectId: card.subjectId, subjectName: card.subjectName };
+      const other = byCard.get(card.subjectId);
+      if (!other || entered(shown) > entered(other)) byCard.set(card.subjectId, shown);
+    }
+    grades.push(...Array.from(byCard.values()));
 
     return grades;
   }
@@ -401,7 +426,9 @@ class StudentDatabaseService {
 
     // Fetch attendance for all subjects in parallel
     const subjectPromises = teacherSubjects.map(async (subject) => {
-      const studentAttendanceDocs = await this._getStudentSessions(teacherDB, firebaseConfig, subject, studentData.studentId);
+      const studentAttendanceDocs = (await Promise.all(subject.subjectIds.map(id =>
+        this._getStudentSessions(teacherDB, firebaseConfig, id, subject.subjectName, studentData.studentId),
+      ))).flat();
 
       if (studentAttendanceDocs.length > 0) {
         const stats = summarizeAttendance(studentAttendanceDocs.flatMap(session => session.records
@@ -433,10 +460,11 @@ class StudentDatabaseService {
   private async _getStudentSessions(
     teacherDB: Firestore,
     firebaseConfig: FirebaseConfig,
-    subject: StudentSubjectInfo,
+    subjectId: string,
+    subjectName: string,
     studentId: string
   ): Promise<AttendanceData[]> {
-    const summary = await teacherDatabaseService.getAttendanceSummary(firebaseConfig, subject.subjectId);
+    const summary = await teacherDatabaseService.getAttendanceSummary(firebaseConfig, subjectId);
     if (summary) {
       const statuses = summary.students?.[studentId] || {};
       return Object.entries(statuses)
@@ -444,8 +472,8 @@ class StudentDatabaseService {
         .map(([sessionId, status]) => {
           const session = summary.sessions[sessionId];
           return {
-            subjectId: subject.subjectId,
-            subjectName: subject.subjectName,
+            subjectId,
+            subjectName,
             classroom: session.classroom,
             date: session.date,
             hours: session.hours,
@@ -456,14 +484,15 @@ class StudentDatabaseService {
         });
     }
 
+    // No complete summary yet (the teacher's app builds it): read the sessions themselves
     const attendanceSnap = await getDocs(query(
       collection(teacherDB, 'attendance'),
-      where('subjectId', '==', subject.subjectId)
+      where('subjectId', '==', subjectId)
     ));
     const sessions: AttendanceData[] = [];
     for (const attendanceDoc of attendanceSnap.docs) {
       const attendanceData = attendanceDoc.data() as AttendanceData;
-      const studentRecord = attendanceData.records?.find(r => r.studentId === studentId);
+      const studentRecord = attendanceData.records?.find(r => String(r.studentId) === String(studentId));
       if (studentRecord) {
         sessions.push({ ...attendanceData, records: [studentRecord] });
       }
@@ -529,9 +558,9 @@ class StudentDatabaseService {
           const teacherDB = this.getTeacherDB(firebaseConfig);
           const teacherSubjects = ctx.subjects.filter(s => s.teacherId === teacher.teacherId);
 
-          // Fetch assignments + scores for all subjects in parallel
+          // Fetch assignments + scores for all subjects (every doc of a card) in parallel
           const subjectResults = await Promise.all(
-            teacherSubjects.map(async (subject) => {
+            teacherSubjects.flatMap(card => card.subjectIds.map(id => ({ ...card, subjectId: id }))).map(async (subject) => {
               // Get assignments and scores in parallel
               const [assignmentsSnap, scoresSnap] = await Promise.all([
                 getDocs(query(
@@ -554,7 +583,8 @@ class StudentDatabaseService {
                 const hasScore = scoreData?.assignmentScores?.[assignment.id];
                 if (!hasScore && hasScore !== 0) {
                   subjectPending.push({
-                    subjectId: subject.subjectId,
+                    // the card's id, so the link opens the right card
+                    subjectId: teacherSubjects.find(c => c.subjectIds.includes(subject.subjectId))?.subjectId || subject.subjectId,
                     subjectName: subject.subjectName,
                     assignmentTitle: assignment.title,
                     deadline: assignment.deadline || '',

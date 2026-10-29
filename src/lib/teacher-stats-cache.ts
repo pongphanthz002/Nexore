@@ -11,7 +11,7 @@ import type { SubjectStatsInput } from './class-stats';
 export const TEACHER_STATS_FRESH_MS = 10 * 60 * 1000;
 
 /** Bump when `SubjectStatsInput` changes shape, so older cached copies are ignored. */
-export const TEACHER_STATS_VERSION = 2;
+export const TEACHER_STATS_VERSION = 3;
 
 export interface CachedTeacherStats {
   version: number;
