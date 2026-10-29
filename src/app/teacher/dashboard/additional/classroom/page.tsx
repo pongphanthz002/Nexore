@@ -26,7 +26,7 @@ import {
 import { roomKeyOf } from '@/lib/classroom-tools-store';
 
 /**
- * Classroom tools (teacher "เพิ่มเติม" → เครื่องมือในห้องเรียน): random picker and group maker
+ * Classroom tools (teacher "เพิ่มเติม" → เครื่องมือสุ่ม): random picker and group maker
  * over one room, or every room of a merged period. Opens on the period being taught now;
  * outside a period the teacher picks a room. Students marked absent or on leave today are left
  * out (the teacher can change that), and the subject's totals, computed now from its scores with
@@ -166,7 +166,7 @@ export default function ClassroomToolsPage() {
   );
 
   if (!accessLoading && !can('classroomTools')) {
-    return wrap(<ComingSoon icon={Dices} title="เครื่องมือในห้องเรียน" message="ระบบนี้ยังไม่เปิดให้ใช้งาน" />);
+    return wrap(<ComingSoon icon={Dices} title="เครื่องมือสุ่ม" message="ระบบนี้ยังไม่เปิดให้ใช้งาน" />);
   }
 
   if (loading && subjects.length === 0) {

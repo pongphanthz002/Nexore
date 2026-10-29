@@ -21,7 +21,7 @@ export default function AdditionalPage() {
 
   return (
     <div className="px-4 pt-2 text-gray-900 sm:px-6 dark:text-gray-50">
-      <div className="mx-auto max-w-3xl space-y-6">
+      <div className="mx-auto w-full max-w-7xl space-y-6">
         <header>
           <h1 className="text-2xl font-bold">เพิ่มเติม</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">เครื่องมือเสริมสำหรับการสอน</p>
@@ -29,7 +29,7 @@ export default function AdditionalPage() {
         {features.length === 0 ? (
           <ComingSoon icon={Settings} title="ระบบเพิ่มเติม" message="ยังไม่มีระบบที่เปิดให้ใช้งาน" />
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {features.map((f, i) => {
               const route = ROUTES[f.id]!;
               const Icon = route.icon;

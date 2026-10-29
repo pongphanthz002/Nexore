@@ -87,6 +87,9 @@ export default function AdminDashboard() {
     { href: '/admin/dashboard/users/teachers', icon: Users, title: 'ครู', total: stats.teachers, registered: stats.signedUpTeachers },
     { href: '/admin/dashboard/users/students', icon: GraduationCap, title: 'นักเรียน', total: stats.students, registered: stats.signedUpStudents },
     { href: '/admin/dashboard/users/subjects', icon: Book, title: 'วิชาเรียน', hint: 'รายวิชาและตารางสอนของครู' },
+  ];
+  // School settings sit on their own row under the rosters
+  const settingTiles = [
     { href: '/admin/dashboard/features', icon: SlidersHorizontal, title: 'ระบบเพิ่มเติม', hint: 'เลือกว่าครูและนักเรียนคนไหนเห็นระบบใดบ้าง' },
   ];
 
@@ -114,8 +117,9 @@ export default function AdminDashboard() {
           )}
         </header>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {tiles.map(tile => {
+        {[tiles, settingTiles].map((row, r) => (
+        <div key={r} className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {row.map((tile: (typeof tiles)[number]) => {
             const Icon = tile.icon;
             const share = tile.total ? (tile.registered ?? 0) / tile.total : 0;
             return (
@@ -160,6 +164,7 @@ export default function AdminDashboard() {
             );
           })}
         </div>
+        ))}
 
         <SchoolDangerZone />
       </div>

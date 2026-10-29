@@ -25,7 +25,7 @@ export interface FeatureInfo {
 }
 
 export const FEATURES: FeatureInfo[] = [
-  { id: 'classroomTools', audience: 'teacher', title: 'เครื่องมือในห้องเรียน', description: 'สุ่มเรียกนักเรียนและจัดกลุ่มคละเก่ง–อ่อน' },
+  { id: 'classroomTools', audience: 'teacher', title: 'เครื่องมือสุ่ม', description: 'สุ่มเรียกนักเรียนและจัดกลุ่มคละเก่ง–อ่อน' },
   { id: 'learning', audience: 'student', title: 'การเรียนรู้', description: 'แท็บการเรียนรู้ของนักเรียน (กำลังพัฒนา)' },
 ];
 
