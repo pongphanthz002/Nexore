@@ -3,6 +3,7 @@ import { collection, doc, setDoc, getDoc, getDocs, query, where, deleteDoc, writ
 import { teacherDatabaseService, GradeConfig, Assignment, AssignmentGroup, StudentScore } from '@/services/teacher-database.service';
 import { firestoreService } from '@/services/firestore.service';
 import { TtlCache, dedupe, withRetry, chunkArray, runPool, ProgressCallback } from '@/lib/firestore-helpers';
+import { invalidateTeacherRoster } from '@/lib/teacher-roster-cache';
 import type { FirebaseConfig } from '@/types/firebase.types';
 
 export interface TeacherFirebaseConfig {
@@ -153,6 +154,7 @@ class SchoolDatabaseService {
   private invalidateTeachers(): void {
     this.teachersCache.invalidate();
     this.teachersByIdCache.invalidate();
+    invalidateTeacherRoster();
   }
 
   private invalidateStudents(): void {
@@ -160,12 +162,14 @@ class SchoolDatabaseService {
     this.studentCache.invalidate();
     this.studentSubjectsCache.invalidate();
     this.subjectStudentsCache.invalidate();
+    invalidateTeacherRoster();
   }
 
   private invalidateSubjects(): void {
     this.subjectsCache.invalidate();
     this.studentSubjectsCache.invalidate();
     this.teacherSubjectsCache.invalidate();
+    invalidateTeacherRoster();
   }
 
   private getSchoolDB(schoolFirebaseConfig: FirebaseConfig): Firestore {

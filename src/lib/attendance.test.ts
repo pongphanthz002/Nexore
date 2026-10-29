@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sessionDateKey, summarizeAttendance } from './attendance';
+import { sessionDateKey, studentAttendanceTotals, summarizeAttendance } from './attendance';
 
 describe('summarizeAttendance', () => {
   it('counts hours, with มา, สาย and กิจกรรม as present', () => {
@@ -60,5 +60,23 @@ describe('sessionDateKey', () => {
   it('puts May before April of the same school year', () => {
     expect(sessionDateKey('Mon 20/5')).toBeLessThan(sessionDateKey('Tue 1/4'));
     expect(sessionDateKey('nonsense')).toBe(0);
+  });
+});
+
+describe('studentAttendanceTotals', () => {
+  const summary = {
+    sessions: { a: { hours: 2 }, b: { hours: 1 }, c: { hours: 1 }, d: { hours: 1 } },
+    students: { S1: { a: 'มา', b: 'ขาด', c: 'กิจกรรม', d: '', gone: 'มา' } },
+  };
+
+  it('counts hours per status and the present share', () => {
+    expect(studentAttendanceTotals(summary, 'S1')).toEqual({
+      present: 2, absent: 1, late: 0, sickLeave: 0, personalLeave: 0, activity: 1, skipped: 0, total: 4, percentage: 75,
+    });
+  });
+
+  it('is all zero for a student with no sessions', () => {
+    expect(studentAttendanceTotals(summary, 'S2').total).toBe(0);
+    expect(studentAttendanceTotals(summary, 'S2').percentage).toBe(0);
   });
 });

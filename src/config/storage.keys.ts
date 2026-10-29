@@ -11,6 +11,8 @@ export const STORAGE_KEYS = {
   THEME: 'nexore-theme',
   /** Teacher home statistics (per-subject summaries), see src/lib/teacher-stats-cache.ts */
   TEACHER_STATS: 'NEXORE_TEACHER_STATS',
+  /** Teacher's record, subjects and students for the grades/attendance pages, see src/lib/teacher-roster-cache.ts */
+  TEACHER_ROSTER: 'NEXORE_TEACHER_ROSTER',
   // Legacy keys used by storage.service.ts
   USER_IDENTITY: 'nexore_user_identity',
   MASTER_REGISTRY_CONFIG: 'nexore_master_registry_config',

@@ -18,6 +18,8 @@ import GoogleSheetsIcon from '@/components/GoogleSheetsIcon';
 import Modal, { ModalHeader } from '@/components/Modal';
 import AttendanceStatusSelect from '@/components/AttendanceStatusSelect';
 import SubjectPicker from '@/components/SubjectPicker';
+import { useTeacherRoster } from '@/hooks/useTeacherRoster';
+import { studentAttendanceTotals, type StudentAttendanceTotals } from '@/lib/attendance';
 import { useTheme } from '@/contexts/ThemeContext';
 
 // Parse "08:30-09:30" → { startMinutes, endMinutes }
@@ -129,13 +131,10 @@ function SchedulesContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { isDark } = useTheme();
-  const [subjects, setSubjects] = useState<SubjectData[]>([]);
-  const [students, setStudents] = useState<StudentData[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { subjects, students, teacher: teacherConfig, loading } = useTeacherRoster();
   const [selectedSubject, setSelectedSubject] = useState<SubjectData | null>(null);
   const [filteredStudents, setFilteredStudents] = useState<StudentData[]>([]);
   const [nowMinutes, setNowMinutes] = useState(getNowMinutes());
-  const [teacherConfig, setTeacherConfig] = useState<any>(null);
   
   // Attendance state
   const [isAttendanceMode, setIsAttendanceMode] = useState(false);
@@ -148,7 +147,7 @@ function SchedulesContent() {
   const [loadingAttendance, setLoadingAttendance] = useState(false);
   const [fromSection, setFromSection] = useState<'current' | 'all'>('current');
   const [paramsProcessed, setParamsProcessed] = useState(false);
-  const [attendanceSummaries, setAttendanceSummaries] = useState<Record<string, any>>({});
+  const [attendanceSummaries, setAttendanceSummaries] = useState<Record<string, StudentAttendanceTotals>>({});
   const [todayAttendance, setTodayAttendance] = useState<AttendanceData[]>([]);
   
   // Load todayAttendance from localStorage on mount
@@ -190,38 +189,16 @@ function SchedulesContent() {
     return () => clearInterval(interval);
   }, []);
 
+  // Today's sessions (which periods are already checked); not needed to show the subject list
+  const teacherDbConfig = teacherConfig?.firebaseConfig;
   useEffect(() => {
-    async function loadData() {
-      if (userAccount?.schoolFirebaseConfig && userAccount?.userId) {
-        try {
-          // Only this teacher's subjects and the students enrolled in them
-          const [teacherSubjects, teacherData] = await Promise.all([
-            schoolDatabaseService.getSubjectsForTeacher(userAccount.schoolFirebaseConfig, userAccount.userId),
-            schoolDatabaseService.getTeacherConfig(userAccount.schoolFirebaseConfig, userAccount.userId),
-          ]);
-          const subjectStudents = await schoolDatabaseService.getStudentsForSubjects(userAccount.schoolFirebaseConfig, teacherSubjects);
-          setSubjects(teacherSubjects);
-          setStudents(subjectStudents);
-          setTeacherConfig(teacherData);
-
-          // Fetch today's attendance to filter currently teaching subjects
-          if (teacherData?.firebaseConfig) {
-            const todayFormatted = formatDate(new Date());
-            const attendance = await teacherDatabaseService.getAttendanceByDate(
-              teacherData.firebaseConfig,
-              todayFormatted
-            );
-            setTodayAttendance(attendance);
-          }
-        } catch (error) {
-          console.error('Error loading data:', error);
-        } finally {
-          setLoading(false);
-        }
-      }
-    }
-    loadData();
-  }, [userAccount]);
+    if (!teacherDbConfig) return;
+    teacherDatabaseService.getAttendanceByDate(teacherDbConfig, formatDate(new Date()))
+      .then(setTodayAttendance)
+      .catch(error => console.error('Error loading today\'s attendance:', error));
+    // Once per teacher project: the cached and the re-read teacher record hold the same config
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teacherDbConfig?.projectId]);
 
   // Current subjects: show 15 min before start, hide 180 min after start
   // Also filter out subjects that have already been checked today
@@ -482,83 +459,30 @@ function SchedulesContent() {
       setIsDownloading(false);
     }
   };
+  /** History table: every student's hours per status, from the subject's summary document (1 read). */
   const loadSummaries = async (subject?: SubjectData, studentsList?: StudentData[]) => {
     const targetSubject = subject || selectedSubject;
     const targetStudents = studentsList || filteredStudents;
-    
-    if (targetSubject && targetStudents.length > 0) {
-      try {
-        const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
-        if (!firebaseConfig) return;
-
-        let allAttendance: AttendanceData[] = [];
-        if (teacherConfig?.firebaseConfig) {
-          allAttendance = await teacherDatabaseService.getAttendanceBySubject(
-            teacherConfig.firebaseConfig,
-            targetSubject.subjectId,
-            targetSubject.classroom
-          );
-        } else {
-          allAttendance = await schoolDatabaseService.getAttendanceBySubject(
-            userAccount!.schoolFirebaseConfig,
-            targetSubject.subjectId,
-            targetSubject.classroom
-          );
-        }
-
-        const summaries: Record<string, any> = {};
-        for (const student of targetStudents) {
-          let present = 0;
-          let absent = 0;
-          let late = 0;
-          let sickLeave = 0;
-          let personalLeave = 0;
-          let activity = 0;
-          let skipped = 0;
-          let total = 0;
-
-          allAttendance.forEach((att: any) => {
-            const record = att.records?.find((r: any) => r.studentId === student.studentId);
-            if (record && record.status) {
-              const hours = Number(att.hours) || 1;
-              total += hours;
-              
-              if (record.status === 'มา') {
-                present += hours;
-              } else if (record.status === 'ขาด') {
-                absent += hours;
-              } else if (record.status === 'สาย') {
-                late += hours;
-              } else if (record.status === 'ลาป่วย') {
-                sickLeave += hours;
-              } else if (record.status === 'ลากิจ') {
-                personalLeave += hours;
-              } else if (record.status === 'กิจกรรม') {
-                activity += hours;
-              } else if (record.status === 'หนี') {
-                skipped += hours;
-              }
-            }
-          });
-
-          // percentage = (มา + สาย + กิจกรรม) / ทั้งหมด
-          const totalPresentHours = present + late + activity;
-          const percentage = total > 0 ? Math.round((totalPresentHours / total) * 100) : 0;
-          summaries[student.studentId] = { present, absent, late, sickLeave, personalLeave, activity, skipped, total, percentage };
-        }
-        setAttendanceSummaries(summaries);
-      } catch (error) {
-        console.error('Error loading attendance summaries:', error);
-      }
+    const firebaseConfig = teacherConfig?.firebaseConfig || userAccount?.schoolFirebaseConfig;
+    if (!targetSubject || targetStudents.length === 0 || !firebaseConfig) return;
+    try {
+      const summary = await teacherDatabaseService.getSubjectAttendance(firebaseConfig, targetSubject.subjectId, targetSubject.classroom);
+      const totals: Record<string, StudentAttendanceTotals> = {};
+      for (const student of targetStudents) totals[student.studentId] = studentAttendanceTotals(summary, student.studentId);
+      setAttendanceSummaries(totals);
+    } catch (error) {
+      console.error('Error loading attendance summaries:', error);
     }
   };
 
-  // Load attendance summaries when subject is selected or teacher configuration changes
+  // History view only: checking attendance doesn't show the totals
   useEffect(() => {
+    if (fromSection !== 'all' || isAttendanceMode) return;
     loadSummaries();
-    // These are exactly the values loadSummaries reads; it is recreated every render
+    // These are the values loadSummaries reads (the teacher record by project: a re-read copy
+    // is a new object with the same config); it is recreated every render
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSubject, filteredStudents, teacherConfig]);
+  }, [selectedSubject, filteredStudents, teacherConfig?.firebaseConfig?.projectId]);
 
   // All unique subjects (unique by subjectName + classroom)
   const allUniqueSubjects = subjects
@@ -584,6 +508,7 @@ function SchedulesContent() {
     setSelectedSubject(subject);
     setFromSection(section);
     setGroupSubjects([]);
+    setAttendanceSummaries({});
     const matched = matchStudents(subject);
     setFilteredStudents(matched);
     

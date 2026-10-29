@@ -41,6 +41,24 @@ export interface AttendanceSummary {
 
 export const ATTENDANCE_SUMMARY_VERSION = 1;
 const ATTENDANCE_SUMMARIES = 'attendanceSummaries';
+
+function summaryFromSessions(subjectId: string, sessions: AttendanceData[]): AttendanceSummary {
+  const summary: AttendanceSummary = {
+    subjectId,
+    version: ATTENDANCE_SUMMARY_VERSION,
+    sessions: {},
+    students: {},
+    updatedAt: new Date(),
+  };
+  for (const session of sessions) {
+    const docId = attendanceDocId(session.subjectId, session.classroom, session.date);
+    summary.sessions[docId] = { date: session.date, hours: Number(session.hours) || 1, classroom: session.classroom };
+    for (const r of session.records || []) {
+      (summary.students[r.studentId] ||= {})[docId] = r.status || '';
+    }
+  }
+  return summary;
+}
 /** `gradeSummaries/{subjectId}`: per-student totals for the home statistics (see src/lib/class-stats.ts). */
 const GRADE_SUMMARIES = 'gradeSummaries';
 
@@ -430,21 +448,18 @@ class TeacherDatabaseService {
       return;
     }
 
-    const summary: AttendanceSummary = {
-      subjectId,
-      version: ATTENDANCE_SUMMARY_VERSION,
-      sessions: {},
-      students: {},
-      updatedAt: new Date(),
-    };
-    for (const session of sessions) {
-      const docId = attendanceDocId(session.subjectId, session.classroom, session.date);
-      summary.sessions[docId] = { date: session.date, hours: Number(session.hours) || 1, classroom: session.classroom };
-      for (const r of session.records || []) {
-        (summary.students[r.studentId] ||= {})[docId] = r.status || '';
-      }
-    }
-    await setDoc(ref, summary);
+    await setDoc(ref, summaryFromSessions(subjectId, sessions));
+  }
+
+  /**
+   * A subject's attendance summary for the teacher's history view: the summary document
+   * (1 read), or, before it exists, built from the session documents (which also saves it).
+   */
+  async getSubjectAttendance(teacherFirebaseConfig: FirebaseConfig, subjectId: string, classroom: string): Promise<AttendanceSummary> {
+    const summary = await withRetry(() => this.getAttendanceSummary(teacherFirebaseConfig, subjectId));
+    if (summary) return summary;
+    const sessions = await this.getAttendanceBySubject(teacherFirebaseConfig, subjectId, classroom);
+    return summaryFromSessions(subjectId, sessions);
   }
 
   /**

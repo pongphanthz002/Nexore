@@ -78,3 +78,39 @@ export function summarizeAttendance(sessions: AttendanceSession[]): AttendanceSt
     history,
   };
 }
+
+/** One student's hours per status in a subject, as the teacher's history table shows them. */
+export interface StudentAttendanceTotals {
+  present: number;
+  absent: number;
+  late: number;
+  sickLeave: number;
+  personalLeave: number;
+  activity: number;
+  skipped: number;
+  total: number;
+  /** (มา + สาย + กิจกรรม) / total, rounded; 0 before any session */
+  percentage: number;
+}
+
+const TOTAL_FIELD: Record<AttendanceStatus, keyof StudentAttendanceTotals> = {
+  'มา': 'present', 'ขาด': 'absent', 'สาย': 'late', 'ลาป่วย': 'sickLeave', 'ลากิจ': 'personalLeave', 'กิจกรรม': 'activity', 'หนี': 'skipped',
+};
+
+/** Totals from a subject's attendance summary (session hours + each student's statuses). Blank statuses are left out. */
+export function studentAttendanceTotals(
+  summary: { sessions: Record<string, { hours: number }>; students: Record<string, Record<string, string>> },
+  studentId: string,
+): StudentAttendanceTotals {
+  const totals: StudentAttendanceTotals = { present: 0, absent: 0, late: 0, sickLeave: 0, personalLeave: 0, activity: 0, skipped: 0, total: 0, percentage: 0 };
+  for (const [sessionId, status] of Object.entries(summary.students?.[studentId] || {})) {
+    const session = summary.sessions?.[sessionId];
+    if (!session || !status) continue;
+    const h = Number(session.hours) || 1;
+    totals.total += h;
+    if (isStatus(status)) totals[TOTAL_FIELD[status]] += h;
+  }
+  const attended = totals.present + totals.late + totals.activity;
+  totals.percentage = totals.total > 0 ? Math.round((attended / totals.total) * 100) : 0;
+  return totals;
+}

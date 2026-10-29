@@ -21,6 +21,7 @@ import {
 import { addSubjectSheet } from '@/lib/grade-export';
 import { buildGradeSummary, gradeSummaryFingerprint } from '@/lib/class-stats';
 import { useScoreAutosave, type QueuedScoreCell } from '@/hooks/useScoreAutosave';
+import { useTeacherRoster } from '@/hooks/useTeacherRoster';
 import ScoreGrid, { formatScore, type CellEdit, type ScoreGridActions } from '@/components/ScoreGrid';
 import MobileScoreEntry from '@/components/MobileScoreEntry';
 import GoogleSheetsIcon from '@/components/GoogleSheetsIcon';
@@ -92,12 +93,9 @@ function normalizeStructure(nextAssignments: Assignment[], nextGroups: Assignmen
 export default function GradesPage() {
   const { userAccount } = useAuth();
   const { isDark } = useTheme();
-  const [subjects, setSubjects] = useState<SubjectData[]>([]);
-  const [students, setStudents] = useState<StudentData[]>([]);
+  const { subjects, students, teacher: teacherConfig, loading } = useTeacherRoster();
   const [selectedSubject, setSelectedSubject] = useState<SubjectData | null>(null);
   const [filteredStudents, setFilteredStudents] = useState<StudentData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [teacherConfig, setTeacherConfig] = useState<any>(null);
 
   // Grade Management State
   const [showGradeConfigModal, setShowGradeConfigModal] = useState(false);
@@ -165,29 +163,6 @@ export default function GradesPage() {
     const t = setTimeout(() => setToast(null), 4000);
     return () => clearTimeout(t);
   }, [toast]);
-
-  useEffect(() => {
-    async function loadData() {
-      if (userAccount?.schoolFirebaseConfig && userAccount?.userId) {
-        try {
-          // Only this teacher's subjects and the students enrolled in them
-          const [teacherSubjects, teacherData] = await Promise.all([
-            schoolDatabaseService.getSubjectsForTeacher(userAccount.schoolFirebaseConfig, userAccount.userId),
-            schoolDatabaseService.getTeacherConfig(userAccount.schoolFirebaseConfig, userAccount.userId),
-          ]);
-          const subjectStudents = await schoolDatabaseService.getStudentsForSubjects(userAccount.schoolFirebaseConfig, teacherSubjects);
-          setSubjects(teacherSubjects);
-          setStudents(subjectStudents);
-          setTeacherConfig(teacherData);
-        } catch (error) {
-          console.error('Error loading data:', error);
-        } finally {
-          setLoading(false);
-        }
-      }
-    }
-    loadData();
-  }, [userAccount]);
 
   const studentsForSubject = (subject: SubjectData) => students
     .filter(s => {
