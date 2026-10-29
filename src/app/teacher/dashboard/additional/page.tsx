@@ -1,27 +1,13 @@
 'use client';
 
-import { motion } from 'framer-motion';
-import { useTheme } from '@/contexts/ThemeContext';
+import ComingSoon from '@/components/ComingSoon';
+import { Settings } from 'lucide-react';
 
 export default function AdditionalPage() {
-  const { isDark } = useTheme();
-
   return (
-    <div className="p-6">
-      <div className="max-w-7xl mx-auto">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          className={`rounded-2xl p-6 bg-surface shadow-neu-lg`}
-        >
-          <h1 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
-            ระบบเพิ่มเติม
-          </h1>
-          <p className={isDark ? 'text-gray-300' : 'text-gray-600'}>
-            หน้านี้สำหรับระบบเพิ่มเติมอื่นๆ
-          </p>
-        </motion.div>
+    <div className="px-4 pb-32 pt-2 text-gray-900 sm:px-6 dark:text-gray-50">
+      <div className="mx-auto max-w-3xl">
+        <ComingSoon icon={Settings} title="ระบบเพิ่มเติม" />
       </div>
     </div>
   );
